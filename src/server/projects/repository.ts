@@ -21,7 +21,10 @@ export async function getProjectForUser(userId: string, projectId: string) {
   const project = await prisma.project.findFirst({
     where: { id: projectId, userId },
     include: {
-      scenes: { orderBy: { order: "asc" } },
+      scenes: {
+        orderBy: { order: "asc" },
+        include: { characters: { include: { character: true } } },
+      },
       characters: { include: { character: true } },
       music: { include: { musicTrack: true } },
     },

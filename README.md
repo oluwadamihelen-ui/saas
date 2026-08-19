@@ -61,10 +61,12 @@ default to `mock`, so the app runs completely without external API keys.
 ```bash
 npm install
 npx prisma migrate dev   # applies the schema, generates the client
-npm run dev
+npm run dev              # web app
+npm run worker           # in a second terminal — processes generation jobs
 ```
 
-Visit http://localhost:3000.
+Visit http://localhost:3000. The worker must be running for storyboard/scene
+generation to complete — without it, generation jobs sit queued in Redis.
 
 ## Project structure
 
@@ -80,10 +82,12 @@ src/
     db/                # Prisma client singleton
     credits/           # credit ledger
     projects/           # auth-scoped repositories
-    providers/          # AI provider interfaces + mocks (Phase B)
-    pipeline/            # generation pipeline stages (Phase B)
-    jobs/                # BullMQ queues/workers (Phase B)
-    storage/              # StorageProvider (Phase B/D)
+    scenes/              # auth-scoped scene repository (ownership via project)
+    characters/           # auth-scoped character repository
+    providers/             # AIProvider/ImageProvider interfaces + mock/ implementations
+    pipeline/                # generation stages: analyze-script, build-storyboard, generate-scene-image
+    jobs/                     # BullMQ queues (queue.ts) + worker process (worker.ts)
+    storage/                   # StorageProvider (local dev impl; swap in S3/R2 for prod)
   components/
     ui/                # base design system (Button, Card, Input, Badge...)
     marketing/           # public site sections/forms
@@ -112,14 +116,47 @@ business decisions are made. All balance changes go through
 `applyCreditDelta` in `src/server/credits/ledger.ts`, which writes an
 auditable `CreditLedgerEntry` for every grant and charge.
 
+## AI providers (mock-first)
+
+`AI_PROVIDER` / `IMAGE_PROVIDER` in `.env` default to `mock`, resolved via the
+factories in `src/server/providers/index.ts`. `MockAIProvider` is a
+deterministic, rule-based storyboard/character generator (sentence
+splitting + heuristics — not a real LLM); `MockImageProvider` renders an SVG
+"scene card" placeholder rather than pretending to be a real image
+generation result. Both set `isMock: true`. To add a real provider,
+implement the `AIProvider`/`ImageProvider` interfaces in `src/server/providers/types.ts`
+and add a case to the relevant factory function — nothing else in the app
+depends on which implementation is active.
+
+## Generation pipeline & jobs
+
+`POST /api/projects/:id/generate` enqueues a `project-generate` BullMQ job.
+The worker (`npm run worker`) runs `runScriptAnalysis` → `runBuildStoryboard`
+(creates/reuses `Character` rows by name and creates `Scene` rows), then fans
+out one `scene-image` job per scene. Every stage writes a `GenerationJob` row
+(`queued|processing|completed|failed`) and debits credits via the ledger
+before calling the provider — insufficient credits fails the job cleanly
+rather than running for free. The project detail page polls
+`GET /api/projects/:id/jobs` while generating and stops once scenes settle.
+A single scene can be regenerated independently via
+`POST /api/scenes/:id/regenerate` without rerunning the whole pipeline.
+
 ## What's implemented vs. what's next
 
-**Phase A (this phase) — Foundation**: architecture, Postgres schema, Auth.js,
-protected dashboard shell, project CRUD, billing/credit ledger UI, original
-marketing site.
+**Phase A — Foundation**: architecture, Postgres schema, Auth.js, protected
+dashboard shell, project CRUD, billing/credit ledger UI, original marketing
+site.
 
-**Not yet built** (see the phased roadmap): AI script/storyboard generation,
-character consistency engine, scene image/video/voice/music generation, the
-scene editor and timeline, captions, Remotion rendering/export, and Stripe
-billing. Nothing in this codebase fakes AI output — pages for these areas
-show honest "coming in Phase X" states rather than mocked results.
+**Phase B (this phase) — AI workflow**: mock `AIProvider`/`ImageProvider`,
+BullMQ job queue + worker, script analysis → storyboard → character
+extraction/reuse → scene image generation pipeline, full scene CRUD (edit,
+duplicate, delete, reorder, regenerate, add), and a full character library
+(create/edit/delete, generate a mock portrait, or upload your own reference
+image).
+
+**Not yet built**: the voice studio and music library (Phase C), the
+timeline editor and captions (Phase C), Remotion rendering/export (Phase D),
+and Stripe billing (Phase E). Nothing in this codebase fakes AI output —
+scene/character generation is real (mock-provider) output end-to-end, not
+hardcoded fixtures, and areas not yet built show honest "coming in Phase X"
+states.

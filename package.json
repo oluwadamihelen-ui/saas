@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "worker": "tsx src/server/jobs/worker.ts",
+    "worker:watch": "tsx watch src/server/jobs/worker.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
@@ -16,6 +18,7 @@
     "bullmq": "^6.1.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dotenv": "^17.4.2",
     "ioredis": "^6.0.0",
     "lucide-react": "^1.31.0",
     "next": "16.3.1",

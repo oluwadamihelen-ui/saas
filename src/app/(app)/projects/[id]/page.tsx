@@ -1,14 +1,27 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { auth } from "@/server/auth";
 import { getProjectForUser, ProjectNotFoundError } from "@/server/projects/repository";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { VISUAL_STYLES, ASPECT_RATIOS } from "@/lib/style-options";
+import { GenerationTrigger } from "@/components/dashboard/generation-trigger";
+import { StoryboardGrid } from "@/components/dashboard/storyboard-grid";
 
 export const metadata: Metadata = { title: "Project" };
+
+const STATUS_VARIANT: Record<string, "brand" | "success" | "warning" | "danger" | "neutral"> = {
+  DRAFT: "neutral",
+  SCRIPT_READY: "brand",
+  STORYBOARD_READY: "brand",
+  GENERATING: "warning",
+  READY_TO_EDIT: "brand",
+  RENDERING: "warning",
+  COMPLETED: "success",
+  FAILED: "danger",
+};
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -24,9 +37,11 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
   const style = VISUAL_STYLES.find((s) => s.value === project.visualStyle);
   const ratio = ASPECT_RATIOS.find((r) => r.value === project.aspectRatio);
+  const hasContent = Boolean(project.idea || project.script);
+  const isGenerating = project.status === "GENERATING" && project.scenes.length === 0;
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-6xl">
       <Link href="/projects" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> Back to projects
       </Link>
@@ -36,62 +51,43 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           <h1 className="font-display text-2xl font-bold">{project.title}</h1>
           {project.description && <p className="mt-1 text-sm text-muted-foreground">{project.description}</p>}
         </div>
-        <Badge variant="brand">{project.status.replaceAll("_", " ")}</Badge>
+        <Badge variant={STATUS_VARIANT[project.status]}>{project.status.replaceAll("_", " ")}</Badge>
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <Card className={`bg-gradient-to-br ${style?.gradient ?? "from-brand-300 to-brand-500"} aspect-video`} />
+      <div className="mt-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <MiniStat label="Style" value={style?.label ?? project.visualStyle} />
+        <MiniStat label="Aspect" value={ratio?.label ?? project.aspectRatio} />
+        <MiniStat label="Language" value={project.language} />
+        <MiniStat label="Scenes" value={String(project.scenes.length)} />
+        <MiniStat label="Characters" value={String(project.characters.length)} />
+        {project.targetLengthSeconds && <MiniStat label="Target length" value={`${project.targetLengthSeconds}s`} />}
+      </div>
 
-          <Card className="mt-6 flex items-start gap-4 p-6">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-100">
-              <Sparkles className="h-5 w-5 text-brand-600" />
-            </div>
-            <div>
-              <h3 className="font-display font-semibold">Storyboard generation is coming next</h3>
-              <p className="mt-1.5 text-sm text-muted-foreground">
-                This project has been created and saved. Script analysis, storyboard
-                generation, character extraction and scene rendering are part of the
-                AI pipeline being built next — once available, you&apos;ll be able to
-                trigger it directly from this page.
-              </p>
-            </div>
-          </Card>
+      {(project.idea || project.script) && (
+        <details className="mt-6 rounded-xl border border-border bg-surface p-4">
+          <summary className="cursor-pointer font-display text-sm font-semibold">
+            {project.script ? "Script" : "Idea"}
+          </summary>
+          <p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground">{project.script || project.idea}</p>
+        </details>
+      )}
 
-          {(project.idea || project.script) && (
-            <Card className="mt-6 p-6">
-              <h3 className="font-display font-semibold">{project.script ? "Script" : "Idea"}</h3>
-              <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
-                {project.script || project.idea}
-              </p>
-            </Card>
-          )}
-        </div>
-
-        <div className="space-y-4">
-          <Card className="p-5">
-            <h3 className="font-display text-sm font-semibold">Details</h3>
-            <dl className="mt-3 space-y-2.5 text-sm">
-              <Row label="Visual style" value={style?.label ?? project.visualStyle} />
-              <Row label="Aspect ratio" value={ratio?.label ?? project.aspectRatio} />
-              <Row label="Language" value={project.language} />
-              {project.audience && <Row label="Audience" value={project.audience} />}
-              {project.targetLengthSeconds && <Row label="Target length" value={`${project.targetLengthSeconds}s`} />}
-              <Row label="Scenes" value={String(project.scenes.length)} />
-              <Row label="Characters" value={String(project.characters.length)} />
-            </dl>
-          </Card>
-        </div>
+      <div className="mt-8">
+        {project.scenes.length === 0 || isGenerating ? (
+          <GenerationTrigger projectId={project.id} hasContent={hasContent} />
+        ) : (
+          <StoryboardGrid projectId={project.id} scenes={project.scenes} />
+        )}
       </div>
     </div>
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-2">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="font-medium">{value}</dd>
-    </div>
+    <Card className="p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-0.5 truncate text-sm font-semibold">{value}</p>
+    </Card>
   );
 }
