@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Simple sparkle glyph, kept inside the 66dp adaptive-icon safe zone -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,24 L61.07,46.93 L84,54 L61.07,61.07 L54,84 L46.93,61.07 L24,54 L46.93,46.93 Z" />
+</vector>
