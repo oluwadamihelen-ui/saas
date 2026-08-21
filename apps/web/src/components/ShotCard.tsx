@@ -1,4 +1,5 @@
 import { GenerateShotButton } from "./create/GenerateShotButton";
+import { GenerateDialogueButton } from "./create/GenerateDialogueButton";
 
 export interface ShotCardProps {
   id: string;
@@ -12,6 +13,8 @@ export interface ShotCardProps {
   status: string;
   videoUrl: string | null;
   videoProviderConfigured: boolean;
+  dialogueAudioUrl: string | null;
+  voiceProviderConfigured: boolean;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -60,6 +63,19 @@ export function ShotCard(props: ShotCardProps) {
         (canGenerate || canRegenerate) && <GenerateShotButton shotId={props.id} projectId={props.projectId} label={canRegenerate ? "Regenerate" : "Generate"} />
       ) : (
         <p className="text-[11px] text-cinerra-muted">Video generation provider not configured.</p>
+      )}
+
+      {props.dialogue && (
+        <div className="border-t border-cinerra-border pt-2">
+          {props.dialogueAudioUrl ? (
+            // eslint-disable-next-line jsx-a11y/media-has-caption
+            <audio src={props.dialogueAudioUrl} controls className="h-8 w-full" />
+          ) : props.voiceProviderConfigured ? (
+            <GenerateDialogueButton shotId={props.id} projectId={props.projectId} />
+          ) : (
+            <p className="text-[11px] text-cinerra-muted">Voice generation provider not configured.</p>
+          )}
+        </div>
       )}
     </div>
   );

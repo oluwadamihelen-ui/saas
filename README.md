@@ -20,16 +20,17 @@ This build follows the phased plan in the product spec and keeps the project run
 - **Reference image generation** (character/location reference images via `ImageProvider` → OpenAI) with an Approve step, displayed inline on each card via signed storage URLs (spec §23, §40) — generation is refused once an entity is locked, so an approved identity can't be silently replaced
 - **Shot/video generation** — the full pipeline: `continuityEngine` resolves the character/wardrobe/location/prop/previous-shot graph for a shot → `promptCompiler` compiles the structured, continuity-constrained prompt → `VideoProvider` (Runway) generates the shot using the character's approved reference image for identity consistency → the result is downloaded and persisted to durable storage → the shot is marked ready with an inline video preview on its storyboard card (spec §20-24)
 - **Job state machine is now actually enforced**, not just defined: every service transitions status through a shared `transitionGenerationJob` helper that validates the move, a BullMQ retry after a failure correctly re-enters via `FAILED → RETRYING → PROCESSING` instead of crashing on an invalid transition, and cancelling a queued job is honored cooperatively before any provider call is made (`packages/domain/src/services/jobTransitions.ts`)
+- **Dialogue audio generation** (spec §28): synthesizes a shot's spoken dialogue in the speaking character's voice via `VoiceProvider` (ElevenLabs). A character's voice identity is assigned once (from a small default pool, split by gender) and reused on every regeneration so it doesn't drift; the audio plays inline on the shot card
 - All of the above run asynchronously through real BullMQ queues + a worker, with state-based progress in the UI (never a fake percentage)
 - Stripe subscription checkout, customer portal, and webhook-driven subscription sync
 - Admin dashboard (users, MRR, provider configuration status, plan table, recent jobs)
 
 **Real, typed, wired interfaces — ready for the next phase without an architecture change:**
 - Full AI provider abstraction (`packages/ai`) with real adapters for Anthropic (text), OpenAI (image), Runway (video), ElevenLabs (voice) — each honestly reports "not configured" if its API key is absent, per the platform's no-fake-generation rule
-- Full relational schema for characters, locations, wardrobe, props, scenes, shots, timeline, exports, publications
+- Full relational schema for characters, locations, wardrobe, props, scenes, shots, timeline, exports, publications — dialogue audio already writes real `TimelineItem` rows against each shot, which is exactly what the future timeline editor will read from
 - Generation job state machine covering the entire QUEUED → PROVIDER_GENERATING → DOWNLOADING → VALIDATING → FINALIZING → SUCCEEDED/FAILED lifecycle, with per-job-type shortcuts (a text-only agent call skips straight to SUCCEEDED; a media job walks the full pipeline)
 
-**Not yet built** (the next phases, per the spec's own phased roadmap): a real automated Quality Control pass on generated video (spec §27 — face/continuity/artifact detection; the job still walks through a VALIDATING state for structural consistency, it just doesn't score anything yet), wardrobe/prop UI cards and prop bible generation, dialogue/SFX/music generation, timeline editor, export/FFmpeg processing, trailer/social clip generation, publishing/discovery feed, mid-flight cancellation of an already-processing job (cancellation today reliably stops a still-queued job; a job actively mid-provider-call runs to completion since the provider adapters don't yet support aborting an in-flight request).
+**Not yet built** (the next phases, per the spec's own phased roadmap): sound effect and music generation (the `AudioItem`/queue plumbing is shared with dialogue, but no SFX/music provider adapter exists yet — `packages/ai`'s registry honestly reports these as unconfigured), a real automated Quality Control pass on generated video (spec §27 — face/continuity/artifact detection; the job still walks through a VALIDATING state for structural consistency, it just doesn't score anything yet), wardrobe/prop UI cards and prop bible generation, the timeline editor UI, export/FFmpeg processing, trailer/social clip generation, publishing/discovery feed, mid-flight cancellation of an already-processing job (cancellation today reliably stops a still-queued job; a job actively mid-provider-call runs to completion since the provider adapters don't yet support aborting an in-flight request).
 
 ## Tech stack
 
@@ -91,7 +92,7 @@ Add whichever provider keys you have to `.env`:
 - `ANTHROPIC_API_KEY` — powers the Story Architect, Screenwriter, Character Designer, Location Designer, and Director agents (Claude). **Required for any of the text generation flows to actually produce output** — without it, generation jobs fail with an honest "no language model provider is configured" message rather than faking a result.
 - `OPENAI_API_KEY` — character/location reference image generation. Without it, "Generate Reference" fails honestly instead of showing a placeholder image.
 - `RUNWAY_API_KEY` — shot video generation. Runway requires at least one reference image, so generate and approve a character reference first — without a configured provider, "Generate"/"Regenerate" on a shot fails honestly instead of faking a clip.
-- `ELEVENLABS_API_KEY` — voice generation (dialogue synthesis, not wired into the UI yet)
+- `ELEVENLABS_API_KEY` — dialogue voice synthesis. Without it, "Generate Dialogue Audio" fails honestly instead of faking a clip.
 
 The `AiModel` table (seeded by `pnpm db:seed`) is the admin-editable routing table for which provider/model serves each capability under each optimization mode (`BEST_QUALITY` / `FASTEST` / `BALANCED`) — see `packages/ai`.
 
@@ -164,7 +165,8 @@ Sign up → Create Movie → Enter Story Idea → Generate
   → user generates a reference image per character/location, approves it
   → user generates each shot's video (continuity-compiled prompt +
     approved reference image → Runway → durable storage → inline preview)
-  → [next phase] dialogue/SFX/music → timeline assembly → export → publish
+  → user generates dialogue audio for shots with speaking lines
+  → [next phase] SFX/music → timeline assembly → export → publish
 ```
 
 ## Design principles this codebase holds to

@@ -50,11 +50,19 @@ const SHOT_STEPS = [
   { key: "VALIDATING", label: "Finalizing" },
 ];
 
+const DIALOGUE_STEPS = [
+  { key: "QUEUED", label: "Queued for generation" },
+  { key: "PROCESSING", label: "Assigning the character's voice" },
+  { key: "PROVIDER_GENERATING", label: "Synthesizing dialogue audio" },
+  { key: "DOWNLOADING", label: "Saving the audio to your project" },
+];
+
 const STEPS_BY_KIND = {
   story: STORY_STEPS,
   script: SCRIPT_STEPS,
   characters: CHARACTERS_STEPS,
   locations: LOCATIONS_STEPS,
+  dialogue: DIALOGUE_STEPS,
   storyboard: STORYBOARD_STEPS,
   reference: REFERENCE_STEPS,
   shot: SHOT_STEPS,

@@ -338,6 +338,11 @@ model Character {
   build           String?
   personality     String?
   voiceProfile    String?
+  // Vendor-specific voice identity for dialogue synthesis (e.g. an
+  // ElevenLabs voice_id). Auto-assigned from a small default set when
+  // dialogue is first generated for a character; editable so a user can
+  // point it at a custom/cloned voice later without touching code.
+  voiceId         String?
   accent          String?
   relationships   Json?
   characterArc    String?

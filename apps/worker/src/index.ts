@@ -10,6 +10,7 @@ import {
   runStoryboardGenerationJob,
   runReferenceImageGenerationJob,
   runShotGenerationJob,
+  runDialogueGenerationJob,
 } from "@cinerra/domain";
 import { prisma } from "@cinerra/database";
 
@@ -61,12 +62,17 @@ const workers = [
   createGenerationWorker(QUEUE_NAMES.shotGeneration, connection, Number(process.env.WORKER_SHOT_CONCURRENCY ?? 2), (job) =>
     withJobLogging(job, () => runShotGenerationJob(router, storage, job.data.generationJobId)),
   ),
+  createGenerationWorker(QUEUE_NAMES.audioGeneration, connection, WORKER_CONCURRENCY, (job) =>
+    withJobLogging(job, () => runDialogueGenerationJob(router, storage, job.data.generationJobId)),
+  ),
 ];
 
-// Remaining queues (audio-generation, episode-assembly, export) are
-// defined in @cinerra/queue and will attach their own worker processors
-// here as those pipelines are implemented — the queue/worker/state-machine
-// plumbing already supports them uniformly.
+// Remaining queues (episode-assembly, export) are defined in @cinerra/queue
+// and will attach their own worker processors here as those pipelines are
+// implemented — the queue/worker/state-machine plumbing already supports
+// them uniformly. SFX/music generation share the audio-generation queue's
+// intent but have no configured provider adapter yet (packages/ai) so
+// there's no processor to add for them until one exists.
 
 for (const w of workers) {
   w.on("failed", (job, error) => {
@@ -75,7 +81,7 @@ for (const w of workers) {
 }
 
 console.log(
-  `[worker] Cinerra worker started. Concurrency=${WORKER_CONCURRENCY}. Providers configured: TEXT=${registry.isConfigured("TEXT")} IMAGE=${registry.isConfigured("IMAGE")} VIDEO=${registry.isConfigured("VIDEO")} VOICE=${registry.isConfigured("VOICE")}`,
+  `[worker] Cinerra worker started. Concurrency=${WORKER_CONCURRENCY}. Providers configured: TEXT=${registry.isConfigured("TEXT")} IMAGE=${registry.isConfigured("IMAGE")} VIDEO=${registry.isConfigured("VIDEO")} VOICE=${registry.isConfigured("VOICE")} MUSIC=${registry.isConfigured("MUSIC")} SOUND_EFFECT=${registry.isConfigured("SOUND_EFFECT")}`,
 );
 
 async function shutdown(signal: string) {

@@ -20,9 +20,10 @@ const JOB_TITLES: Record<GenerationKind, string> = {
   storyboard: "Building your storyboard…",
   reference: "Generating reference image…",
   shot: "Generating shot…",
+  dialogue: "Generating dialogue audio…",
 };
 
-const VALID_KINDS = new Set<GenerationKind>(["story", "script", "characters", "locations", "storyboard", "reference", "shot"]);
+const VALID_KINDS = new Set<GenerationKind>(["story", "script", "characters", "locations", "storyboard", "reference", "shot", "dialogue"]);
 
 export default async function ProjectPage({
   params,
@@ -48,7 +49,11 @@ export default async function ProjectPage({
           location: true,
           shots: {
             orderBy: { order: "asc" },
-            include: { characters: { include: { character: true } }, videoAsset: true },
+            include: {
+              characters: { include: { character: true } },
+              videoAsset: true,
+              timelineItems: { where: { track: "DIALOGUE" }, include: { audioItem: { include: { asset: true } } } },
+            },
           },
         },
       },
@@ -59,6 +64,7 @@ export default async function ProjectPage({
 
   const imageProviderConfigured = providerRegistry.isConfigured("IMAGE");
   const videoProviderConfigured = providerRegistry.isConfigured("VIDEO");
+  const voiceProviderConfigured = providerRegistry.isConfigured("VOICE");
 
   const characterCards = await Promise.all(
     project.characters.map(async (c) => ({
@@ -84,10 +90,14 @@ export default async function ProjectPage({
       .map(async (scene) => ({
         ...scene,
         shotsResolved: await Promise.all(
-          scene.shots.map(async (shot) => ({
-            ...shot,
-            videoUrl: shot.videoAsset ? await getAssetDisplayUrl(shot.videoAsset.storageKey) : null,
-          })),
+          scene.shots.map(async (shot) => {
+            const dialogueAsset = shot.timelineItems[0]?.audioItem?.asset;
+            return {
+              ...shot,
+              videoUrl: shot.videoAsset ? await getAssetDisplayUrl(shot.videoAsset.storageKey) : null,
+              dialogueAudioUrl: dialogueAsset ? await getAssetDisplayUrl(dialogueAsset.storageKey) : null,
+            };
+          }),
         ),
       })),
   );
@@ -260,6 +270,8 @@ export default async function ProjectPage({
                           status={shot.status}
                           videoUrl={shot.videoUrl}
                           videoProviderConfigured={videoProviderConfigured}
+                          dialogueAudioUrl={shot.dialogueAudioUrl}
+                          voiceProviderConfigured={voiceProviderConfigured}
                         />
                       ))}
                     </div>
