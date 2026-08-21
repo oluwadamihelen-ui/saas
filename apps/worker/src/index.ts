@@ -1,7 +1,13 @@
 import { loadEnv } from "@cinerra/config";
 import { ModelRouter, ProviderRegistry } from "@cinerra/ai";
-import { createGenerationWorker, redisConnection, type GenerationJobPayload, type Job } from "@cinerra/queue";
-import { runStoryGenerationJob, runScriptGenerationJob } from "@cinerra/domain";
+import { createGenerationWorker, redisConnection, QUEUE_NAMES, type GenerationJobPayload, type Job } from "@cinerra/queue";
+import {
+  runStoryGenerationJob,
+  runScriptGenerationJob,
+  runCharacterGenerationJob,
+  runLocationGenerationJob,
+  runStoryboardGenerationJob,
+} from "@cinerra/domain";
 import { prisma } from "@cinerra/database";
 
 const env = loadEnv(process.env);
@@ -26,30 +32,42 @@ async function withJobLogging(job: Job<GenerationJobPayload>, run: () => Promise
   }
 }
 
-const storyWorker = createGenerationWorker("story-generation", connection, WORKER_CONCURRENCY, async (job) =>
-  withJobLogging(job, () => runStoryGenerationJob(router, job.data.generationJobId)),
-);
+const workers = [
+  createGenerationWorker(QUEUE_NAMES.storyGeneration, connection, WORKER_CONCURRENCY, (job) =>
+    withJobLogging(job, () => runStoryGenerationJob(router, job.data.generationJobId)),
+  ),
+  createGenerationWorker(QUEUE_NAMES.scriptGeneration, connection, WORKER_CONCURRENCY, (job) =>
+    withJobLogging(job, () => runScriptGenerationJob(router, job.data.generationJobId)),
+  ),
+  createGenerationWorker(QUEUE_NAMES.characterGeneration, connection, WORKER_CONCURRENCY, (job) =>
+    withJobLogging(job, () => runCharacterGenerationJob(router, job.data.generationJobId)),
+  ),
+  createGenerationWorker(QUEUE_NAMES.locationGeneration, connection, WORKER_CONCURRENCY, (job) =>
+    withJobLogging(job, () => runLocationGenerationJob(router, job.data.generationJobId)),
+  ),
+  createGenerationWorker(QUEUE_NAMES.storyboardGeneration, connection, WORKER_CONCURRENCY, (job) =>
+    withJobLogging(job, () => runStoryboardGenerationJob(router, job.data.generationJobId)),
+  ),
+];
 
-const scriptWorker = createGenerationWorker("script-generation", connection, WORKER_CONCURRENCY, async (job) =>
-  withJobLogging(job, () => runScriptGenerationJob(router, job.data.generationJobId)),
-);
-
-// Additional queues (asset-generation, shot-generation, audio-generation,
+// Remaining queues (asset-generation, shot-generation, audio-generation,
 // episode-assembly, export) are defined in @cinerra/queue and will attach
 // their own worker processors here as those pipelines are implemented —
 // the queue/worker/state-machine plumbing already supports them uniformly.
 
-for (const w of [storyWorker, scriptWorker]) {
+for (const w of workers) {
   w.on("failed", (job, error) => {
     console.error(`[worker] job ${job?.id} exhausted retries:`, error.message);
   });
 }
 
-console.log(`[worker] Cinerra worker started. Concurrency=${WORKER_CONCURRENCY}. Providers configured: TEXT=${registry.isConfigured("TEXT")} IMAGE=${registry.isConfigured("IMAGE")} VIDEO=${registry.isConfigured("VIDEO")} VOICE=${registry.isConfigured("VOICE")}`);
+console.log(
+  `[worker] Cinerra worker started. Concurrency=${WORKER_CONCURRENCY}. Providers configured: TEXT=${registry.isConfigured("TEXT")} IMAGE=${registry.isConfigured("IMAGE")} VIDEO=${registry.isConfigured("VIDEO")} VOICE=${registry.isConfigured("VOICE")}`,
+);
 
 async function shutdown(signal: string) {
   console.log(`[worker] received ${signal}, shutting down gracefully…`);
-  await Promise.all([storyWorker.close(), scriptWorker.close()]);
+  await Promise.all(workers.map((w) => w.close()));
   await prisma.$disconnect();
   process.exit(0);
 }

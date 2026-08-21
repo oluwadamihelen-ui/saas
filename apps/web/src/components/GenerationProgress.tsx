@@ -20,6 +20,31 @@ const SCRIPT_STEPS = [
   { key: "PROCESSING", label: "Breaking the episode into scenes and writing the screenplay" },
 ];
 
+const CHARACTERS_STEPS = [
+  { key: "QUEUED", label: "Queued for generation" },
+  { key: "PROCESSING", label: "Reading the screenplay and building the character bible" },
+];
+
+const LOCATIONS_STEPS = [
+  { key: "QUEUED", label: "Queued for generation" },
+  { key: "PROCESSING", label: "Reading the screenplay and building the location bible" },
+];
+
+const STORYBOARD_STEPS = [
+  { key: "QUEUED", label: "Queued for generation" },
+  { key: "PROCESSING", label: "Breaking each scene into cinematic shots" },
+];
+
+const STEPS_BY_KIND = {
+  story: STORY_STEPS,
+  script: SCRIPT_STEPS,
+  characters: CHARACTERS_STEPS,
+  locations: LOCATIONS_STEPS,
+  storyboard: STORYBOARD_STEPS,
+} as const;
+
+export type GenerationKind = keyof typeof STEPS_BY_KIND;
+
 const STEP_ORDER = ["QUEUED", "PROCESSING", "PROVIDER_GENERATING", "DOWNLOADING", "VALIDATING", "FINALIZING", "SUCCEEDED"];
 
 function stepGlyph(stepKey: string, currentStatus: string): string {
@@ -35,10 +60,10 @@ function stepGlyph(stepKey: string, currentStatus: string): string {
  * the backend actually reports, polling until the job reaches a terminal
  * state. No invented percentage is ever shown.
  */
-export function GenerationProgress({ jobId, kind, title }: { jobId: string; kind: "story" | "script"; title: string }) {
+export function GenerationProgress({ jobId, kind, title }: { jobId: string; kind: GenerationKind; title: string }) {
   const router = useRouter();
   const [job, setJob] = useState<JobState | null>(null);
-  const steps = kind === "story" ? STORY_STEPS : SCRIPT_STEPS;
+  const steps = STEPS_BY_KIND[kind] ?? STORY_STEPS;
 
   useEffect(() => {
     let cancelled = false;

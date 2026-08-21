@@ -531,6 +531,15 @@ model Scene {
   continuityNotes String?
   scriptText      String?
 
+  // Raw text captured from the Screenwriter agent's output before the
+  // Character/Location bibles exist. The continuity-linking step
+  // (packages/domain/src/services/continuityLinking.ts) reconciles these
+  // against real Character/Location rows once they're generated, then
+  // relational SceneCharacter links and Scene.locationId are the source
+  // of truth — these raw fields are never read again after that.
+  rawLocationName   String?
+  rawCharacterNames String[]
+
   characters      SceneCharacter[]
   props           ScenePropLink[]
   shots           Shot[]

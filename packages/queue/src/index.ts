@@ -9,6 +9,9 @@ import { Queue, Worker, type ConnectionOptions, type Job, type Processor } from 
 export const QUEUE_NAMES = {
   storyGeneration: "story-generation",
   scriptGeneration: "script-generation",
+  characterGeneration: "character-generation", // Character + Wardrobe bible (text)
+  locationGeneration: "location-generation", // Location bible (text)
+  storyboardGeneration: "storyboard-generation", // Director agent shot list (text)
   assetGeneration: "asset-generation", // character/location/wardrobe/prop reference images
   shotGeneration: "shot-generation", // video
   audioGeneration: "audio-generation", // dialogue / sfx / music

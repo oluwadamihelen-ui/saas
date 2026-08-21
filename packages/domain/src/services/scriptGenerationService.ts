@@ -73,6 +73,8 @@ export async function runScriptGenerationJob(router: ModelRouter, generationJobI
             storyPurpose: scene.storyPurpose,
             emotionalState: scene.emotionalState,
             scriptText: scene.scriptText,
+            rawLocationName: scene.locationName,
+            rawCharacterNames: scene.characterNames,
           },
           update: {
             intExt: scene.intExt,
@@ -80,6 +82,8 @@ export async function runScriptGenerationJob(router: ModelRouter, generationJobI
             storyPurpose: scene.storyPurpose,
             emotionalState: scene.emotionalState,
             scriptText: scene.scriptText,
+            rawLocationName: scene.locationName,
+            rawCharacterNames: scene.characterNames,
           },
         });
       }
