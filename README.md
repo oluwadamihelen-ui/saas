@@ -17,17 +17,19 @@ This build follows the phased plan in the product spec and keeps the project run
 - **Continuity linking**: once characters/locations exist, scenes are automatically reconciled to real Character/Location records (`packages/domain/src/services/continuityLinking.ts`) — relational `SceneCharacter` links and `Scene.locationId`, not just text
 - **Storyboard generation** (Director agent → breaks every scene into cinematic shot coverage: shot type, camera movement, lens, action, dialogue, duration — standard film grammar, 3-8 shots per scene)
 - **Locking**: characters and locations can be locked from the UI; a locked entity is never silently rewritten by a regeneration (spec §13-14, §58)
+- **Reference image generation** (character/location reference images via `ImageProvider` → OpenAI) with an Approve step, displayed inline on each card via signed storage URLs (spec §23, §40) — generation is refused once an entity is locked, so an approved identity can't be silently replaced
+- **Shot/video generation** — the full pipeline: `continuityEngine` resolves the character/wardrobe/location/prop/previous-shot graph for a shot → `promptCompiler` compiles the structured, continuity-constrained prompt → `VideoProvider` (Runway) generates the shot using the character's approved reference image for identity consistency → the result is downloaded and persisted to durable storage → the shot is marked ready with an inline video preview on its storyboard card (spec §20-24)
+- **Job state machine is now actually enforced**, not just defined: every service transitions status through a shared `transitionGenerationJob` helper that validates the move, a BullMQ retry after a failure correctly re-enters via `FAILED → RETRYING → PROCESSING` instead of crashing on an invalid transition, and cancelling a queued job is honored cooperatively before any provider call is made (`packages/domain/src/services/jobTransitions.ts`)
 - All of the above run asynchronously through real BullMQ queues + a worker, with state-based progress in the UI (never a fake percentage)
 - Stripe subscription checkout, customer portal, and webhook-driven subscription sync
 - Admin dashboard (users, MRR, provider configuration status, plan table, recent jobs)
 
 **Real, typed, wired interfaces — ready for the next phase without an architecture change:**
 - Full AI provider abstraction (`packages/ai`) with real adapters for Anthropic (text), OpenAI (image), Runway (video), ElevenLabs (voice) — each honestly reports "not configured" if its API key is absent, per the platform's no-fake-generation rule
-- Prompt Compiler and Visual Continuity Engine (`packages/domain`) — fully implemented and unit-tested, ready to drive shot generation once the shot-generation queue processor is added
 - Full relational schema for characters, locations, wardrobe, props, scenes, shots, timeline, exports, publications
-- Generation job state machine covering the entire QUEUED → PROVIDER_GENERATING → DOWNLOADING → VALIDATING → FINALIZING → SUCCEEDED/FAILED lifecycle
+- Generation job state machine covering the entire QUEUED → PROVIDER_GENERATING → DOWNLOADING → VALIDATING → FINALIZING → SUCCEEDED/FAILED lifecycle, with per-job-type shortcuts (a text-only agent call skips straight to SUCCEEDED; a media job walks the full pipeline)
 
-**Not yet built** (the next phases, per the spec's own phased roadmap): reference image generation (character/location/wardrobe/prop reference images — the `asset-generation` queue and `ImageProvider` adapter already exist, just not wired to this UI yet), shot/video generation queue processor, wardrobe/prop UI cards and prop bible generation, shot regeneration/override UI, timeline editor, audio pipeline, export/FFmpeg processing, trailer/social clip generation, publishing/discovery feed.
+**Not yet built** (the next phases, per the spec's own phased roadmap): a real automated Quality Control pass on generated video (spec §27 — face/continuity/artifact detection; the job still walks through a VALIDATING state for structural consistency, it just doesn't score anything yet), wardrobe/prop UI cards and prop bible generation, dialogue/SFX/music generation, timeline editor, export/FFmpeg processing, trailer/social clip generation, publishing/discovery feed, mid-flight cancellation of an already-processing job (cancellation today reliably stops a still-queued job; a job actively mid-provider-call runs to completion since the provider adapters don't yet support aborting an in-flight request).
 
 ## Tech stack
 
@@ -86,10 +88,10 @@ The seed creates a demo account: `demo@cinerra.app` / `demo-password-1234`, subs
 
 Add whichever provider keys you have to `.env`:
 
-- `ANTHROPIC_API_KEY` — powers the Story Architect, Screenwriter, Character Designer, Location Designer, and Director agents (Claude). **Required for any of the generation flows to actually produce output** — without it, generation jobs fail with an honest "no language model provider is configured" message rather than faking a result.
-- `OPENAI_API_KEY` — image generation/analysis (character/location reference images, once wired up)
-- `RUNWAY_API_KEY` — video generation (shot generation, once wired up)
-- `ELEVENLABS_API_KEY` — voice generation (dialogue synthesis, once wired up)
+- `ANTHROPIC_API_KEY` — powers the Story Architect, Screenwriter, Character Designer, Location Designer, and Director agents (Claude). **Required for any of the text generation flows to actually produce output** — without it, generation jobs fail with an honest "no language model provider is configured" message rather than faking a result.
+- `OPENAI_API_KEY` — character/location reference image generation. Without it, "Generate Reference" fails honestly instead of showing a placeholder image.
+- `RUNWAY_API_KEY` — shot video generation. Runway requires at least one reference image, so generate and approve a character reference first — without a configured provider, "Generate"/"Regenerate" on a shot fails honestly instead of faking a clip.
+- `ELEVENLABS_API_KEY` — voice generation (dialogue synthesis, not wired into the UI yet)
 
 The `AiModel` table (seeded by `pnpm db:seed`) is the admin-editable routing table for which provider/model serves each capability under each optimization mode (`BEST_QUALITY` / `FASTEST` / `BALANCED`) — see `packages/ai`.
 
@@ -143,7 +145,8 @@ packages/
   database/  Prisma schema, client, seed script
   domain/    Agents (Story Architect, Screenwriter, Character/Location
              Designer, Director), prompt compiler, continuity engine +
-             linking, job state machine, orchestration services
+             linking, job state machine + transition enforcement,
+             reference image / shot video orchestration services
   queue/     BullMQ queue/worker definitions shared by web + worker
   storage/   S3-compatible object storage client
 ```
@@ -158,7 +161,10 @@ Sign up → Create Movie → Enter Story Idea → Generate
   → Location Designer generates the location bible (lock any location)
   → scenes are automatically reconciled to real characters/locations
   → Director agent breaks every scene into a shot list (storyboard)
-  → [next phase] user reviews shots → generates episode video → preview → publish
+  → user generates a reference image per character/location, approves it
+  → user generates each shot's video (continuity-compiled prompt +
+    approved reference image → Runway → durable storage → inline preview)
+  → [next phase] dialogue/SFX/music → timeline assembly → export → publish
 ```
 
 ## Design principles this codebase holds to

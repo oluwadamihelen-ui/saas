@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@cinerra/ai": "workspace:*",
-    "@cinerra/database": "workspace:*"
+    "@cinerra/database": "workspace:*",
+    "@cinerra/storage": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.5.4",

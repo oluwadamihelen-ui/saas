@@ -17,11 +17,18 @@ export type GenerationJobStatus =
   | "CANCELLED"
   | "RETRYING";
 
+// Not every job type needs every stage: a text-only agent call (Story
+// Architect, Screenwriter, ...) has no provider task to download or asset
+// to validate, so it may go straight from PROCESSING to SUCCEEDED. A
+// media-generation job (reference image, shot video) walks the full
+// PROVIDER_GENERATING -> DOWNLOADING -> [VALIDATING] -> FINALIZING path.
+// VALIDATING is likewise optional until a real QC pass exists (spec §27) —
+// DOWNLOADING may go straight to FINALIZING for now.
 const TRANSITIONS: Record<GenerationJobStatus, GenerationJobStatus[]> = {
   QUEUED: ["PROCESSING", "CANCELLED"],
-  PROCESSING: ["PROVIDER_GENERATING", "FAILED", "CANCELLED", "FINALIZING"],
+  PROCESSING: ["PROVIDER_GENERATING", "FINALIZING", "SUCCEEDED", "FAILED", "CANCELLED"],
   PROVIDER_GENERATING: ["DOWNLOADING", "FAILED", "CANCELLED", "RETRYING"],
-  DOWNLOADING: ["VALIDATING", "FAILED", "CANCELLED"],
+  DOWNLOADING: ["VALIDATING", "FINALIZING", "FAILED", "CANCELLED"],
   VALIDATING: ["FINALIZING", "RETRYING", "FAILED"],
   FINALIZING: ["SUCCEEDED", "FAILED"],
   SUCCEEDED: [],

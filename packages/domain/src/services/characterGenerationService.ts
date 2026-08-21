@@ -4,6 +4,7 @@ import { ProviderGenerationError, ProviderNotConfiguredError } from "@cinerra/ai
 import { runCharacterDesigner } from "../agents/characterDesigner.js";
 import { makeEntityCode } from "../lib/codes.js";
 import { linkSceneCharacters } from "./continuityLinking.js";
+import { beginProcessing, transitionGenerationJob, JobCancelledError } from "./jobTransitions.js";
 
 export interface StartCharacterGenerationParams {
   userId: string;
@@ -29,7 +30,13 @@ export async function startCharacterGeneration(params: StartCharacterGenerationP
 
 export async function runCharacterGenerationJob(router: ModelRouter, generationJobId: string): Promise<void> {
   const job = await prisma.generationJob.findUniqueOrThrow({ where: { id: generationJobId } });
-  await prisma.generationJob.update({ where: { id: job.id }, data: { status: "PROCESSING", startedAt: new Date() } });
+
+  try {
+    await beginProcessing(job.id);
+  } catch (error) {
+    if (error instanceof JobCancelledError) return;
+    throw error;
+  }
 
   try {
     const project = await prisma.project.findUniqueOrThrow({ where: { id: job.projectId }, include: { storyBible: true } });
@@ -127,7 +134,7 @@ export async function runCharacterGenerationJob(router: ModelRouter, generationJ
     });
 
     await linkSceneCharacters(project.id);
-    await prisma.generationJob.update({ where: { id: job.id }, data: { status: "SUCCEEDED", finishedAt: new Date() } });
+    await transitionGenerationJob(job.id, "SUCCEEDED");
   } catch (error) {
     const message =
       error instanceof ProviderNotConfiguredError
@@ -135,10 +142,7 @@ export async function runCharacterGenerationJob(router: ModelRouter, generationJ
         : error instanceof ProviderGenerationError
           ? "We couldn't generate characters right now. Your project is safe — try again shortly."
           : `We couldn't generate characters: ${error instanceof Error ? error.message : "unexpected error"}`;
-    await prisma.generationJob.update({
-      where: { id: job.id },
-      data: { status: "FAILED", errorMessage: message, finishedAt: new Date(), attempts: { increment: 1 } },
-    });
+    await transitionGenerationJob(job.id, "FAILED", { errorMessage: message, attempts: { increment: 1 } });
     throw error;
   }
 }

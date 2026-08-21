@@ -35,12 +35,29 @@ const STORYBOARD_STEPS = [
   { key: "PROCESSING", label: "Breaking each scene into cinematic shots" },
 ];
 
+const REFERENCE_STEPS = [
+  { key: "QUEUED", label: "Queued for generation" },
+  { key: "PROCESSING", label: "Compiling the reference prompt" },
+  { key: "PROVIDER_GENERATING", label: "Generating the reference image" },
+  { key: "DOWNLOADING", label: "Saving the image to your project" },
+];
+
+const SHOT_STEPS = [
+  { key: "QUEUED", label: "Queued for generation" },
+  { key: "PROCESSING", label: "Resolving continuity — characters, wardrobe, location, props" },
+  { key: "PROVIDER_GENERATING", label: "Generating the shot" },
+  { key: "DOWNLOADING", label: "Saving the video to your project" },
+  { key: "VALIDATING", label: "Finalizing" },
+];
+
 const STEPS_BY_KIND = {
   story: STORY_STEPS,
   script: SCRIPT_STEPS,
   characters: CHARACTERS_STEPS,
   locations: LOCATIONS_STEPS,
   storyboard: STORYBOARD_STEPS,
+  reference: REFERENCE_STEPS,
+  shot: SHOT_STEPS,
 } as const;
 
 export type GenerationKind = keyof typeof STEPS_BY_KIND;

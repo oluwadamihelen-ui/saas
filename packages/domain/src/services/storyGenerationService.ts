@@ -1,8 +1,8 @@
 import { prisma } from "@cinerra/database";
 import type { ModelRouter } from "@cinerra/ai";
 import { ProviderNotConfiguredError, ProviderGenerationError } from "@cinerra/ai";
-import { assertTransition, type GenerationJobStatus } from "../jobStateMachine.js";
 import { runStoryArchitect, type StoryArchitectInput } from "../agents/storyArchitect.js";
+import { beginProcessing, transitionGenerationJob, JobCancelledError } from "./jobTransitions.js";
 
 export interface StartStoryGenerationParams {
   userId: string;
@@ -55,19 +55,6 @@ export async function startStoryGeneration(params: StartStoryGenerationParams): 
   return { generationJobId: job.id };
 }
 
-async function transitionJob(jobId: string, from: GenerationJobStatus, to: GenerationJobStatus, extra: Record<string, unknown> = {}) {
-  assertTransition(from, to);
-  await prisma.generationJob.update({
-    where: { id: jobId },
-    data: {
-      status: to,
-      startedAt: to === "PROCESSING" ? new Date() : undefined,
-      finishedAt: to === "SUCCEEDED" || to === "FAILED" || to === "CANCELLED" ? new Date() : undefined,
-      ...extra,
-    },
-  });
-}
-
 /**
  * Executed by the worker. Runs the Story Architect agent and persists its
  * output into the canonical Story Bible + Episode rows. On any failure the
@@ -76,7 +63,13 @@ async function transitionJob(jobId: string, from: GenerationJobStatus, to: Gener
  */
 export async function runStoryGenerationJob(router: ModelRouter, generationJobId: string): Promise<void> {
   const job = await prisma.generationJob.findUniqueOrThrow({ where: { id: generationJobId } });
-  await transitionJob(job.id, "QUEUED", "PROCESSING");
+
+  try {
+    await beginProcessing(job.id);
+  } catch (error) {
+    if (error instanceof JobCancelledError) return;
+    throw error;
+  }
 
   try {
     const input = job.input as unknown as StoryArchitectInput;
@@ -107,16 +100,13 @@ export async function runStoryGenerationJob(router: ModelRouter, generationJobId
       await tx.project.update({ where: { id: job.projectId }, data: { status: "DRAFT" } });
     });
 
-    await transitionJob(job.id, "PROCESSING", "FINALIZING");
-    await transitionJob(job.id, "FINALIZING", "SUCCEEDED");
+    await transitionGenerationJob(job.id, "FINALIZING");
+    await transitionGenerationJob(job.id, "SUCCEEDED");
   } catch (error) {
     const message = humanReadableError(error);
     await prisma.storyBible.update({ where: { projectId: job.projectId }, data: { status: "DRAFT" } }).catch(() => undefined);
     await prisma.project.update({ where: { id: job.projectId }, data: { status: "DRAFT" } }).catch(() => undefined);
-    await prisma.generationJob.update({
-      where: { id: job.id },
-      data: { status: "FAILED", errorMessage: message, finishedAt: new Date(), attempts: { increment: 1 } },
-    });
+    await transitionGenerationJob(job.id, "FAILED", { errorMessage: message, attempts: { increment: 1 } });
     throw error;
   }
 }

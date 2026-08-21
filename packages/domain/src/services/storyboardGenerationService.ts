@@ -2,6 +2,7 @@ import { prisma } from "@cinerra/database";
 import type { ModelRouter } from "@cinerra/ai";
 import { ProviderGenerationError, ProviderNotConfiguredError } from "@cinerra/ai";
 import { runDirector } from "../agents/director.js";
+import { beginProcessing, transitionGenerationJob, JobCancelledError } from "./jobTransitions.js";
 
 export interface StartStoryboardGenerationParams {
   userId: string;
@@ -35,7 +36,13 @@ function normalize(name: string): string {
 /** Director agent (spec §18-19): converts every scene without shots yet into cinematic coverage. */
 export async function runStoryboardGenerationJob(router: ModelRouter, generationJobId: string): Promise<void> {
   const job = await prisma.generationJob.findUniqueOrThrow({ where: { id: generationJobId } });
-  await prisma.generationJob.update({ where: { id: job.id }, data: { status: "PROCESSING", startedAt: new Date() } });
+
+  try {
+    await beginProcessing(job.id);
+  } catch (error) {
+    if (error instanceof JobCancelledError) return;
+    throw error;
+  }
 
   try {
     const project = await prisma.project.findUniqueOrThrow({ where: { id: job.projectId } });
@@ -98,7 +105,7 @@ export async function runStoryboardGenerationJob(router: ModelRouter, generation
       }
     }
 
-    await prisma.generationJob.update({ where: { id: job.id }, data: { status: "SUCCEEDED", finishedAt: new Date() } });
+    await transitionGenerationJob(job.id, "SUCCEEDED");
   } catch (error) {
     const message =
       error instanceof ProviderNotConfiguredError
@@ -106,10 +113,7 @@ export async function runStoryboardGenerationJob(router: ModelRouter, generation
         : error instanceof ProviderGenerationError
           ? "We couldn't generate the storyboard right now. Your project is safe — try again shortly."
           : `We couldn't generate the storyboard: ${error instanceof Error ? error.message : "unexpected error"}`;
-    await prisma.generationJob.update({
-      where: { id: job.id },
-      data: { status: "FAILED", errorMessage: message, finishedAt: new Date(), attempts: { increment: 1 } },
-    });
+    await transitionGenerationJob(job.id, "FAILED", { errorMessage: message, attempts: { increment: 1 } });
     throw error;
   }
 }

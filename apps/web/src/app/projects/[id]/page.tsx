@@ -1,6 +1,8 @@
 import { redirect, notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { getAssetDisplayUrl } from "@/lib/storage";
+import { providerRegistry } from "@/lib/ai";
 import { Header } from "@/components/Header";
 import { MobileNav } from "@/components/Nav";
 import { GenerationProgress, type GenerationKind } from "@/components/GenerationProgress";
@@ -16,9 +18,11 @@ const JOB_TITLES: Record<GenerationKind, string> = {
   characters: "Building your character bible…",
   locations: "Building your location bible…",
   storyboard: "Building your storyboard…",
+  reference: "Generating reference image…",
+  shot: "Generating shot…",
 };
 
-const VALID_KINDS = new Set<GenerationKind>(["story", "script", "characters", "locations", "storyboard"]);
+const VALID_KINDS = new Set<GenerationKind>(["story", "script", "characters", "locations", "storyboard", "reference", "shot"]);
 
 export default async function ProjectPage({
   params,
@@ -36,19 +40,57 @@ export default async function ProjectPage({
     include: {
       storyBible: true,
       episodes: { orderBy: { number: "asc" } },
-      characters: { orderBy: { code: "asc" } },
-      locations: { orderBy: { code: "asc" } },
+      characters: { orderBy: { code: "asc" }, include: { primaryReference: { include: { asset: true } } } },
+      locations: { orderBy: { code: "asc" }, include: { primaryReference: { include: { asset: true } } } },
       scenes: {
         orderBy: { number: "asc" },
         include: {
           location: true,
-          shots: { orderBy: { order: "asc" }, include: { characters: { include: { character: true } } } },
+          shots: {
+            orderBy: { order: "asc" },
+            include: { characters: { include: { character: true } }, videoAsset: true },
+          },
         },
       },
     },
   });
   if (!project) notFound();
   if (project.ownerId !== userId) notFound();
+
+  const imageProviderConfigured = providerRegistry.isConfigured("IMAGE");
+  const videoProviderConfigured = providerRegistry.isConfigured("VIDEO");
+
+  const characterCards = await Promise.all(
+    project.characters.map(async (c) => ({
+      ...c,
+      primaryReferenceResolved: c.primaryReference
+        ? { id: c.primaryReference.id, imageUrl: await getAssetDisplayUrl(c.primaryReference.asset.storageKey), approvedAt: c.primaryReference.approvedAt }
+        : null,
+    })),
+  );
+
+  const locationCards = await Promise.all(
+    project.locations.map(async (l) => ({
+      ...l,
+      primaryReferenceResolved: l.primaryReference
+        ? { id: l.primaryReference.id, imageUrl: await getAssetDisplayUrl(l.primaryReference.asset.storageKey), approvedAt: l.primaryReference.approvedAt }
+        : null,
+    })),
+  );
+
+  const scenesWithShotUrls = await Promise.all(
+    project.scenes
+      .filter((s) => s.shots.length > 0)
+      .map(async (scene) => ({
+        ...scene,
+        shotsResolved: await Promise.all(
+          scene.shots.map(async (shot) => ({
+            ...shot,
+            videoUrl: shot.videoAsset ? await getAssetDisplayUrl(shot.videoAsset.storageKey) : null,
+          })),
+        ),
+      })),
+  );
 
   const requestedKind = searchParams.kind as GenerationKind | undefined;
   const activeJobKind: GenerationKind = requestedKind && VALID_KINDS.has(requestedKind) ? requestedKind : "story";
@@ -123,12 +165,13 @@ export default async function ProjectPage({
                 label={project.characters.length > 0 ? "Regenerate Characters" : "Generate Characters"}
               />
             </div>
-            {project.characters.length > 0 ? (
+            {characterCards.length > 0 ? (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {project.characters.map((c) => (
+                {characterCards.map((c) => (
                   <CharacterCard
                     key={c.id}
                     id={c.id}
+                    projectId={project.id}
                     code={c.code}
                     name={c.name}
                     age={c.age}
@@ -138,6 +181,8 @@ export default async function ProjectPage({
                     personality={c.personality}
                     voiceProfile={c.voiceProfile}
                     isLocked={c.isLocked}
+                    primaryReference={c.primaryReferenceResolved}
+                    imageProviderConfigured={imageProviderConfigured}
                   />
                 ))}
               </div>
@@ -158,18 +203,21 @@ export default async function ProjectPage({
                 label={project.locations.length > 0 ? "Regenerate Locations" : "Generate Locations"}
               />
             </div>
-            {project.locations.length > 0 ? (
+            {locationCards.length > 0 ? (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {project.locations.map((l) => (
+                {locationCards.map((l) => (
                   <LocationCard
                     key={l.id}
                     id={l.id}
+                    projectId={project.id}
                     code={l.code}
                     name={l.name}
                     architecture={l.architecture}
                     lighting={l.lighting}
                     colorPalette={l.colorPalette}
                     isLocked={l.isLocked}
+                    primaryReference={l.primaryReferenceResolved}
+                    imageProviderConfigured={imageProviderConfigured}
                   />
                 ))}
               </div>
@@ -190,31 +238,33 @@ export default async function ProjectPage({
                 label={hasShots ? "Generate Remaining Shots" : "Generate Storyboard"}
               />
             </div>
-            {hasShots ? (
+            {scenesWithShotUrls.length > 0 ? (
               <div className="flex flex-col gap-6">
-                {project.scenes
-                  .filter((s) => s.shots.length > 0)
-                  .map((scene) => (
-                    <div key={scene.id}>
-                      <p className="mb-2 text-xs uppercase tracking-wide text-cinerra-muted">
-                        Scene {scene.number} · {scene.intExt} {scene.location?.name ?? scene.rawLocationName ?? ""}
-                      </p>
-                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                        {scene.shots.map((shot) => (
-                          <ShotCard
-                            key={shot.id}
-                            code={shot.code}
-                            shotType={shot.shotType}
-                            durationSeconds={shot.durationSeconds}
-                            action={shot.action}
-                            dialogue={shot.dialogue}
-                            characterNames={shot.characters.map((link) => link.character.name)}
-                            status={shot.status}
-                          />
-                        ))}
-                      </div>
+                {scenesWithShotUrls.map((scene) => (
+                  <div key={scene.id}>
+                    <p className="mb-2 text-xs uppercase tracking-wide text-cinerra-muted">
+                      Scene {scene.number} · {scene.intExt} {scene.location?.name ?? scene.rawLocationName ?? ""}
+                    </p>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                      {scene.shotsResolved.map((shot) => (
+                        <ShotCard
+                          key={shot.id}
+                          id={shot.id}
+                          projectId={project.id}
+                          code={shot.code}
+                          shotType={shot.shotType}
+                          durationSeconds={shot.durationSeconds}
+                          action={shot.action}
+                          dialogue={shot.dialogue}
+                          characterNames={shot.characters.map((link) => link.character.name)}
+                          status={shot.status}
+                          videoUrl={shot.videoUrl}
+                          videoProviderConfigured={videoProviderConfigured}
+                        />
+                      ))}
                     </div>
-                  ))}
+                  </div>
+                ))}
               </div>
             ) : (
               <p className="text-sm text-cinerra-muted">No shots yet — the Director agent breaks each scene into cinematic coverage.</p>

@@ -1,18 +1,22 @@
 import { loadEnv } from "@cinerra/config";
 import { ModelRouter, ProviderRegistry } from "@cinerra/ai";
 import { createGenerationWorker, redisConnection, QUEUE_NAMES, type GenerationJobPayload, type Job } from "@cinerra/queue";
+import { createStorageClient } from "@cinerra/storage";
 import {
   runStoryGenerationJob,
   runScriptGenerationJob,
   runCharacterGenerationJob,
   runLocationGenerationJob,
   runStoryboardGenerationJob,
+  runReferenceImageGenerationJob,
+  runShotGenerationJob,
 } from "@cinerra/domain";
 import { prisma } from "@cinerra/database";
 
 const env = loadEnv(process.env);
 const registry = new ProviderRegistry(env);
 const router = new ModelRouter(registry);
+const storage = createStorageClient(env);
 const connection = redisConnection(env.REDIS_URL);
 
 // Global per-worker-process concurrency ceiling (distinct from the
@@ -48,12 +52,21 @@ const workers = [
   createGenerationWorker(QUEUE_NAMES.storyboardGeneration, connection, WORKER_CONCURRENCY, (job) =>
     withJobLogging(job, () => runStoryboardGenerationJob(router, job.data.generationJobId)),
   ),
+  createGenerationWorker(QUEUE_NAMES.assetGeneration, connection, WORKER_CONCURRENCY, (job) =>
+    withJobLogging(job, () => runReferenceImageGenerationJob(router, storage, job.data.generationJobId)),
+  ),
+  // Video generation is typically the slowest and most provider-rate-limited
+  // step, so it gets its own (usually lower) concurrency rather than
+  // sharing the general worker concurrency.
+  createGenerationWorker(QUEUE_NAMES.shotGeneration, connection, Number(process.env.WORKER_SHOT_CONCURRENCY ?? 2), (job) =>
+    withJobLogging(job, () => runShotGenerationJob(router, storage, job.data.generationJobId)),
+  ),
 ];
 
-// Remaining queues (asset-generation, shot-generation, audio-generation,
-// episode-assembly, export) are defined in @cinerra/queue and will attach
-// their own worker processors here as those pipelines are implemented —
-// the queue/worker/state-machine plumbing already supports them uniformly.
+// Remaining queues (audio-generation, episode-assembly, export) are
+// defined in @cinerra/queue and will attach their own worker processors
+// here as those pipelines are implemented — the queue/worker/state-machine
+// plumbing already supports them uniformly.
 
 for (const w of workers) {
   w.on("failed", (job, error) => {

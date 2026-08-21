@@ -106,7 +106,7 @@ export async function resolveShotPromptContext(shotId: string): Promise<Compiled
   return context;
 }
 
-function formatVisualStyle(style: string, custom: string | null): string {
+export function formatVisualStyle(style: string, custom: string | null): string {
   if (style === "CUSTOM" && custom) return custom;
   return style
     .toLowerCase()
@@ -115,7 +115,7 @@ function formatVisualStyle(style: string, custom: string | null): string {
     .join(" ");
 }
 
-function formatAspectRatio(ratio: string): "16:9" | "9:16" | "1:1" {
+export function formatAspectRatio(ratio: string): "16:9" | "9:16" | "1:1" {
   switch (ratio) {
     case "LANDSCAPE_16_9":
       return "16:9";

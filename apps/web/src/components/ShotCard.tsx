@@ -1,4 +1,8 @@
+import { GenerateShotButton } from "./create/GenerateShotButton";
+
 export interface ShotCardProps {
+  id: string;
+  projectId: string;
   code: string;
   shotType: string;
   durationSeconds: number;
@@ -6,6 +10,8 @@ export interface ShotCardProps {
   dialogue: string | null;
   characterNames: string[];
   status: string;
+  videoUrl: string | null;
+  videoProviderConfigured: boolean;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -17,8 +23,11 @@ const STATUS_LABEL: Record<string, string> = {
   FAILED: "Failed",
 };
 
-/** ShotCard (spec §30): one storyboard card per shot. Video generation is a later phase — status is always honest, never faked. */
+/** ShotCard (spec §30): one storyboard card per shot. */
 export function ShotCard(props: ShotCardProps) {
+  const canGenerate = props.status === "PENDING" || props.status === "FAILED";
+  const canRegenerate = props.status === "READY";
+
   return (
     <div className="card flex flex-col gap-2">
       <div className="flex items-center justify-between">
@@ -31,14 +40,27 @@ export function ShotCard(props: ShotCardProps) {
           {STATUS_LABEL[props.status] ?? props.status}
         </span>
       </div>
-      <div className="flex aspect-video items-center justify-center rounded-lg bg-cinerra-surface2 text-[11px] text-cinerra-muted">
-        No preview yet
+
+      <div className="flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-cinerra-surface2 text-[11px] text-cinerra-muted">
+        {props.videoUrl ? (
+          // eslint-disable-next-line jsx-a11y/media-has-caption
+          <video src={props.videoUrl} controls className="h-full w-full object-cover" />
+        ) : (
+          "No preview yet"
+        )}
       </div>
+
       <p className="text-sm font-medium">{props.shotType.replace(/_/g, " ")}</p>
       <p className="text-xs text-cinerra-muted">{props.durationSeconds} sec</p>
       {props.characterNames.length > 0 && <p className="text-xs text-cinerra-muted">{props.characterNames.join(" + ")}</p>}
       {props.action && <p className="text-xs text-cinerra-text">{props.action}</p>}
       {props.dialogue && <p className="text-xs italic text-cinerra-muted">&ldquo;{props.dialogue}&rdquo;</p>}
+
+      {props.videoProviderConfigured ? (
+        (canGenerate || canRegenerate) && <GenerateShotButton shotId={props.id} projectId={props.projectId} label={canRegenerate ? "Regenerate" : "Generate"} />
+      ) : (
+        <p className="text-[11px] text-cinerra-muted">Video generation provider not configured.</p>
+      )}
     </div>
   );
 }

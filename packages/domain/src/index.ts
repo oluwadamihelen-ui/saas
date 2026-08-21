@@ -14,3 +14,6 @@ export * from "./services/characterGenerationService.js";
 export * from "./services/locationGenerationService.js";
 export * from "./services/storyboardGenerationService.js";
 export * from "./services/continuityLinking.js";
+export * from "./services/referenceImageService.js";
+export * from "./services/shotGenerationService.js";
+export * from "./services/jobTransitions.js";
