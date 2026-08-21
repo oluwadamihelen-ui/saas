@@ -1,0 +1,1030 @@
+// Cinerra database schema.
+// Core relationships that continuity generation depends on are modeled as
+// real foreign keys / join tables, never as free-form JSON. JSON columns
+// are used only for genuinely variable-shape metadata (spec §37).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// IDENTITY / ORGANIZATIONS
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+model User {
+  id                String        @id @default(cuid())
+  email             String        @unique
+  emailVerifiedAt   DateTime?
+  passwordHash      String?
+  name              String?
+  avatarUrl         String?
+  role              UserRole      @default(USER)
+  status            AccountStatus @default(ACTIVE)
+  organizationId    String?
+  organization      Organization? @relation(fields: [organizationId], references: [id])
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  accounts          OAuthAccount[]
+  sessions          Session[]
+  verificationTokens VerificationToken[]
+  passwordResets    PasswordResetToken[]
+  subscription      Subscription?
+  projects          Project[]
+  generationJobs    GenerationJob[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+  publications      Publication[]
+  favorites         Favorite[]
+
+  @@index([organizationId])
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+  projects  Project[]
+}
+
+model OAuthAccount {
+  id                String  @id @default(cuid())
+  userId            String
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider          String
+  providerAccountId String
+  accessToken       String?
+  refreshToken      String?
+  expiresAt         Int?
+  tokenType         String?
+  scope             String?
+  idToken           String?
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// SUBSCRIPTIONS / BILLING  (no customer-facing credit balance — fair-use only)
+// ---------------------------------------------------------------------------
+
+enum QueuePriority {
+  LOW
+  NORMAL
+  HIGH
+  HIGHEST
+}
+
+enum BillingInterval {
+  MONTH
+  YEAR
+}
+
+// Admin-editable plan catalog. Prices and fair-use limits are never hard-coded
+// into application logic (spec §42, §80).
+model Plan {
+  id                        String   @id @default(cuid())
+  key                       String   @unique // e.g. "free", "creator", "pro", "studio"
+  name                      String
+  description               String?
+  priceMonthlyCents         Int
+  priceYearlyCents          Int
+  stripePriceIdMonthly      String?
+  stripePriceIdYearly       String?
+  maxConcurrentGenerations  Int      @default(1)
+  queuePriority             QueuePriority @default(NORMAL)
+  maxExportResolution       String   @default("720p")
+  maxStorageGB              Int      @default(10)
+  maxProjectDurationMinutes Int      @default(20)
+  seats                     Int      @default(1)
+  isPubliclyVisible         Boolean  @default(true)
+  sortOrder                 Int      @default(0)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  subscriptions Subscription[]
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  UNPAID
+  INCOMPLETE
+}
+
+// Synced exclusively from Stripe webhooks — never trust the frontend for state (spec §44).
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId               String
+  plan                 Plan               @relation(fields: [planId], references: [id])
+  status               SubscriptionStatus @default(TRIALING)
+  interval             BillingInterval    @default(MONTH)
+  stripeCustomerId     String?
+  stripeSubscriptionId String?            @unique
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// PROJECTS / STORY BIBLE
+// ---------------------------------------------------------------------------
+
+enum ProjectMode {
+  INSPIRATION
+  ADAPTATION
+}
+
+enum ProjectFormat {
+  SHORT_FILM
+  FEATURE_FILM
+  MINI_SERIES
+  SERIES
+}
+
+enum AspectRatio {
+  LANDSCAPE_16_9
+  PORTRAIT_9_16
+  SQUARE_1_1
+}
+
+enum VisualStyle {
+  LIVE_ACTION_FILM
+  CINEMATIC_DRAMA
+  DOCUMENTARY
+  DARK_THRILLER
+  ROMANTIC_DRAMA
+  HIGH_END_TELEVISION
+  PERIOD_DRAMA
+  ACTION_FILM
+  HORROR
+  CUSTOM
+}
+
+enum ProjectStatus {
+  DRAFT
+  GENERATING
+  READY
+  PUBLISHED
+  ARCHIVED
+}
+
+enum Visibility {
+  PRIVATE
+  UNLISTED
+  PUBLIC
+}
+
+model Project {
+  id             String        @id @default(cuid())
+  ownerId        String
+  owner          User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  title          String
+  mode           ProjectMode
+  format         ProjectFormat @default(SERIES)
+  episodeCount   Int           @default(1)
+  aspectRatio    AspectRatio   @default(PORTRAIT_9_16)
+  visualStyle    VisualStyle   @default(LIVE_ACTION_FILM)
+  customStyle    String?
+
+  status         ProjectStatus @default(DRAFT)
+  visibility     Visibility    @default(PRIVATE)
+
+  sourceText     String?       // raw pasted/extracted source material for adaptation mode
+  sourceFileKey  String?       // storage key of uploaded source document
+
+  posterAssetId  String?
+  posterAsset    Asset?        @relation("ProjectPoster", fields: [posterAssetId], references: [id])
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  storyBible     StoryBible?
+  characters     Character[]
+  locations      Location[]
+  wardrobes      Wardrobe[]
+  props          Prop[]
+  episodes       Episode[]
+  scenes         Scene[]
+  assets         Asset[]       @relation("ProjectAssets")
+  generationJobs GenerationJob[]
+  projectVersions ProjectVersion[]
+  timelineItems  TimelineItem[]
+  exports        Export[]
+  publication    Publication?
+
+  @@index([ownerId])
+  @@index([status])
+  @@index([visibility])
+}
+
+// Full-project autosave snapshots (spec §36). Lightweight JSON diff/snapshot,
+// not the canonical relational data itself.
+model ProjectVersion {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  label     String?
+  snapshot  Json
+  createdAt DateTime @default(now())
+
+  @@index([projectId, createdAt])
+}
+
+// The canonical Story Bible (spec §12) — one per project.
+model StoryBible {
+  id                    String   @id @default(cuid())
+  projectId             String   @unique
+  project               Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  logline               String
+  genres                String[] // Drama, Thriller, Romance, ...
+  tones                 String[] // Dark, Emotional, Suspenseful, ...
+  premise               String
+  theme                 String?
+  world                 String?
+  setting               String?
+  targetAudience         String?
+  storyRules            Json?    // array of hard constraints the AI must never violate
+  episodeStructure       Json?    // per-episode beat summary
+  cinematographyRules    Json?
+
+  status                String   @default("DRAFT") // DRAFT | GENERATING | READY
+  generatedByJobId       String?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// CHARACTER / LOCATION / WARDROBE / PROP BIBLES
+// ---------------------------------------------------------------------------
+
+model Character {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  code            String   // e.g. CHAR-MAR-01
+  name            String
+  age             Int?
+  gender          String?
+  appearanceNotes String?  // used only when explicitly required by the story (spec §13)
+  face            String?
+  hair            String?
+  eyes            String?
+  skin            String?
+  height          String?
+  build           String?
+  personality     String?
+  voiceProfile    String?
+  accent          String?
+  relationships   Json?
+  characterArc    String?
+  firstAppearance String?
+  lastAppearance  String?
+  continuityRules String?
+  isLocked        Boolean  @default(false)
+  lockedAt        DateTime?
+
+  primaryReferenceId String?
+  primaryReference    CharacterReference? @relation("PrimaryRef", fields: [primaryReferenceId], references: [id])
+
+  references      CharacterReference[] @relation("AllRefs")
+  wardrobes       Wardrobe[]
+  sceneLinks      SceneCharacter[]
+  shotLinks       ShotCharacter[]
+  props           Prop[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([projectId, code])
+  @@index([projectId])
+}
+
+model CharacterReference {
+  id          String    @id @default(cuid())
+  characterId String
+  character   Character @relation("AllRefs", fields: [characterId], references: [id], onDelete: Cascade)
+  assetId     String
+  asset       Asset     @relation(fields: [assetId], references: [id])
+  label       String?   // "face", "body", "expression: anger", ...
+  approvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  primaryFor  Character[] @relation("PrimaryRef")
+
+  @@index([characterId])
+}
+
+model Location {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  code            String   // e.g. LOC-HOSP-01
+  name            String
+  architecture    String?
+  lighting        String?
+  colorPalette    String?
+  furniture       String?
+  layout          String?
+  timeOfDayVariants Json?
+  continuityRules String?
+  isLocked        Boolean  @default(false)
+  lockedAt        DateTime?
+
+  primaryReferenceId String?
+  primaryReference    LocationReference? @relation("PrimaryRef", fields: [primaryReferenceId], references: [id])
+
+  references      LocationReference[] @relation("AllRefs")
+  sceneLinks      Scene[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([projectId, code])
+  @@index([projectId])
+}
+
+model LocationReference {
+  id         String    @id @default(cuid())
+  locationId String
+  location   Location  @relation("AllRefs", fields: [locationId], references: [id], onDelete: Cascade)
+  assetId    String
+  asset      Asset     @relation(fields: [assetId], references: [id])
+  label      String?
+  approvedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  primaryFor Location[] @relation("PrimaryRef")
+
+  @@index([locationId])
+}
+
+model Wardrobe {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  characterId     String
+  character       Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  code            String   // e.g. WARD-MAR-01
+  name            String
+  clothing        String?
+  colors          String?
+  shoes           String?
+  accessories     String?
+  hairstyle       String?
+  makeup          String?
+  continuityNotes String?
+  isLocked        Boolean  @default(false)
+  referenceAssetId String?
+  referenceAsset   Asset?  @relation("WardrobeReference", fields: [referenceAssetId], references: [id])
+
+  shotLinks       ShotWardrobe[]
+  sceneLinks      SceneCharacter[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([projectId, code])
+  @@index([projectId])
+  @@index([characterId])
+}
+
+model Prop {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  ownerCharacterId String?
+  ownerCharacter   Character? @relation(fields: [ownerCharacterId], references: [id])
+  code            String   // e.g. PROP-PHONE-MAR-01
+  name            String
+  description     String?
+  continuityNotes String?
+  isLocked        Boolean  @default(false)
+  referenceAssetId String?
+  referenceAsset   Asset?  @relation("PropReference", fields: [referenceAssetId], references: [id])
+
+  sceneLinks      ScenePropLink[]
+  shotLinks       ShotProp[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([projectId, code])
+  @@index([projectId])
+}
+
+// ---------------------------------------------------------------------------
+// EPISODES / SCENES / SHOTS
+// ---------------------------------------------------------------------------
+
+enum EpisodeStatus {
+  DRAFT
+  GENERATING
+  READY
+  PUBLISHED
+}
+
+model Episode {
+  id          String        @id @default(cuid())
+  projectId   String
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  number      Int
+  title       String
+  synopsis    String?
+  script      String?       // full screenplay text for this episode
+  status      EpisodeStatus @default(DRAFT)
+  runtimeSeconds Int?
+  thumbnailAssetId String?
+  thumbnailAsset   Asset?   @relation(fields: [thumbnailAssetId], references: [id])
+  publishedAt DateTime?
+
+  scenes      Scene[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([projectId, number])
+  @@index([projectId])
+}
+
+enum SceneIntExt {
+  INT
+  EXT
+  INT_EXT
+}
+
+model Scene {
+  id              String      @id @default(cuid())
+  projectId       String
+  project         Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  episodeId       String?
+  episode         Episode?    @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  number          Int
+  intExt          SceneIntExt @default(INT)
+  locationId      String?
+  location        Location?   @relation(fields: [locationId], references: [id])
+  timeOfDay       String?     // "EVENING", "DAY", "NIGHT", ...
+  storyPurpose    String?
+  emotionalState  String?
+  continuityNotes String?
+  scriptText      String?
+
+  characters      SceneCharacter[]
+  props           ScenePropLink[]
+  shots           Shot[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([projectId, number])
+  @@index([projectId])
+  @@index([episodeId])
+  @@index([locationId])
+}
+
+model SceneCharacter {
+  sceneId     String
+  scene       Scene     @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  wardrobeId  String?
+  wardrobe    Wardrobe? @relation(fields: [wardrobeId], references: [id])
+
+  @@id([sceneId, characterId])
+  @@index([characterId])
+}
+
+model ScenePropLink {
+  sceneId String
+  scene   Scene @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  propId  String
+  prop    Prop  @relation(fields: [propId], references: [id], onDelete: Cascade)
+
+  @@id([sceneId, propId])
+  @@index([propId])
+}
+
+enum ShotType {
+  EXTREME_WIDE
+  WIDE
+  MEDIUM_WIDE
+  MEDIUM
+  MEDIUM_CLOSE_UP
+  CLOSE_UP
+  EXTREME_CLOSE_UP
+  OVER_THE_SHOULDER
+  TWO_SHOT
+  POV
+  INSERT
+}
+
+enum CameraMovement {
+  LOCKED_OFF
+  TRACKING
+  DOLLY
+  CRANE
+  HANDHELD
+  PUSH_IN
+  PULL_OUT
+  PAN
+  TILT
+  RACK_FOCUS
+}
+
+enum ShotStatus {
+  PENDING
+  QUEUED
+  GENERATING
+  NEEDS_REVISION
+  READY
+  FAILED
+}
+
+model Shot {
+  id              String         @id @default(cuid())
+  code            String         // e.g. SC03-SH001
+  sceneId         String
+  scene           Scene          @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  order           Int
+  shotType        ShotType
+  cameraMovement  CameraMovement @default(LOCKED_OFF)
+  lens            String?
+  framing         String?
+  eyeLine         String?
+  emotion         String?
+  action          String?
+  dialogue        String?
+  durationSeconds Int            @default(6)
+  isLocked        Boolean        @default(false)
+
+  previousShotId  String?        @unique
+  previousShot    Shot?          @relation("ShotSequence", fields: [previousShotId], references: [id])
+  nextShot        Shot?          @relation("ShotSequence")
+
+  generationPrompt String?
+  negativePrompt   String?
+  status           ShotStatus    @default(PENDING)
+  qualityScore     Float?
+  videoAssetId     String?
+  videoAsset       Asset?        @relation("ShotVideo", fields: [videoAssetId], references: [id])
+
+  characters      ShotCharacter[]
+  wardrobes       ShotWardrobe[]
+  props           ShotProp[]
+  generationJobs  GenerationJob[]
+  timelineItems   TimelineItem[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([sceneId, code])
+  @@index([sceneId])
+  @@index([status])
+}
+
+model ShotCharacter {
+  shotId      String
+  shot        Shot      @relation(fields: [shotId], references: [id], onDelete: Cascade)
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@id([shotId, characterId])
+  @@index([characterId])
+}
+
+model ShotWardrobe {
+  shotId     String
+  shot       Shot     @relation(fields: [shotId], references: [id], onDelete: Cascade)
+  wardrobeId String
+  wardrobe   Wardrobe @relation(fields: [wardrobeId], references: [id], onDelete: Cascade)
+
+  @@id([shotId, wardrobeId])
+  @@index([wardrobeId])
+}
+
+model ShotProp {
+  shotId String
+  shot   Shot   @relation(fields: [shotId], references: [id], onDelete: Cascade)
+  propId String
+  prop   Prop   @relation(fields: [propId], references: [id], onDelete: Cascade)
+
+  @@id([shotId, propId])
+  @@index([propId])
+}
+
+// ---------------------------------------------------------------------------
+// ASSETS (media library — spec §59)
+// ---------------------------------------------------------------------------
+
+enum AssetType {
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+}
+
+enum AssetKind {
+  CHARACTER_REFERENCE
+  LOCATION_REFERENCE
+  WARDROBE_REFERENCE
+  PROP_REFERENCE
+  STORYBOARD_FRAME
+  GENERATED_IMAGE
+  GENERATED_VIDEO
+  GENERATED_AUDIO
+  UPLOAD
+  EXPORT
+  POSTER
+  THUMBNAIL
+}
+
+model Asset {
+  id           String    @id @default(cuid())
+  projectId    String
+  project      Project   @relation("ProjectAssets", fields: [projectId], references: [id], onDelete: Cascade)
+  type         AssetType
+  kind         AssetKind
+  storageKey   String    // durable object-storage key — never a raw provider URL
+  mimeType     String?
+  width        Int?
+  height       Int?
+  durationSeconds Float?
+  bytes         Int?
+  checksum      String?
+  sourceProvider String?  // which AI provider produced this, if generated
+  sourceModel    String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  characterReferences CharacterReference[]
+  locationReferences  LocationReference[]
+  projectPosterOf     Project[]            @relation("ProjectPoster")
+  episodeThumbnailOf  Episode[]
+  shotVideoOf         Shot[]               @relation("ShotVideo")
+  audioItems          AudioItem[]
+  wardrobeReferenceOf Wardrobe[]           @relation("WardrobeReference")
+  propReferenceOf     Prop[]               @relation("PropReference")
+
+  @@index([projectId, kind])
+}
+
+// ---------------------------------------------------------------------------
+// AI PROVIDERS / MODEL ROUTING
+// ---------------------------------------------------------------------------
+
+enum ProviderCapability {
+  TEXT
+  IMAGE
+  VIDEO
+  IMAGE_TO_VIDEO
+  VIDEO_TO_VIDEO
+  VOICE
+  SOUND_EFFECT
+  MUSIC
+  IMAGE_ANALYSIS
+  VIDEO_ANALYSIS
+}
+
+enum OptimizationMode {
+  BEST_QUALITY
+  FASTEST
+  BALANCED
+}
+
+// Admin-configurable model routing table (spec §4). No provider is hard-coded
+// into the router — this table is the router's only source of truth.
+model AiModel {
+  id             String             @id @default(cuid())
+  provider       String             // "anthropic" | "openai" | "runway" | "elevenlabs" | ...
+  modelId        String             // provider-native model identifier
+  capability     ProviderCapability
+  optimizationModes OptimizationMode[]
+  isEnabled      Boolean            @default(true)
+  priority       Int                @default(0) // lower = preferred within the same mode
+  costPerUnitCents Int?             // internal cost tracking unit (per second/image/1k tokens depending on capability)
+  costUnit        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([provider, modelId, capability])
+  @@index([capability])
+}
+
+// ---------------------------------------------------------------------------
+// GENERATION JOBS / PROVIDER TASKS
+// ---------------------------------------------------------------------------
+
+enum GenerationJobType {
+  STORY_OUTLINE
+  SCREENPLAY
+  CHARACTER_BIBLE
+  LOCATION_BIBLE
+  WARDROBE_BIBLE
+  PROP_BIBLE
+  STORYBOARD
+  REFERENCE_IMAGE
+  SHOT_VIDEO
+  DIALOGUE_AUDIO
+  SOUND_EFFECT
+  MUSIC
+  EPISODE_ASSEMBLY
+  TRAILER
+  SOCIAL_CLIP
+  EXPORT
+}
+
+enum GenerationJobStatus {
+  QUEUED
+  PROCESSING
+  PROVIDER_GENERATING
+  DOWNLOADING
+  VALIDATING
+  FINALIZING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  RETRYING
+}
+
+model GenerationJob {
+  id            String               @id @default(cuid())
+  userId        String
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId     String
+  project       Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  shotId        String?
+  shot          Shot?                @relation(fields: [shotId], references: [id])
+
+  type          GenerationJobType
+  status        GenerationJobStatus  @default(QUEUED)
+  priority      QueuePriority        @default(NORMAL)
+  input         Json                 // resolved, provider-agnostic input payload
+  resultAssetId String?
+  errorMessage  String?              // always human-readable (spec §56)
+  attempts      Int                  @default(0)
+  maxAttempts   Int                  @default(3)
+
+  queuedAt      DateTime  @default(now())
+  startedAt     DateTime?
+  finishedAt    DateTime?
+
+  providerTasks ProviderTask[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([projectId])
+  @@index([shotId])
+  @@index([status])
+}
+
+enum ProviderTaskStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  TIMED_OUT
+}
+
+// One row per attempt against a concrete provider — the internal cost/perf
+// ledger. Never exposed to customers (spec §6, §79).
+model ProviderTask {
+  id               String              @id @default(cuid())
+  generationJobId  String
+  generationJob    GenerationJob       @relation(fields: [generationJobId], references: [id], onDelete: Cascade)
+  provider         String
+  modelId          String
+  externalTaskId   String?             // provider's own job/task id, for polling/webhooks
+  status           ProviderTaskStatus  @default(PENDING)
+  requestPayload   Json?
+  responsePayload  Json?
+  durationMs       Int?
+  costCents        Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([generationJobId])
+  @@index([externalTaskId])
+}
+
+// ---------------------------------------------------------------------------
+// AUDIO / TIMELINE / EXPORT
+// ---------------------------------------------------------------------------
+
+enum AudioItemType {
+  DIALOGUE
+  SFX
+  MUSIC
+  AMBIENCE
+}
+
+model AudioItem {
+  id           String        @id @default(cuid())
+  projectId    String
+  type         AudioItemType
+  assetId      String
+  asset        Asset         @relation(fields: [assetId], references: [id])
+  characterId  String?
+  text         String?       // dialogue line or cue description
+  language     String?
+  startSeconds Float?
+  createdAt    DateTime @default(now())
+
+  timelineItems TimelineItem[]
+
+  @@index([projectId, type])
+}
+
+enum TimelineTrack {
+  VIDEO
+  DIALOGUE
+  SFX
+  MUSIC
+  AMBIENCE
+  TEXT
+}
+
+model TimelineItem {
+  id            String        @id @default(cuid())
+  projectId     String
+  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  track         TimelineTrack
+  shotId        String?
+  shot          Shot?         @relation(fields: [shotId], references: [id])
+  audioItemId   String?
+  audioItem     AudioItem?    @relation(fields: [audioItemId], references: [id])
+  startSeconds  Float
+  endSeconds    Float
+  volume        Float         @default(1.0)
+  muted         Boolean       @default(false)
+  captionText   String?
+  order         Int           @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, track])
+}
+
+enum ExportFormat {
+  MP4
+}
+
+enum ExportStatus {
+  QUEUED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
+model Export {
+  id          String       @id @default(cuid())
+  projectId   String
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  format      ExportFormat @default(MP4)
+  resolution  String       // "720p" | "1080p" | "4K"
+  aspectRatio AspectRatio
+  status      ExportStatus @default(QUEUED)
+  assetKey    String?
+  errorMessage String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+// ---------------------------------------------------------------------------
+// PUBLISHING / DISCOVERY
+// ---------------------------------------------------------------------------
+
+model Publication {
+  id          String     @id @default(cuid())
+  projectId   String     @unique
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  publishedById String
+  publishedBy   User     @relation(fields: [publishedById], references: [id])
+  visibility  Visibility @default(UNLISTED)
+  views       Int        @default(0)
+  likes       Int        @default(0)
+  saves       Int        @default(0)
+  publishedAt DateTime   @default(now())
+  moderationStatus String @default("PENDING") // PENDING | APPROVED | REJECTED
+  moderationNotes  String?
+
+  favorites   Favorite[]
+}
+
+model Favorite {
+  id            String       @id @default(cuid())
+  userId        String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publicationId String
+  publication   Publication  @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+
+  @@unique([userId, publicationId])
+}
+
+// ---------------------------------------------------------------------------
+// NOTIFICATIONS / AUDIT
+// ---------------------------------------------------------------------------
+
+enum NotificationType {
+  GENERATION_COMPLETE
+  GENERATION_FAILED
+  MOVIE_READY
+  EPISODE_READY
+  EXPORT_COMPLETE
+  SUBSCRIPTION_EVENT
+}
+
+model Notification {
+  id        String            @id @default(cuid())
+  userId    String
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String?
+  linkUrl   String?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId, readAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entityType String?
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType, entityId])
+}

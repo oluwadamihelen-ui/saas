@@ -1,0 +1,26 @@
+{
+  "name": "cinerra",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Cinerra — AI movie generation platform",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @cinerra/web dev",
+    "dev:worker": "pnpm --filter @cinerra/worker dev",
+    "build": "pnpm -r --filter=./packages/* build && pnpm --filter @cinerra/web build && pnpm --filter @cinerra/worker build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "db:generate": "pnpm --filter @cinerra/database generate",
+    "db:migrate": "pnpm --filter @cinerra/database migrate",
+    "db:seed": "pnpm --filter @cinerra/database seed",
+    "db:studio": "pnpm --filter @cinerra/database studio"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "prettier": "^3.3.3"
+  },
+  "packageManager": "pnpm@10.33.0"
+}

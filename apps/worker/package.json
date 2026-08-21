@@ -1,0 +1,27 @@
+{
+  "name": "@cinerra/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'no-op'",
+    "test": "echo 'no unit tests in this package'"
+  },
+  "dependencies": {
+    "@cinerra/ai": "workspace:*",
+    "@cinerra/config": "workspace:*",
+    "@cinerra/database": "workspace:*",
+    "@cinerra/domain": "workspace:*",
+    "@cinerra/queue": "workspace:*",
+    "@cinerra/storage": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  }
+}
