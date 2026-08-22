@@ -20,7 +20,7 @@ export class ProviderRegistry {
   constructor(env: Env) {
     const anthropic = env.ANTHROPIC_API_KEY ? new AnthropicTextProvider({ apiKey: env.ANTHROPIC_API_KEY }) : null;
     const openai = env.OPENAI_API_KEY ? new OpenAiImageProvider({ apiKey: env.OPENAI_API_KEY }) : null;
-    const runway = env.RUNWAY_API_KEY ? new RunwayVideoProvider({ apiKey: env.RUNWAY_API_KEY }) : null;
+    const runway = env.RUNWAYML_API_SECRET ? new RunwayVideoProvider({ apiKey: env.RUNWAYML_API_SECRET }) : null;
     const elevenlabs = env.ELEVENLABS_API_KEY ? new ElevenLabsVoiceProvider({ apiKey: env.ELEVENLABS_API_KEY }) : null;
     const elevenlabsSfx = env.ELEVENLABS_API_KEY ? new ElevenLabsSoundEffectProvider({ apiKey: env.ELEVENLABS_API_KEY }) : null;
     const elevenlabsMusic = env.ELEVENLABS_API_KEY ? new ElevenLabsMusicProvider({ apiKey: env.ELEVENLABS_API_KEY }) : null;

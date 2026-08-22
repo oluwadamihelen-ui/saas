@@ -45,7 +45,7 @@ const envSchema = z.object({
   // --- AI providers (all optional — router degrades honestly if unset) ---
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
-  RUNWAY_API_KEY: z.string().optional(),
+  RUNWAYML_API_SECRET: z.string().optional(),
   ELEVENLABS_API_KEY: z.string().optional(),
 });
 
@@ -73,7 +73,7 @@ export function resetEnvCacheForTests(): void {
 export const isProviderConfigured = {
   anthropic: (env: Env) => Boolean(env.ANTHROPIC_API_KEY),
   openai: (env: Env) => Boolean(env.OPENAI_API_KEY),
-  runway: (env: Env) => Boolean(env.RUNWAY_API_KEY),
+  runway: (env: Env) => Boolean(env.RUNWAYML_API_SECRET),
   elevenlabs: (env: Env) => Boolean(env.ELEVENLABS_API_KEY),
   stripe: (env: Env) => Boolean(env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET),
   googleOAuth: (env: Env) => Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
