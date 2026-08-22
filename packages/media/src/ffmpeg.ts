@@ -1,6 +1,14 @@
 import { spawn } from "node:child_process";
 import { FfmpegExecutionError, FfmpegNotAvailableError } from "./errors.js";
-import { buildAddSilentAudioArgs, buildConcatArgs, buildMuxAudioArgs, type TargetSize } from "./args.js";
+import {
+  buildAddSilentAudioArgs,
+  buildConcatArgs,
+  buildMixAudioArgs,
+  buildMuxAudioArgs,
+  buildOverlayMusicArgs,
+  type OverlayMusicOptions,
+  type TargetSize,
+} from "./args.js";
 
 let availabilityCache: boolean | null = null;
 
@@ -47,4 +55,14 @@ export async function addSilentAudioTrack(videoPath: string, outputPath: string)
 /** Concatenates prepared shot segments (each already carrying a real or silent audio track) into one episode file, optionally scaled to an exact target resolution. */
 export async function concatVideos(inputPaths: string[], outputPath: string, targetSize?: TargetSize): Promise<void> {
   await runFfmpeg(buildConcatArgs(inputPaths, outputPath, targetSize));
+}
+
+/** Mixes a shot's dialogue and sound-effect audio down to one track before it's muxed onto the video. */
+export async function mixAudioTracks(audioPaths: string[], outputPath: string): Promise<void> {
+  await runFfmpeg(buildMixAudioArgs(audioPaths, outputPath));
+}
+
+/** Overlays a looping background score onto an already-assembled episode without re-encoding the video. */
+export async function overlayMusic(videoPath: string, musicPath: string, outputPath: string, options?: OverlayMusicOptions): Promise<void> {
+  await runFfmpeg(buildOverlayMusicArgs(videoPath, musicPath, outputPath, options));
 }

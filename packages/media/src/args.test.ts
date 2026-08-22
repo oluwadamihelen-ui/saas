@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildAddSilentAudioArgs, buildConcatArgs, buildMuxAudioArgs } from "./args.js";
+import { buildAddSilentAudioArgs, buildConcatArgs, buildMixAudioArgs, buildMuxAudioArgs, buildOverlayMusicArgs } from "./args.js";
 
 describe("buildMuxAudioArgs", () => {
   it("maps video from the first input and audio from the second, trimmed to the shorter", () => {
@@ -50,5 +50,43 @@ describe("buildConcatArgs", () => {
     const args = buildConcatArgs(["only.mp4"], "out.mp4", { width: 1280, height: 720 });
     expect(args).not.toContain("-c");
     expect(args.join(" ")).toContain("scale=1280:720");
+  });
+});
+
+describe("buildMixAudioArgs", () => {
+  it("throws when given no inputs", () => {
+    expect(() => buildMixAudioArgs([], "out.mp3")).toThrow();
+  });
+
+  it("just copies through a single input rather than building a filtergraph", () => {
+    const args = buildMixAudioArgs(["only.mp3"], "out.mp3");
+    expect(args).toEqual(["-y", "-i", "only.mp3", "-c:a", "copy", "out.mp3"]);
+  });
+
+  it("builds an amix filtergraph over every input, keeping the longest duration", () => {
+    const args = buildMixAudioArgs(["dialogue.mp3", "sfx.mp3"], "out.mp3");
+    const joined = args.join(" ");
+    expect(joined).toContain("-i dialogue.mp3");
+    expect(joined).toContain("-i sfx.mp3");
+    expect(joined).toContain("[0:a][1:a]amix=inputs=2:duration=longest:dropout_transition=0[aout]");
+    expect(joined).toContain("-map [aout]");
+    expect(args.at(-1)).toBe("out.mp3");
+  });
+});
+
+describe("buildOverlayMusicArgs", () => {
+  it("loops the music input and mixes it under the existing audio at reduced volume", () => {
+    const args = buildOverlayMusicArgs("episode.mp4", "score.mp3", "out.mp4");
+    const joined = args.join(" ");
+    expect(joined).toContain("-stream_loop -1 -i score.mp3");
+    expect(joined).toContain("[1:a]volume=0.25[music]");
+    expect(joined).toContain("[0:a][music]amix=inputs=2:duration=first:dropout_transition=0[aout]");
+    expect(joined).toContain("-c:v copy");
+    expect(args).toContain("-shortest");
+  });
+
+  it("honors a custom music volume", () => {
+    const args = buildOverlayMusicArgs("episode.mp4", "score.mp3", "out.mp4", { musicVolume: 0.4 });
+    expect(args.join(" ")).toContain("[1:a]volume=0.4[music]");
   });
 });

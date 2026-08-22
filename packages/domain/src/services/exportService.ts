@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { prisma } from "@cinerra/database";
 import type { StorageClient } from "@cinerra/storage";
 import { buildAssetKey } from "@cinerra/storage";
-import { addSilentAudioTrack, concatVideos, FfmpegExecutionError, FfmpegNotAvailableError, muxAudioOntoVideo } from "@cinerra/media";
+import { addSilentAudioTrack, concatVideos, FfmpegExecutionError, FfmpegNotAvailableError, mixAudioTracks, muxAudioOntoVideo, overlayMusic } from "@cinerra/media";
 import { checkEpisodeExportReadiness } from "../exportReadiness.js";
 import { resolveTargetSize } from "../lib/exportResolution.js";
 import { beginProcessing, transitionGenerationJob, JobCancelledError } from "./jobTransitions.js";
@@ -20,9 +20,11 @@ export interface StartEpisodeExportParams {
 /**
  * Episode assembly/export (spec §31, §65): concatenates every shot's
  * generated video, in scene/shot order, muxing in each shot's dialogue
- * audio (or silence, so every segment has a matching audio track) — the
- * lightweight timeline assembly this codebase implements today, ahead of
- * a full drag-and-drop timeline editor.
+ * and sound-effect audio together (or silence, so every segment has a
+ * matching audio track), then overlays the episode's background score
+ * across the whole thing if one has been generated — the lightweight
+ * timeline assembly this codebase implements today, ahead of a full
+ * drag-and-drop timeline editor.
  */
 export async function startEpisodeExport(params: StartEpisodeExportParams): Promise<{ generationJobId: string; exportId: string }> {
   const episode = await prisma.episode.findUniqueOrThrow({ where: { id: params.episodeId }, include: { project: true } });
@@ -87,13 +89,21 @@ export async function runEpisodeExportJob(storage: StorageClient, generationJobI
       include: {
         shots: {
           orderBy: { order: "asc" },
-          include: { videoAsset: true, timelineItems: { where: { track: "DIALOGUE" }, include: { audioItem: { include: { asset: true } } } } },
+          include: {
+            videoAsset: true,
+            timelineItems: { where: { track: { in: ["DIALOGUE", "SFX"] } }, include: { audioItem: { include: { asset: true } } } },
+          },
         },
       },
     });
     const allShots = scenes.flatMap((s) => s.shots);
     const readiness = checkEpisodeExportReadiness(allShots);
     if (!readiness.ready) throw new Error(readiness.reason);
+
+    const musicTimelineItem = await prisma.timelineItem.findFirst({
+      where: { episodeId, track: "MUSIC" },
+      include: { audioItem: { include: { asset: true } } },
+    });
 
     await transitionGenerationJob(job.id, "DOWNLOADING");
     workDir = await mkdtemp(join(tmpdir(), "cinerra-export-"));
@@ -105,22 +115,47 @@ export async function runEpisodeExportJob(storage: StorageClient, generationJobI
       const videoPath = join(workDir, `shot-${index}.mp4`);
       await downloadToFile(storage, videoAsset.storageKey, videoPath);
 
-      const dialogueAsset = shot.timelineItems[0]?.audioItem?.asset;
+      const dialogueAsset = shot.timelineItems.find((t) => t.track === "DIALOGUE")?.audioItem?.asset;
+      const sfxAsset = shot.timelineItems.find((t) => t.track === "SFX")?.audioItem?.asset;
       const preparedPath = join(workDir, `prepared-${index}.mp4`);
+
+      const audioPaths: string[] = [];
       if (dialogueAsset) {
-        const audioPath = join(workDir, `dialogue-${index}.mp3`);
-        await downloadToFile(storage, dialogueAsset.storageKey, audioPath);
-        await muxAudioOntoVideo(videoPath, audioPath, preparedPath);
-      } else {
+        const path = join(workDir, `dialogue-${index}.mp3`);
+        await downloadToFile(storage, dialogueAsset.storageKey, path);
+        audioPaths.push(path);
+      }
+      if (sfxAsset) {
+        const path = join(workDir, `sfx-${index}.mp3`);
+        await downloadToFile(storage, sfxAsset.storageKey, path);
+        audioPaths.push(path);
+      }
+
+      if (audioPaths.length === 0) {
         await addSilentAudioTrack(videoPath, preparedPath);
+      } else if (audioPaths.length === 1) {
+        await muxAudioOntoVideo(videoPath, audioPaths[0]!, preparedPath);
+      } else {
+        const mixedPath = join(workDir, `mixed-${index}.mp3`);
+        await mixAudioTracks(audioPaths, mixedPath);
+        await muxAudioOntoVideo(videoPath, mixedPath, preparedPath);
       }
       preparedSegments.push(preparedPath);
       index++;
     }
 
     await transitionGenerationJob(job.id, "FINALIZING");
-    const finalPath = join(workDir, "final.mp4");
-    await concatVideos(preparedSegments, finalPath, targetSize);
+    const concatenatedPath = join(workDir, "concatenated.mp4");
+    await concatVideos(preparedSegments, concatenatedPath, targetSize);
+
+    let finalPath = concatenatedPath;
+    const musicAsset = musicTimelineItem?.audioItem?.asset;
+    if (musicAsset) {
+      const musicPath = join(workDir, "music.mp3");
+      await downloadToFile(storage, musicAsset.storageKey, musicPath);
+      finalPath = join(workDir, "final.mp4");
+      await overlayMusic(concatenatedPath, musicPath, finalPath);
+    }
 
     const finalBytes = await readFile(finalPath);
     const assetKey = buildAssetKey({ projectId: job.projectId, kind: "EXPORT", assetId: randomUUID(), ext: "mp4" });
