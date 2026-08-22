@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "dotenv -e ../../.env -- tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
@@ -21,6 +21,7 @@
     "@cinerra/storage": "workspace:*"
   },
   "devDependencies": {
+    "dotenv-cli": "^7.4.2",
     "tsx": "^4.19.0",
     "typescript": "^5.5.4"
   }

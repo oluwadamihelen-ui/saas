@@ -7,10 +7,10 @@
   "types": "./src/index.ts",
   "scripts": {
     "generate": "prisma generate",
-    "migrate": "prisma migrate dev",
+    "migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
-    "studio": "prisma studio",
-    "seed": "tsx prisma/seed.ts",
+    "studio": "dotenv -e ../../.env -- prisma studio",
+    "seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
     "typecheck": "tsc --noEmit",
     "lint": "echo 'no-op'",
     "test": "echo 'no unit tests in this package'"
@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.14.15",
+    "dotenv-cli": "^7.4.2",
     "prisma": "^5.19.1",
     "tsx": "^4.19.0",
     "typescript": "^5.5.4"
