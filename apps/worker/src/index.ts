@@ -11,7 +11,7 @@ import {
   runStoryboardGenerationJob,
   runReferenceImageGenerationJob,
   runShotGenerationJob,
-  runDialogueGenerationJob,
+  runAudioGenerationJob,
   runEpisodeExportJob,
 } from "@cinerra/domain";
 import { prisma } from "@cinerra/database";
@@ -64,8 +64,10 @@ const workers = [
   createGenerationWorker(QUEUE_NAMES.shotGeneration, connection, Number(process.env.WORKER_SHOT_CONCURRENCY ?? 2), (job) =>
     withJobLogging(job, () => runShotGenerationJob(router, storage, job.data.generationJobId)),
   ),
+  // One queue shared by dialogue/SFX/music (spec §25) — the dispatcher
+  // reads the persisted job's type and routes to the right service.
   createGenerationWorker(QUEUE_NAMES.audioGeneration, connection, WORKER_CONCURRENCY, (job) =>
-    withJobLogging(job, () => runDialogueGenerationJob(router, storage, job.data.generationJobId)),
+    withJobLogging(job, () => runAudioGenerationJob(router, storage, job.data.generationJobId)),
   ),
   // Episode export is CPU-bound (ffmpeg re-encoding) rather than
   // provider-rate-limited, so it gets a small dedicated concurrency of its
@@ -77,10 +79,7 @@ const workers = [
 
 // The remaining queue (episode-assembly) is defined in @cinerra/queue for
 // a future multi-episode/movie assembly step distinct from the
-// per-episode export above; SFX/music generation share the
-// audio-generation queue's intent but have no configured provider adapter
-// yet (packages/ai) so there's no processor to add for them until one
-// exists.
+// per-episode export above.
 
 for (const w of workers) {
   w.on("failed", (job, error) => {

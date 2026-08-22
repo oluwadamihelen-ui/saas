@@ -506,8 +506,9 @@ model Episode {
   thumbnailAsset   Asset?   @relation(fields: [thumbnailAssetId], references: [id])
   publishedAt DateTime?
 
-  scenes      Scene[]
-  exports     Export[]
+  scenes        Scene[]
+  exports       Export[]
+  timelineItems TimelineItem[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -928,6 +929,10 @@ model TimelineItem {
   track         TimelineTrack
   shotId        String?
   shot          Shot?         @relation(fields: [shotId], references: [id])
+  // Episode-level placement for tracks that aren't tied to a single shot —
+  // background music today; ambience/text tracks can use this too later.
+  episodeId     String?
+  episode       Episode?      @relation(fields: [episodeId], references: [id])
   audioItemId   String?
   audioItem     AudioItem?    @relation(fields: [audioItemId], references: [id])
   startSeconds  Float
@@ -941,6 +946,7 @@ model TimelineItem {
   updatedAt DateTime @updatedAt
 
   @@index([projectId, track])
+  @@index([episodeId])
 }
 
 enum ExportFormat {

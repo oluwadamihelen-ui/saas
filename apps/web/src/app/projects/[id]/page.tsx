@@ -8,6 +8,7 @@ import { MobileNav } from "@/components/Nav";
 import { GenerationProgress, type GenerationKind } from "@/components/GenerationProgress";
 import { GenerateScriptButton } from "@/components/create/GenerateScriptButton";
 import { GenerateExportButton } from "@/components/create/GenerateExportButton";
+import { GenerateMusicButton } from "@/components/create/GenerateMusicButton";
 import { GenerateBibleButton } from "@/components/create/GenerateBibleButton";
 import { CharacterCard } from "@/components/CharacterCard";
 import { LocationCard } from "@/components/LocationCard";
@@ -22,10 +23,24 @@ const JOB_TITLES: Record<GenerationKind, string> = {
   reference: "Generating reference image…",
   shot: "Generating shot…",
   dialogue: "Generating dialogue audio…",
+  soundEffect: "Generating sound effect…",
+  music: "Composing episode score…",
   export: "Assembling and exporting your episode…",
 };
 
-const VALID_KINDS = new Set<GenerationKind>(["story", "script", "characters", "locations", "storyboard", "reference", "shot", "dialogue", "export"]);
+const VALID_KINDS = new Set<GenerationKind>([
+  "story",
+  "script",
+  "characters",
+  "locations",
+  "storyboard",
+  "reference",
+  "shot",
+  "dialogue",
+  "soundEffect",
+  "music",
+  "export",
+]);
 
 export default async function ProjectPage({
   params,
@@ -42,7 +57,13 @@ export default async function ProjectPage({
     where: { id: params.id },
     include: {
       storyBible: true,
-      episodes: { orderBy: { number: "asc" }, include: { exports: { orderBy: { createdAt: "desc" }, take: 1 } } },
+      episodes: {
+        orderBy: { number: "asc" },
+        include: {
+          exports: { orderBy: { createdAt: "desc" }, take: 1 },
+          timelineItems: { where: { track: "MUSIC" }, include: { audioItem: { include: { asset: true } } } },
+        },
+      },
       characters: { orderBy: { code: "asc" }, include: { primaryReference: { include: { asset: true } } } },
       locations: { orderBy: { code: "asc" }, include: { primaryReference: { include: { asset: true } } } },
       scenes: {
@@ -54,7 +75,7 @@ export default async function ProjectPage({
             include: {
               characters: { include: { character: true } },
               videoAsset: true,
-              timelineItems: { where: { track: "DIALOGUE" }, include: { audioItem: { include: { asset: true } } } },
+              timelineItems: { where: { track: { in: ["DIALOGUE", "SFX"] } }, include: { audioItem: { include: { asset: true } } } },
             },
           },
         },
@@ -67,6 +88,8 @@ export default async function ProjectPage({
   const imageProviderConfigured = providerRegistry.isConfigured("IMAGE");
   const videoProviderConfigured = providerRegistry.isConfigured("VIDEO");
   const voiceProviderConfigured = providerRegistry.isConfigured("VOICE");
+  const soundEffectProviderConfigured = providerRegistry.isConfigured("SOUND_EFFECT");
+  const musicProviderConfigured = providerRegistry.isConfigured("MUSIC");
 
   const characterCards = await Promise.all(
     project.characters.map(async (c) => ({
@@ -93,11 +116,13 @@ export default async function ProjectPage({
         ...scene,
         shotsResolved: await Promise.all(
           scene.shots.map(async (shot) => {
-            const dialogueAsset = shot.timelineItems[0]?.audioItem?.asset;
+            const dialogueAsset = shot.timelineItems.find((t) => t.track === "DIALOGUE")?.audioItem?.asset;
+            const sfxAsset = shot.timelineItems.find((t) => t.track === "SFX")?.audioItem?.asset;
             return {
               ...shot,
               videoUrl: shot.videoAsset ? await getAssetDisplayUrl(shot.videoAsset.storageKey) : null,
               dialogueAudioUrl: dialogueAsset ? await getAssetDisplayUrl(dialogueAsset.storageKey) : null,
+              sfxAudioUrl: sfxAsset ? await getAssetDisplayUrl(sfxAsset.storageKey) : null,
             };
           }),
         ),
@@ -108,12 +133,14 @@ export default async function ProjectPage({
     project.episodes.map(async (episode) => {
       const episodeShots = project.scenes.filter((s) => s.episodeId === episode.id).flatMap((s) => s.shots);
       const latestExport = episode.exports[0] ?? null;
+      const musicAsset = episode.timelineItems[0]?.audioItem?.asset;
       return {
         ...episode,
         allShotsReady: episodeShots.length > 0 && episodeShots.every((s) => s.status === "READY"),
         latestExport: latestExport
           ? { ...latestExport, downloadUrl: latestExport.assetKey ? await getAssetDisplayUrl(latestExport.assetKey) : null }
           : null,
+        musicUrl: musicAsset ? await getAssetDisplayUrl(musicAsset.storageKey) : null,
       };
     }),
   );
@@ -194,6 +221,18 @@ export default async function ProjectPage({
                     )}
                     {episode.latestExport?.status === "FAILED" && (
                       <p className="max-w-[16rem] text-right text-[11px] text-red-300">{episode.latestExport.errorMessage}</p>
+                    )}
+                    {episode.script && (
+                      <div className="mt-1 w-full max-w-[16rem]">
+                        {episode.musicUrl ? (
+                          // eslint-disable-next-line jsx-a11y/media-has-caption
+                          <audio src={episode.musicUrl} controls className="h-8 w-full" />
+                        ) : musicProviderConfigured ? (
+                          <GenerateMusicButton projectId={project.id} episodeId={episode.id} />
+                        ) : (
+                          <p className="text-right text-[11px] text-cinerra-muted">Music generation provider not configured.</p>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -310,6 +349,8 @@ export default async function ProjectPage({
                           videoProviderConfigured={videoProviderConfigured}
                           dialogueAudioUrl={shot.dialogueAudioUrl}
                           voiceProviderConfigured={voiceProviderConfigured}
+                          sfxAudioUrl={shot.sfxAudioUrl}
+                          soundEffectProviderConfigured={soundEffectProviderConfigured}
                         />
                       ))}
                     </div>

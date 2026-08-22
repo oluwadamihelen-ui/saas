@@ -1,5 +1,6 @@
 import { GenerateShotButton } from "./create/GenerateShotButton";
 import { GenerateDialogueButton } from "./create/GenerateDialogueButton";
+import { GenerateSoundEffectButton } from "./create/GenerateSoundEffectButton";
 
 export interface ShotCardProps {
   id: string;
@@ -15,6 +16,8 @@ export interface ShotCardProps {
   videoProviderConfigured: boolean;
   dialogueAudioUrl: string | null;
   voiceProviderConfigured: boolean;
+  sfxAudioUrl: string | null;
+  soundEffectProviderConfigured: boolean;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -74,6 +77,19 @@ export function ShotCard(props: ShotCardProps) {
             <GenerateDialogueButton shotId={props.id} projectId={props.projectId} />
           ) : (
             <p className="text-[11px] text-cinerra-muted">Voice generation provider not configured.</p>
+          )}
+        </div>
+      )}
+
+      {props.action && (
+        <div className="border-t border-cinerra-border pt-2">
+          {props.sfxAudioUrl ? (
+            // eslint-disable-next-line jsx-a11y/media-has-caption
+            <audio src={props.sfxAudioUrl} controls className="h-8 w-full" />
+          ) : props.soundEffectProviderConfigured ? (
+            <GenerateSoundEffectButton shotId={props.id} projectId={props.projectId} />
+          ) : (
+            <p className="text-[11px] text-cinerra-muted">Sound effect generation provider not configured.</p>
           )}
         </div>
       )}

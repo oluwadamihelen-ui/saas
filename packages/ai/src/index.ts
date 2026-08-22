@@ -6,4 +6,6 @@ export * from "./providers/anthropic/textProvider.js";
 export * from "./providers/openai/imageProvider.js";
 export * from "./providers/runway/videoProvider.js";
 export * from "./providers/elevenlabs/voiceProvider.js";
+export * from "./providers/elevenlabs/soundEffectProvider.js";
+export * from "./providers/elevenlabs/musicProvider.js";
 export * from "./providers/unconfigured.js";

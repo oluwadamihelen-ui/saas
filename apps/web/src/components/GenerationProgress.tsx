@@ -57,6 +57,20 @@ const DIALOGUE_STEPS = [
   { key: "DOWNLOADING", label: "Saving the audio to your project" },
 ];
 
+const SOUND_EFFECT_STEPS = [
+  { key: "QUEUED", label: "Queued for generation" },
+  { key: "PROCESSING", label: "Reading the shot's action description" },
+  { key: "PROVIDER_GENERATING", label: "Generating the sound effect" },
+  { key: "DOWNLOADING", label: "Saving the audio to your project" },
+];
+
+const MUSIC_STEPS = [
+  { key: "QUEUED", label: "Queued for generation" },
+  { key: "PROCESSING", label: "Reading the episode's genre and tone" },
+  { key: "PROVIDER_GENERATING", label: "Composing the instrumental score" },
+  { key: "DOWNLOADING", label: "Saving the score to your project" },
+];
+
 const EXPORT_STEPS = [
   { key: "QUEUED", label: "Queued for export" },
   { key: "PROCESSING", label: "Checking every shot is ready" },
@@ -71,6 +85,8 @@ const STEPS_BY_KIND = {
   locations: LOCATIONS_STEPS,
   export: EXPORT_STEPS,
   dialogue: DIALOGUE_STEPS,
+  soundEffect: SOUND_EFFECT_STEPS,
+  music: MUSIC_STEPS,
   storyboard: STORYBOARD_STEPS,
   reference: REFERENCE_STEPS,
   shot: SHOT_STEPS,

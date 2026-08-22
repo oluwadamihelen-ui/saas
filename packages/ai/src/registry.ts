@@ -3,6 +3,8 @@ import { AnthropicTextProvider } from "./providers/anthropic/textProvider.js";
 import { OpenAiImageProvider } from "./providers/openai/imageProvider.js";
 import { RunwayVideoProvider } from "./providers/runway/videoProvider.js";
 import { ElevenLabsVoiceProvider } from "./providers/elevenlabs/voiceProvider.js";
+import { ElevenLabsSoundEffectProvider } from "./providers/elevenlabs/soundEffectProvider.js";
+import { ElevenLabsMusicProvider } from "./providers/elevenlabs/musicProvider.js";
 import { createUnconfiguredProvider } from "./providers/unconfigured.js";
 import type { AiCapability, CapabilityProviderMap } from "./types.js";
 
@@ -20,6 +22,8 @@ export class ProviderRegistry {
     const openai = env.OPENAI_API_KEY ? new OpenAiImageProvider({ apiKey: env.OPENAI_API_KEY }) : null;
     const runway = env.RUNWAY_API_KEY ? new RunwayVideoProvider({ apiKey: env.RUNWAY_API_KEY }) : null;
     const elevenlabs = env.ELEVENLABS_API_KEY ? new ElevenLabsVoiceProvider({ apiKey: env.ELEVENLABS_API_KEY }) : null;
+    const elevenlabsSfx = env.ELEVENLABS_API_KEY ? new ElevenLabsSoundEffectProvider({ apiKey: env.ELEVENLABS_API_KEY }) : null;
+    const elevenlabsMusic = env.ELEVENLABS_API_KEY ? new ElevenLabsMusicProvider({ apiKey: env.ELEVENLABS_API_KEY }) : null;
 
     this.register("TEXT", [anthropic]);
     this.register("IMAGE", [openai]);
@@ -29,11 +33,8 @@ export class ProviderRegistry {
     this.register("VIDEO_TO_VIDEO", [runway]);
     this.register("VIDEO_ANALYSIS", [runway]);
     this.register("VOICE", [elevenlabs]);
-    // No music or sound-effect adapter ships yet — these capabilities are
-    // fully typed and routed, but honestly report as not configured until
-    // an admin wires up a provider (spec §81).
-    this.register("MUSIC", []);
-    this.register("SOUND_EFFECT", []);
+    this.register("MUSIC", [elevenlabsMusic]);
+    this.register("SOUND_EFFECT", [elevenlabsSfx]);
   }
 
   private register(capability: AiCapability, instances: Array<unknown | null | undefined>): void {
