@@ -142,11 +142,14 @@ export default async function ProjectPage({
           scene.shots.map(async (shot) => {
             const dialogueAsset = shot.timelineItems.find((t) => t.track === "DIALOGUE")?.audioItem?.asset;
             const sfxAsset = shot.timelineItems.find((t) => t.track === "SFX")?.audioItem?.asset;
+            const qcFrames = Array.isArray(shot.qcNotes) ? (shot.qcNotes as Array<{ pass: boolean; issues: string[] }>) : [];
+            const qcIssues = Array.from(new Set(qcFrames.flatMap((f) => (Array.isArray(f.issues) ? f.issues : []))));
             return {
               ...shot,
               videoUrl: shot.videoAsset ? await getAssetDisplayUrl(shot.videoAsset.storageKey) : null,
               dialogueAudioUrl: dialogueAsset ? await getAssetDisplayUrl(dialogueAsset.storageKey) : null,
               sfxAudioUrl: sfxAsset ? await getAssetDisplayUrl(sfxAsset.storageKey) : null,
+              qcIssues,
             };
           }),
         ),
@@ -411,6 +414,8 @@ export default async function ProjectPage({
                           voiceProviderConfigured={voiceProviderConfigured}
                           sfxAudioUrl={shot.sfxAudioUrl}
                           soundEffectProviderConfigured={soundEffectProviderConfigured}
+                          qualityScore={shot.qualityScore}
+                          qcIssues={shot.qcIssues}
                         />
                       ))}
                     </div>

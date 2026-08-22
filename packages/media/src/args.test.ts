@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildAddSilentAudioArgs, buildConcatArgs, buildMixAudioArgs, buildMuxAudioArgs, buildOverlayMusicArgs } from "./args.js";
+import { buildAddSilentAudioArgs, buildConcatArgs, buildExtractFrameArgs, buildMixAudioArgs, buildMuxAudioArgs, buildOverlayMusicArgs } from "./args.js";
 
 describe("buildMuxAudioArgs", () => {
   it("maps video from the first input and audio from the second, trimmed to the shorter", () => {
@@ -88,5 +88,18 @@ describe("buildOverlayMusicArgs", () => {
   it("honors a custom music volume", () => {
     const args = buildOverlayMusicArgs("episode.mp4", "score.mp3", "out.mp4", { musicVolume: 0.4 });
     expect(args.join(" ")).toContain("[1:a]volume=0.4[music]");
+  });
+});
+
+describe("buildExtractFrameArgs", () => {
+  it("seeks to the timestamp and grabs exactly one frame", () => {
+    const args = buildExtractFrameArgs("shot.mp4", "frame.jpg", 2.5);
+    expect(args).toEqual(["-y", "-ss", "2.5", "-i", "shot.mp4", "-frames:v", "1", "-q:v", "3", "frame.jpg"]);
+  });
+
+  it("clamps a negative timestamp to zero", () => {
+    const args = buildExtractFrameArgs("shot.mp4", "frame.jpg", -1);
+    expect(args).toContain("0");
+    expect(args).not.toContain("-1");
   });
 });

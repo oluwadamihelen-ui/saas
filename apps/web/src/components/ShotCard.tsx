@@ -18,13 +18,15 @@ export interface ShotCardProps {
   voiceProviderConfigured: boolean;
   sfxAudioUrl: string | null;
   soundEffectProviderConfigured: boolean;
+  qualityScore: number | null;
+  qcIssues: string[];
 }
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "Not generated yet",
   QUEUED: "Queued",
   GENERATING: "Generating…",
-  NEEDS_REVISION: "Generation needs revision",
+  NEEDS_REVISION: "QC flagged an issue",
   READY: "Generated",
   FAILED: "Failed",
 };
@@ -32,7 +34,7 @@ const STATUS_LABEL: Record<string, string> = {
 /** ShotCard (spec §30): one storyboard card per shot. */
 export function ShotCard(props: ShotCardProps) {
   const canGenerate = props.status === "PENDING" || props.status === "FAILED";
-  const canRegenerate = props.status === "READY";
+  const canRegenerate = props.status === "READY" || props.status === "NEEDS_REVISION";
 
   return (
     <div className="card flex flex-col gap-2">
@@ -40,10 +42,17 @@ export function ShotCard(props: ShotCardProps) {
         <span className="text-xs font-mono text-cinerra-muted">{props.code}</span>
         <span
           className={`text-[11px] ${
-            props.status === "READY" ? "text-emerald-400" : props.status === "FAILED" || props.status === "NEEDS_REVISION" ? "text-red-300" : "text-cinerra-muted"
+            props.status === "READY"
+              ? "text-emerald-400"
+              : props.status === "FAILED"
+                ? "text-red-300"
+                : props.status === "NEEDS_REVISION"
+                  ? "text-amber-300"
+                  : "text-cinerra-muted"
           }`}
         >
           {STATUS_LABEL[props.status] ?? props.status}
+          {props.qualityScore !== null && ` · QC ${(props.qualityScore * 100).toFixed(0)}%`}
         </span>
       </div>
 
@@ -62,6 +71,16 @@ export function ShotCard(props: ShotCardProps) {
       {props.action && <p className="text-xs text-cinerra-text">{props.action}</p>}
       {props.dialogue && <p className="text-xs italic text-cinerra-muted">&ldquo;{props.dialogue}&rdquo;</p>}
 
+      {props.status === "NEEDS_REVISION" && props.qcIssues.length > 0 && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-200">
+          <p className="font-medium">Automated QC flagged this shot:</p>
+          <ul className="mt-1 list-disc pl-4">
+            {props.qcIssues.map((issue) => (
+              <li key={issue}>{issue}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {props.videoProviderConfigured ? (
         (canGenerate || canRegenerate) && <GenerateShotButton shotId={props.id} projectId={props.projectId} label={canRegenerate ? "Regenerate" : "Generate"} />
       ) : (

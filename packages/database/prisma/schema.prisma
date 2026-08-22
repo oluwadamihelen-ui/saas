@@ -643,6 +643,10 @@ model Shot {
   negativePrompt   String?
   status           ShotStatus    @default(PENDING)
   qualityScore     Float?
+  // Per-frame QC findings from the automated pass (spec §27) — array of
+  // {atSeconds, pass, issues[]}, one entry per checked frame. Null until a
+  // QC pass has actually run (never fabricated).
+  qcNotes          Json?
   videoAssetId     String?
   videoAsset       Asset?        @relation("ShotVideo", fields: [videoAssetId], references: [id])
 

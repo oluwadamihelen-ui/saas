@@ -16,6 +16,11 @@ import type { ProviderRegistry } from "./registry.js";
 export class ModelRouter {
   constructor(private readonly registry: ProviderRegistry) {}
 
+  /** Lets a caller skip work (e.g. downloading a video for QC) when a capability has no configured provider at all. */
+  isConfigured(capability: AiCapability): boolean {
+    return this.registry.isConfigured(capability);
+  }
+
   async execute<C extends AiCapability, R>(
     capability: C,
     _mode: OptimizationMode,

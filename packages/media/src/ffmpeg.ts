@@ -3,6 +3,7 @@ import { FfmpegExecutionError, FfmpegNotAvailableError } from "./errors.js";
 import {
   buildAddSilentAudioArgs,
   buildConcatArgs,
+  buildExtractFrameArgs,
   buildMixAudioArgs,
   buildMuxAudioArgs,
   buildOverlayMusicArgs,
@@ -65,4 +66,9 @@ export async function mixAudioTracks(audioPaths: string[], outputPath: string): 
 /** Overlays a looping background score onto an already-assembled episode without re-encoding the video. */
 export async function overlayMusic(videoPath: string, musicPath: string, outputPath: string, options?: OverlayMusicOptions): Promise<void> {
   await runFfmpeg(buildOverlayMusicArgs(videoPath, musicPath, outputPath, options));
+}
+
+/** Grabs a single JPEG frame from a video at the given timestamp, for the automated QC pass. */
+export async function extractFrame(videoPath: string, outputPath: string, atSeconds: number): Promise<void> {
+  await runFfmpeg(buildExtractFrameArgs(videoPath, outputPath, atSeconds));
 }

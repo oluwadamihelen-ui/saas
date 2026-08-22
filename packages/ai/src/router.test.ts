@@ -47,4 +47,10 @@ describe("ModelRouter", () => {
     const router = new ModelRouter(fakeRegistry([throwsUnexpected]));
     await expect(router.execute("TEXT", "BALANCED", (p) => p.generateText({ prompt: "hi" }))).rejects.toBeInstanceOf(TypeError);
   });
+
+  it("reports whether a capability has any configured candidate", () => {
+    expect(new ModelRouter(fakeRegistry([])).isConfigured("TEXT")).toBe(false);
+    const working: LanguageModelProvider = { providerName: "working", generateText: async () => ({ text: "ok", meta: { provider: "working", modelId: "m" } }) };
+    expect(new ModelRouter(fakeRegistry([working])).isConfigured("TEXT")).toBe(true);
+  });
 });

@@ -102,6 +102,15 @@ export function buildOverlayMusicArgs(videoPath: string, musicPath: string, outp
   ];
 }
 
+/**
+ * Grabs a single frame from a video at a given timestamp as a JPEG —
+ * used by the automated QC pass to sample a shot's video for a
+ * vision-model review without needing the whole clip.
+ */
+export function buildExtractFrameArgs(videoPath: string, outputPath: string, atSeconds: number): string[] {
+  return ["-y", "-ss", String(Math.max(0, atSeconds)), "-i", videoPath, "-frames:v", "1", "-q:v", "3", outputPath];
+}
+
 export interface TargetSize {
   width: number;
   height: number;

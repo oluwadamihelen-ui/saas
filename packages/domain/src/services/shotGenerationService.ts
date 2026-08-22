@@ -6,6 +6,7 @@ import type { StorageClient } from "@cinerra/storage";
 import { buildAssetKey } from "@cinerra/storage";
 import { compileShotPrompt } from "../promptCompiler.js";
 import { resolveShotPromptContext, resolveShotReferenceImages } from "../continuityEngine.js";
+import { runShotQualityControl } from "./qualityControlService.js";
 import { beginProcessing, transitionGenerationJob, JobCancelledError } from "./jobTransitions.js";
 
 export interface StartShotGenerationParams {
@@ -42,11 +43,15 @@ export async function startShotGeneration(params: StartShotGenerationParams): Pr
  * — providers' URLs are typically short-lived and are never served to
  * users directly (spec §24, §40).
  *
- * A real automated Quality Control pass (spec §27 — face/prop/continuity
- * mismatch detection) is not implemented yet; this job still transitions
- * through VALIDATING for state-machine consistency, but does not yet set
- * qualityScore or flip a shot to NEEDS_REVISION on its own. That's future
- * work, not a claim this build makes today.
+ * Includes an automated QC pass (spec §27) at the VALIDATING step: a few
+ * frames from the generated video are sampled and checked by a
+ * vision-capable model for visible artifacts (distorted anatomy, a
+ * synthetic look, watermarks, etc — the same list the prompt compiler
+ * already asks the video model to avoid). QC is a signal on top of a
+ * successful generation, not a gate on it: if IMAGE_ANALYSIS isn't
+ * configured, or the QC pass itself fails for any infrastructure reason,
+ * the shot still completes and is marked READY — only a QC pass that
+ * actually ran and found a problem marks the shot NEEDS_REVISION instead.
  */
 export async function runShotGenerationJob(router: ModelRouter, storage: StorageClient, generationJobId: string): Promise<void> {
   const job = await prisma.generationJob.findUniqueOrThrow({ where: { id: generationJobId } });
@@ -93,7 +98,14 @@ export async function runShotGenerationJob(router: ModelRouter, storage: Storage
     await storage.downloadAndStore(result.providerUrl, assetKey, "video/mp4");
 
     await transitionGenerationJob(job.id, "VALIDATING");
-    // (see doc comment above — no automated QC yet)
+    let qcReport: Awaited<ReturnType<typeof runShotQualityControl>> = null;
+    try {
+      qcReport = await runShotQualityControl(router, storage, assetKey, context.shot.durationSeconds);
+    } catch (qcError) {
+      // A QC infrastructure failure (download, ffmpeg, a malformed model
+      // response) must never invalidate an otherwise-successful shot.
+      console.error(`[shotGenerationService] QC pass failed to run for shot ${job.shotId}:`, qcError instanceof Error ? qcError.message : qcError);
+    }
 
     await transitionGenerationJob(job.id, "FINALIZING");
     const asset = await prisma.asset.create({
@@ -112,10 +124,11 @@ export async function runShotGenerationJob(router: ModelRouter, storage: Storage
     await prisma.shot.update({
       where: { id: job.shotId },
       data: {
-        status: "READY",
+        status: qcReport && qcReport.score < 1 ? "NEEDS_REVISION" : "READY",
         videoAssetId: asset.id,
         generationPrompt: compiled.prompt,
         negativePrompt: compiled.negativePrompt,
+        ...(qcReport ? { qualityScore: qcReport.score, qcNotes: qcReport.frames as unknown as object } : {}),
       },
     });
 
