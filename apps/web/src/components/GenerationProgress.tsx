@@ -57,11 +57,19 @@ const DIALOGUE_STEPS = [
   { key: "DOWNLOADING", label: "Saving the audio to your project" },
 ];
 
+const EXPORT_STEPS = [
+  { key: "QUEUED", label: "Queued for export" },
+  { key: "PROCESSING", label: "Checking every shot is ready" },
+  { key: "DOWNLOADING", label: "Gathering shot videos and dialogue audio" },
+  { key: "FINALIZING", label: "Assembling and encoding the episode" },
+];
+
 const STEPS_BY_KIND = {
   story: STORY_STEPS,
   script: SCRIPT_STEPS,
   characters: CHARACTERS_STEPS,
   locations: LOCATIONS_STEPS,
+  export: EXPORT_STEPS,
   dialogue: DIALOGUE_STEPS,
   storyboard: STORYBOARD_STEPS,
   reference: REFERENCE_STEPS,

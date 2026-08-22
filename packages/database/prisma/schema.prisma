@@ -507,6 +507,7 @@ model Episode {
   publishedAt DateTime?
 
   scenes      Scene[]
+  exports     Export[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -957,6 +958,8 @@ model Export {
   id          String       @id @default(cuid())
   projectId   String
   project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  episodeId   String?
+  episode     Episode?     @relation(fields: [episodeId], references: [id])
   format      ExportFormat @default(MP4)
   resolution  String       // "720p" | "1080p" | "4K"
   aspectRatio AspectRatio
@@ -967,6 +970,7 @@ model Export {
   updatedAt   DateTime @updatedAt
 
   @@index([projectId])
+  @@index([episodeId])
 }
 
 // ---------------------------------------------------------------------------

@@ -21,6 +21,7 @@ This build follows the phased plan in the product spec and keeps the project run
 - **Shot/video generation** — the full pipeline: `continuityEngine` resolves the character/wardrobe/location/prop/previous-shot graph for a shot → `promptCompiler` compiles the structured, continuity-constrained prompt → `VideoProvider` (Runway) generates the shot using the character's approved reference image for identity consistency → the result is downloaded and persisted to durable storage → the shot is marked ready with an inline video preview on its storyboard card (spec §20-24)
 - **Job state machine is now actually enforced**, not just defined: every service transitions status through a shared `transitionGenerationJob` helper that validates the move, a BullMQ retry after a failure correctly re-enters via `FAILED → RETRYING → PROCESSING` instead of crashing on an invalid transition, and cancelling a queued job is honored cooperatively before any provider call is made (`packages/domain/src/services/jobTransitions.ts`)
 - **Dialogue audio generation** (spec §28): synthesizes a shot's spoken dialogue in the speaking character's voice via `VoiceProvider` (ElevenLabs). A character's voice identity is assigned once (from a small default pool, split by gender) and reused on every regeneration so it doesn't drift; the audio plays inline on the shot card
+- **Episode export/assembly** (spec §41-44): once every shot in an episode is ready, "Export Episode" downloads each shot's video and its dialogue audio (or synthesizes a silent audio track for shots with none) from durable storage, muxes audio onto video per shot, and concatenates the whole episode with real FFmpeg (`packages/media` — a from-scratch wrapper, no fake progress or placeholder file), scaling/padding to the requested resolution and the project's aspect ratio, then uploads the final MP4 back to storage with a signed download link. Fails honestly with `FfmpegNotAvailableError` if FFmpeg isn't installed on the worker, rather than pretending to succeed.
 - All of the above run asynchronously through real BullMQ queues + a worker, with state-based progress in the UI (never a fake percentage)
 - Stripe subscription checkout, customer portal, and webhook-driven subscription sync
 - Admin dashboard (users, MRR, provider configuration status, plan table, recent jobs)
@@ -30,7 +31,7 @@ This build follows the phased plan in the product spec and keeps the project run
 - Full relational schema for characters, locations, wardrobe, props, scenes, shots, timeline, exports, publications — dialogue audio already writes real `TimelineItem` rows against each shot, which is exactly what the future timeline editor will read from
 - Generation job state machine covering the entire QUEUED → PROVIDER_GENERATING → DOWNLOADING → VALIDATING → FINALIZING → SUCCEEDED/FAILED lifecycle, with per-job-type shortcuts (a text-only agent call skips straight to SUCCEEDED; a media job walks the full pipeline)
 
-**Not yet built** (the next phases, per the spec's own phased roadmap): sound effect and music generation (the `AudioItem`/queue plumbing is shared with dialogue, but no SFX/music provider adapter exists yet — `packages/ai`'s registry honestly reports these as unconfigured), a real automated Quality Control pass on generated video (spec §27 — face/continuity/artifact detection; the job still walks through a VALIDATING state for structural consistency, it just doesn't score anything yet), wardrobe/prop UI cards and prop bible generation, the timeline editor UI, export/FFmpeg processing, trailer/social clip generation, publishing/discovery feed, mid-flight cancellation of an already-processing job (cancellation today reliably stops a still-queued job; a job actively mid-provider-call runs to completion since the provider adapters don't yet support aborting an in-flight request).
+**Not yet built** (the next phases, per the spec's own phased roadmap): sound effect and music generation (the `AudioItem`/queue plumbing is shared with dialogue, but no SFX/music provider adapter exists yet — `packages/ai`'s registry honestly reports these as unconfigured), a real automated Quality Control pass on generated video (spec §27 — face/continuity/artifact detection; the job still walks through a VALIDATING state for structural consistency, it just doesn't score anything yet), wardrobe/prop UI cards and prop bible generation, the timeline editor UI (episode export today assembles shots in scene/shot order automatically — there's no drag-and-drop re-sequencing yet), trailer/social clip generation, publishing/discovery feed, mid-flight cancellation of an already-processing job (cancellation today reliably stops a still-queued job; a job actively mid-provider-call runs to completion since the provider adapters don't yet support aborting an in-flight request).
 
 ## Tech stack
 
@@ -41,6 +42,7 @@ Next.js 14 (App Router) · TypeScript · Tailwind · PostgreSQL + Prisma · Redi
 - Node.js 20+
 - pnpm 9+ (`corepack enable`)
 - Docker (for Postgres/Redis/MinIO locally — or point at your own instances)
+- FFmpeg on PATH for the worker process — required for episode export/assembly (`packages/media`). On Windows, install via `winget install Gyan.FFmpeg` (or download a build from ffmpeg.org and add its `bin` folder to PATH) and open a new terminal afterwards; on macOS, `brew install ffmpeg`; on Debian/Ubuntu, `apt-get install ffmpeg`. The `Dockerfile.worker` production image installs it automatically, so this only matters for `pnpm dev:worker` locally. Without it, exporting fails with an honest "FFmpeg is not installed" message rather than a fake file.
 
 ## 1. Install dependencies
 
@@ -166,7 +168,9 @@ Sign up → Create Movie → Enter Story Idea → Generate
   → user generates each shot's video (continuity-compiled prompt +
     approved reference image → Runway → durable storage → inline preview)
   → user generates dialogue audio for shots with speaking lines
-  → [next phase] SFX/music → timeline assembly → export → publish
+  → once every shot is ready, user exports the episode (FFmpeg assembles
+    shots + dialogue/silence into one MP4 at the chosen resolution)
+  → [next phase] SFX/music → timeline editor → trailer clips → publish
 ```
 
 ## Design principles this codebase holds to

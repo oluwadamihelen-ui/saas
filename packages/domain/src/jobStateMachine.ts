@@ -23,10 +23,13 @@ export type GenerationJobStatus =
 // media-generation job (reference image, shot video) walks the full
 // PROVIDER_GENERATING -> DOWNLOADING -> [VALIDATING] -> FINALIZING path.
 // VALIDATING is likewise optional until a real QC pass exists (spec §27) —
-// DOWNLOADING may go straight to FINALIZING for now.
+// DOWNLOADING may go straight to FINALIZING for now. An assembly/export
+// job (packages/domain/services/exportService.ts) downloads existing
+// assets from our own storage rather than calling an AI provider, so it
+// goes PROCESSING -> DOWNLOADING directly, skipping PROVIDER_GENERATING.
 const TRANSITIONS: Record<GenerationJobStatus, GenerationJobStatus[]> = {
   QUEUED: ["PROCESSING", "CANCELLED"],
-  PROCESSING: ["PROVIDER_GENERATING", "FINALIZING", "SUCCEEDED", "FAILED", "CANCELLED"],
+  PROCESSING: ["PROVIDER_GENERATING", "DOWNLOADING", "FINALIZING", "SUCCEEDED", "FAILED", "CANCELLED"],
   PROVIDER_GENERATING: ["DOWNLOADING", "FAILED", "CANCELLED", "RETRYING"],
   DOWNLOADING: ["VALIDATING", "FINALIZING", "FAILED", "CANCELLED"],
   VALIDATING: ["FINALIZING", "RETRYING", "FAILED"],

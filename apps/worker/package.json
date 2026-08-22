@@ -17,6 +17,7 @@
     "@cinerra/config": "workspace:*",
     "@cinerra/database": "workspace:*",
     "@cinerra/domain": "workspace:*",
+    "@cinerra/media": "workspace:*",
     "@cinerra/queue": "workspace:*",
     "@cinerra/storage": "workspace:*"
   },

@@ -1,5 +1,5 @@
 {
-  "name": "@cinerra/domain",
+  "name": "@cinerra/media",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,13 +10,9 @@
     "lint": "echo 'no-op'",
     "test": "vitest run"
   },
-  "dependencies": {
-    "@cinerra/ai": "workspace:*",
-    "@cinerra/database": "workspace:*",
-    "@cinerra/media": "workspace:*",
-    "@cinerra/storage": "workspace:*"
-  },
+  "dependencies": {},
   "devDependencies": {
+    "@types/node": "^20.14.15",
     "typescript": "^5.5.4",
     "vitest": "^2.0.5"
   }

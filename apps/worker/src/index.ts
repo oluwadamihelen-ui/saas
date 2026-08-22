@@ -2,6 +2,7 @@ import { loadEnv } from "@cinerra/config";
 import { ModelRouter, ProviderRegistry } from "@cinerra/ai";
 import { createGenerationWorker, redisConnection, QUEUE_NAMES, type GenerationJobPayload, type Job } from "@cinerra/queue";
 import { createStorageClient } from "@cinerra/storage";
+import { isFfmpegAvailable } from "@cinerra/media";
 import {
   runStoryGenerationJob,
   runScriptGenerationJob,
@@ -11,6 +12,7 @@ import {
   runReferenceImageGenerationJob,
   runShotGenerationJob,
   runDialogueGenerationJob,
+  runEpisodeExportJob,
 } from "@cinerra/domain";
 import { prisma } from "@cinerra/database";
 
@@ -65,14 +67,20 @@ const workers = [
   createGenerationWorker(QUEUE_NAMES.audioGeneration, connection, WORKER_CONCURRENCY, (job) =>
     withJobLogging(job, () => runDialogueGenerationJob(router, storage, job.data.generationJobId)),
   ),
+  // Episode export is CPU-bound (ffmpeg re-encoding) rather than
+  // provider-rate-limited, so it gets a small dedicated concurrency of its
+  // own too — running many at once would just thrash the same CPU.
+  createGenerationWorker(QUEUE_NAMES.export, connection, Number(process.env.WORKER_EXPORT_CONCURRENCY ?? 2), (job) =>
+    withJobLogging(job, () => runEpisodeExportJob(storage, job.data.generationJobId)),
+  ),
 ];
 
-// Remaining queues (episode-assembly, export) are defined in @cinerra/queue
-// and will attach their own worker processors here as those pipelines are
-// implemented — the queue/worker/state-machine plumbing already supports
-// them uniformly. SFX/music generation share the audio-generation queue's
-// intent but have no configured provider adapter yet (packages/ai) so
-// there's no processor to add for them until one exists.
+// The remaining queue (episode-assembly) is defined in @cinerra/queue for
+// a future multi-episode/movie assembly step distinct from the
+// per-episode export above; SFX/music generation share the
+// audio-generation queue's intent but have no configured provider adapter
+// yet (packages/ai) so there's no processor to add for them until one
+// exists.
 
 for (const w of workers) {
   w.on("failed", (job, error) => {
@@ -80,9 +88,11 @@ for (const w of workers) {
   });
 }
 
-console.log(
-  `[worker] Cinerra worker started. Concurrency=${WORKER_CONCURRENCY}. Providers configured: TEXT=${registry.isConfigured("TEXT")} IMAGE=${registry.isConfigured("IMAGE")} VIDEO=${registry.isConfigured("VIDEO")} VOICE=${registry.isConfigured("VOICE")} MUSIC=${registry.isConfigured("MUSIC")} SOUND_EFFECT=${registry.isConfigured("SOUND_EFFECT")}`,
-);
+isFfmpegAvailable().then((available) => {
+  console.log(
+    `[worker] Cinerra worker started. Concurrency=${WORKER_CONCURRENCY}. Providers configured: TEXT=${registry.isConfigured("TEXT")} IMAGE=${registry.isConfigured("IMAGE")} VIDEO=${registry.isConfigured("VIDEO")} VOICE=${registry.isConfigured("VOICE")} MUSIC=${registry.isConfigured("MUSIC")} SOUND_EFFECT=${registry.isConfigured("SOUND_EFFECT")}. FFmpeg available=${available}`,
+  );
+});
 
 async function shutdown(signal: string) {
   console.log(`[worker] received ${signal}, shutting down gracefully…`);

@@ -99,6 +99,9 @@ importers:
       '@cinerra/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@cinerra/media':
+        specifier: workspace:*
+        version: link:../../packages/media
       '@cinerra/queue':
         specifier: workspace:*
         version: link:../../packages/queue
@@ -197,10 +200,25 @@ importers:
       '@cinerra/database':
         specifier: workspace:*
         version: link:../database
+      '@cinerra/media':
+        specifier: workspace:*
+        version: link:../media
       '@cinerra/storage':
         specifier: workspace:*
         version: link:../storage
     devDependencies:
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
+      vitest:
+        specifier: ^2.0.5
+        version: 2.1.9(@types/node@20.19.43)
+
+  packages/media:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.14.15
+        version: 20.19.43
       typescript:
         specifier: ^5.5.4
         version: 5.9.3

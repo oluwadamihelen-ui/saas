@@ -7,6 +7,7 @@ import { Header } from "@/components/Header";
 import { MobileNav } from "@/components/Nav";
 import { GenerationProgress, type GenerationKind } from "@/components/GenerationProgress";
 import { GenerateScriptButton } from "@/components/create/GenerateScriptButton";
+import { GenerateExportButton } from "@/components/create/GenerateExportButton";
 import { GenerateBibleButton } from "@/components/create/GenerateBibleButton";
 import { CharacterCard } from "@/components/CharacterCard";
 import { LocationCard } from "@/components/LocationCard";
@@ -21,9 +22,10 @@ const JOB_TITLES: Record<GenerationKind, string> = {
   reference: "Generating reference image…",
   shot: "Generating shot…",
   dialogue: "Generating dialogue audio…",
+  export: "Assembling and exporting your episode…",
 };
 
-const VALID_KINDS = new Set<GenerationKind>(["story", "script", "characters", "locations", "storyboard", "reference", "shot", "dialogue"]);
+const VALID_KINDS = new Set<GenerationKind>(["story", "script", "characters", "locations", "storyboard", "reference", "shot", "dialogue", "export"]);
 
 export default async function ProjectPage({
   params,
@@ -40,7 +42,7 @@ export default async function ProjectPage({
     where: { id: params.id },
     include: {
       storyBible: true,
-      episodes: { orderBy: { number: "asc" } },
+      episodes: { orderBy: { number: "asc" }, include: { exports: { orderBy: { createdAt: "desc" }, take: 1 } } },
       characters: { orderBy: { code: "asc" }, include: { primaryReference: { include: { asset: true } } } },
       locations: { orderBy: { code: "asc" }, include: { primaryReference: { include: { asset: true } } } },
       scenes: {
@@ -102,6 +104,20 @@ export default async function ProjectPage({
       })),
   );
 
+  const episodeCards = await Promise.all(
+    project.episodes.map(async (episode) => {
+      const episodeShots = project.scenes.filter((s) => s.episodeId === episode.id).flatMap((s) => s.shots);
+      const latestExport = episode.exports[0] ?? null;
+      return {
+        ...episode,
+        allShotsReady: episodeShots.length > 0 && episodeShots.every((s) => s.status === "READY"),
+        latestExport: latestExport
+          ? { ...latestExport, downloadUrl: latestExport.assetKey ? await getAssetDisplayUrl(latestExport.assetKey) : null }
+          : null,
+      };
+    }),
+  );
+
   const requestedKind = searchParams.kind as GenerationKind | undefined;
   const activeJobKind: GenerationKind = requestedKind && VALID_KINDS.has(requestedKind) ? requestedKind : "story";
   const episodeStructure = (project.storyBible?.episodeStructure as Array<{ number: number; title: string; synopsis: string }> | null) ?? [];
@@ -147,7 +163,7 @@ export default async function ProjectPage({
           <section className="mt-8">
             <h2 className="mb-3 text-lg font-semibold">Episodes</h2>
             <div className="flex flex-col gap-3">
-              {project.episodes.map((episode) => (
+              {episodeCards.map((episode) => (
                 <div key={episode.id} className="card flex items-start justify-between gap-4">
                   <div>
                     <p className="text-sm font-semibold">
@@ -156,8 +172,30 @@ export default async function ProjectPage({
                     <p className="mt-1 text-xs text-cinerra-muted">{episode.synopsis}</p>
                     <p className="mt-2 text-[11px] uppercase tracking-wide text-cinerra-muted">{episode.status}</p>
                   </div>
-                  {episode.status === "DRAFT" && !episode.script && <GenerateScriptButton projectId={project.id} episodeId={episode.id} />}
-                  {episode.script && <span className="text-xs text-cinerra-accent">Script ready</span>}
+                  <div className="flex flex-col items-end gap-2">
+                    {episode.status === "DRAFT" && !episode.script && <GenerateScriptButton projectId={project.id} episodeId={episode.id} />}
+                    {episode.script && !episode.allShotsReady && <span className="text-xs text-cinerra-accent">Script ready</span>}
+                    {episode.allShotsReady && episode.latestExport?.status !== "SUCCEEDED" && (
+                      <GenerateExportButton
+                        projectId={project.id}
+                        episodeId={episode.id}
+                        label={episode.latestExport?.status === "FAILED" ? "Retry Export" : "Export Episode"}
+                      />
+                    )}
+                    {episode.latestExport?.status === "SUCCEEDED" && episode.latestExport.downloadUrl && (
+                      <a
+                        href={episode.latestExport.downloadUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-full bg-cinerra-accent px-4 py-1.5 text-xs font-medium text-white hover:brightness-110"
+                      >
+                        Download ({episode.latestExport.resolution})
+                      </a>
+                    )}
+                    {episode.latestExport?.status === "FAILED" && (
+                      <p className="max-w-[16rem] text-right text-[11px] text-red-300">{episode.latestExport.errorMessage}</p>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
