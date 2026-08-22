@@ -8,6 +8,7 @@ import {
   runScriptGenerationJob,
   runCharacterGenerationJob,
   runLocationGenerationJob,
+  runPropGenerationJob,
   runStoryboardGenerationJob,
   runReferenceImageGenerationJob,
   runShotGenerationJob,
@@ -51,6 +52,9 @@ const workers = [
   ),
   createGenerationWorker(QUEUE_NAMES.locationGeneration, connection, WORKER_CONCURRENCY, (job) =>
     withJobLogging(job, () => runLocationGenerationJob(router, job.data.generationJobId)),
+  ),
+  createGenerationWorker(QUEUE_NAMES.propGeneration, connection, WORKER_CONCURRENCY, (job) =>
+    withJobLogging(job, () => runPropGenerationJob(router, job.data.generationJobId)),
   ),
   createGenerationWorker(QUEUE_NAMES.storyboardGeneration, connection, WORKER_CONCURRENCY, (job) =>
     withJobLogging(job, () => runStoryboardGenerationJob(router, job.data.generationJobId)),

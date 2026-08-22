@@ -9,7 +9,7 @@ export function GenerateReferenceButton({
   projectId,
   hasReference,
 }: {
-  entityType: "characters" | "locations";
+  entityType: "characters" | "locations" | "wardrobes" | "props";
   entityId: string;
   projectId: string;
   hasReference: boolean;

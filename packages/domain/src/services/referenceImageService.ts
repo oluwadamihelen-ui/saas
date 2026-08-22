@@ -8,7 +8,7 @@ import { BASE_NEGATIVE_PROMPT_ITEMS } from "../promptCompiler.js";
 import { formatAspectRatio, formatVisualStyle } from "../continuityEngine.js";
 import { beginProcessing, transitionGenerationJob, JobCancelledError } from "./jobTransitions.js";
 
-export type ReferenceEntityType = "character" | "location";
+export type ReferenceEntityType = "character" | "location" | "wardrobe" | "prop";
 
 export interface StartReferenceImageGenerationParams {
   userId: string;
@@ -40,16 +40,32 @@ export async function startReferenceImageGeneration(params: StartReferenceImageG
 }
 
 async function resolveProjectIdAndAssertOwnership(entityType: ReferenceEntityType, entityId: string, userId: string): Promise<string> {
-  if (entityType === "character") {
-    const character = await prisma.character.findUniqueOrThrow({ where: { id: entityId }, include: { project: true } });
-    if (character.project.ownerId !== userId) throw new Error("You do not have access to this character.");
-    if (character.isLocked) throw new Error("This character is locked. Unlock it before generating a new reference image.");
-    return character.projectId;
+  switch (entityType) {
+    case "character": {
+      const character = await prisma.character.findUniqueOrThrow({ where: { id: entityId }, include: { project: true } });
+      if (character.project.ownerId !== userId) throw new Error("You do not have access to this character.");
+      if (character.isLocked) throw new Error("This character is locked. Unlock it before generating a new reference image.");
+      return character.projectId;
+    }
+    case "location": {
+      const location = await prisma.location.findUniqueOrThrow({ where: { id: entityId }, include: { project: true } });
+      if (location.project.ownerId !== userId) throw new Error("You do not have access to this location.");
+      if (location.isLocked) throw new Error("This location is locked. Unlock it before generating a new reference image.");
+      return location.projectId;
+    }
+    case "wardrobe": {
+      const wardrobe = await prisma.wardrobe.findUniqueOrThrow({ where: { id: entityId }, include: { project: true } });
+      if (wardrobe.project.ownerId !== userId) throw new Error("You do not have access to this wardrobe.");
+      if (wardrobe.isLocked) throw new Error("This wardrobe is locked. Unlock it before generating a new reference image.");
+      return wardrobe.projectId;
+    }
+    case "prop": {
+      const prop = await prisma.prop.findUniqueOrThrow({ where: { id: entityId }, include: { project: true } });
+      if (prop.project.ownerId !== userId) throw new Error("You do not have access to this prop.");
+      if (prop.isLocked) throw new Error("This prop is locked. Unlock it before generating a new reference image.");
+      return prop.projectId;
+    }
   }
-  const location = await prisma.location.findUniqueOrThrow({ where: { id: entityId }, include: { project: true } });
-  if (location.project.ownerId !== userId) throw new Error("You do not have access to this location.");
-  if (location.isLocked) throw new Error("This location is locked. Unlock it before generating a new reference image.");
-  return location.projectId;
 }
 
 function buildCharacterPrompt(visualStyle: string, character: { name: string; face: string | null; hair: string | null; eyes: string | null; skin: string | null; build: string | null }): string {
@@ -60,6 +76,32 @@ function buildCharacterPrompt(visualStyle: string, character: { name: string; fa
 function buildLocationPrompt(visualStyle: string, location: { name: string; architecture: string | null; lighting: string | null; colorPalette: string | null; furniture: string | null }): string {
   const details = [location.architecture, location.lighting, location.colorPalette, location.furniture].filter(Boolean).join(", ");
   return `${visualStyle}, photorealistic architectural reference photo of ${location.name}. ${details}. Wide establishing angle, no people, natural lighting consistent with the described time of day.`;
+}
+
+function buildWardrobePrompt(
+  visualStyle: string,
+  characterName: string,
+  wardrobe: { name: string; clothing: string | null; colors: string | null; shoes: string | null; accessories: string | null; hairstyle: string | null; makeup: string | null },
+): string {
+  const details = [wardrobe.clothing, wardrobe.colors, wardrobe.shoes, wardrobe.accessories, wardrobe.hairstyle, wardrobe.makeup].filter(Boolean).join(", ");
+  return `${visualStyle}, photorealistic costume reference for ${characterName}'s "${wardrobe.name}" wardrobe. ${details}. Full-body mannequin or flat-lay product-style reference, neutral studio background, even lighting, high detail — a clean reference other shots must match exactly.`;
+}
+
+function buildPropPrompt(visualStyle: string, prop: { name: string; description: string | null }): string {
+  return `${visualStyle}, photorealistic product reference photo of ${prop.name}. ${prop.description ?? ""}. Neutral studio background, even lighting, high detail, sharp focus — a clean reference other shots must match exactly.`;
+}
+
+function assetKindFor(entityType: ReferenceEntityType): "CHARACTER_REFERENCE" | "LOCATION_REFERENCE" | "WARDROBE_REFERENCE" | "PROP_REFERENCE" {
+  switch (entityType) {
+    case "character":
+      return "CHARACTER_REFERENCE";
+    case "location":
+      return "LOCATION_REFERENCE";
+    case "wardrobe":
+      return "WARDROBE_REFERENCE";
+    case "prop":
+      return "PROP_REFERENCE";
+  }
 }
 
 export async function approveCharacterReference(userId: string, referenceId: string): Promise<void> {
@@ -99,10 +141,23 @@ export async function runReferenceImageGenerationJob(router: ModelRouter, storag
     const visualStyle = formatVisualStyle(project.visualStyle, project.customStyle);
     const aspectRatio = formatAspectRatio(project.aspectRatio);
 
-    const prompt =
-      entityType === "character"
-        ? buildCharacterPrompt(visualStyle, await prisma.character.findUniqueOrThrow({ where: { id: entityId } }))
-        : buildLocationPrompt(visualStyle, await prisma.location.findUniqueOrThrow({ where: { id: entityId } }));
+    let prompt: string;
+    switch (entityType) {
+      case "character":
+        prompt = buildCharacterPrompt(visualStyle, await prisma.character.findUniqueOrThrow({ where: { id: entityId } }));
+        break;
+      case "location":
+        prompt = buildLocationPrompt(visualStyle, await prisma.location.findUniqueOrThrow({ where: { id: entityId } }));
+        break;
+      case "wardrobe": {
+        const wardrobe = await prisma.wardrobe.findUniqueOrThrow({ where: { id: entityId }, include: { character: true } });
+        prompt = buildWardrobePrompt(visualStyle, wardrobe.character.name, wardrobe);
+        break;
+      }
+      case "prop":
+        prompt = buildPropPrompt(visualStyle, await prisma.prop.findUniqueOrThrow({ where: { id: entityId } }));
+        break;
+    }
 
     await transitionGenerationJob(job.id, "PROVIDER_GENERATING");
     const result = await router.execute("IMAGE", "BEST_QUALITY", (provider) =>
@@ -110,12 +165,8 @@ export async function runReferenceImageGenerationJob(router: ModelRouter, storag
     );
 
     await transitionGenerationJob(job.id, "DOWNLOADING");
-    const assetKey = buildAssetKey({
-      projectId: job.projectId,
-      kind: entityType === "character" ? "CHARACTER_REFERENCE" : "LOCATION_REFERENCE",
-      assetId: randomUUID(),
-      ext: "png",
-    });
+    const kind = assetKindFor(entityType);
+    const assetKey = buildAssetKey({ projectId: job.projectId, kind, assetId: randomUUID(), ext: "png" });
     await storage.downloadAndStore(result.providerUrl, assetKey, "image/png");
 
     await transitionGenerationJob(job.id, "FINALIZING");
@@ -124,7 +175,7 @@ export async function runReferenceImageGenerationJob(router: ModelRouter, storag
       data: {
         projectId: job.projectId,
         type: "IMAGE",
-        kind: entityType === "character" ? "CHARACTER_REFERENCE" : "LOCATION_REFERENCE",
+        kind,
         storageKey: assetKey,
         mimeType: "image/png",
         sourceProvider: result.meta.provider,
@@ -132,18 +183,32 @@ export async function runReferenceImageGenerationJob(router: ModelRouter, storag
       },
     });
 
-    if (entityType === "character") {
-      const reference = await prisma.characterReference.create({ data: { characterId: entityId, assetId: asset.id, label: "primary" } });
-      const character = await prisma.character.findUniqueOrThrow({ where: { id: entityId } });
-      if (!character.primaryReferenceId) {
-        await prisma.character.update({ where: { id: entityId }, data: { primaryReferenceId: reference.id } });
+    switch (entityType) {
+      case "character": {
+        const reference = await prisma.characterReference.create({ data: { characterId: entityId, assetId: asset.id, label: "primary" } });
+        const character = await prisma.character.findUniqueOrThrow({ where: { id: entityId } });
+        if (!character.primaryReferenceId) {
+          await prisma.character.update({ where: { id: entityId }, data: { primaryReferenceId: reference.id } });
+        }
+        break;
       }
-    } else {
-      const reference = await prisma.locationReference.create({ data: { locationId: entityId, assetId: asset.id, label: "primary" } });
-      const location = await prisma.location.findUniqueOrThrow({ where: { id: entityId } });
-      if (!location.primaryReferenceId) {
-        await prisma.location.update({ where: { id: entityId }, data: { primaryReferenceId: reference.id } });
+      case "location": {
+        const reference = await prisma.locationReference.create({ data: { locationId: entityId, assetId: asset.id, label: "primary" } });
+        const location = await prisma.location.findUniqueOrThrow({ where: { id: entityId } });
+        if (!location.primaryReferenceId) {
+          await prisma.location.update({ where: { id: entityId }, data: { primaryReferenceId: reference.id } });
+        }
+        break;
       }
+      // Wardrobe/Prop have no candidate-list/approval model (spec scope) —
+      // a single referenceAssetId is the whole identity, so a regeneration
+      // overwrites it directly rather than requiring a separate approve step.
+      case "wardrobe":
+        await prisma.wardrobe.update({ where: { id: entityId }, data: { referenceAssetId: asset.id } });
+        break;
+      case "prop":
+        await prisma.prop.update({ where: { id: entityId }, data: { referenceAssetId: asset.id } });
+        break;
     }
 
     await transitionGenerationJob(job.id, "SUCCEEDED");

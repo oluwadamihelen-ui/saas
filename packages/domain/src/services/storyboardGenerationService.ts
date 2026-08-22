@@ -46,6 +46,9 @@ export async function runStoryboardGenerationJob(router: ModelRouter, generation
 
   try {
     const project = await prisma.project.findUniqueOrThrow({ where: { id: job.projectId } });
+    const projectProps = await prisma.prop.findMany({ where: { projectId: project.id } });
+    const byNormalizedPropName = new Map(projectProps.map((p) => [normalize(p.name), p]));
+    const propNames = projectProps.map((p) => p.name);
 
     const scenes = await prisma.scene.findMany({
       where: { projectId: project.id, shots: { none: {} } },
@@ -66,15 +69,19 @@ export async function runStoryboardGenerationJob(router: ModelRouter, generation
         storyPurpose: scene.storyPurpose ?? undefined,
         emotionalState: scene.emotionalState ?? undefined,
         characterNames,
+        propNames,
         scriptText: scene.scriptText ?? "",
       });
 
       const byNormalizedName = new Map(scene.characters.map((link) => [normalize(link.character.name), link.character]));
+      const scenePropIds = new Set<string>();
 
       let previousShotId: string | undefined;
       for (const s of output.shots.sort((a, b) => a.order - b.order)) {
         const code = `SC${String(scene.number).padStart(2, "0")}-SH${String(s.order).padStart(3, "0")}`;
         const matchedCharacters = s.characterNames.map((n) => byNormalizedName.get(normalize(n))).filter((c): c is NonNullable<typeof c> => Boolean(c));
+        const matchedProps = (s.propNames ?? []).map((n) => byNormalizedPropName.get(normalize(n))).filter((p): p is NonNullable<typeof p> => Boolean(p));
+        matchedProps.forEach((p) => scenePropIds.add(p.id));
 
         const shot = await prisma.shot.create({
           data: {
@@ -99,9 +106,18 @@ export async function runStoryboardGenerationJob(router: ModelRouter, generation
                 .filter((w): w is NonNullable<typeof w> => Boolean(w))
                 .map((w) => ({ wardrobeId: w.id })),
             },
+            props: { create: matchedProps.map((p) => ({ propId: p.id })) },
           },
         });
         previousShotId = shot.id;
+      }
+
+      for (const propId of scenePropIds) {
+        await prisma.scenePropLink.upsert({
+          where: { sceneId_propId: { sceneId: scene.id, propId } },
+          create: { sceneId: scene.id, propId },
+          update: {},
+        });
       }
     }
 

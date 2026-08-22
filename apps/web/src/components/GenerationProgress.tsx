@@ -30,6 +30,11 @@ const LOCATIONS_STEPS = [
   { key: "PROCESSING", label: "Reading the screenplay and building the location bible" },
 ];
 
+const PROPS_STEPS = [
+  { key: "QUEUED", label: "Queued for generation" },
+  { key: "PROCESSING", label: "Reading the screenplay and building the prop bible" },
+];
+
 const STORYBOARD_STEPS = [
   { key: "QUEUED", label: "Queued for generation" },
   { key: "PROCESSING", label: "Breaking each scene into cinematic shots" },
@@ -83,6 +88,7 @@ const STEPS_BY_KIND = {
   script: SCRIPT_STEPS,
   characters: CHARACTERS_STEPS,
   locations: LOCATIONS_STEPS,
+  props: PROPS_STEPS,
   export: EXPORT_STEPS,
   dialogue: DIALOGUE_STEPS,
   soundEffect: SOUND_EFFECT_STEPS,

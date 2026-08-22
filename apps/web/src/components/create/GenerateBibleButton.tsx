@@ -11,7 +11,7 @@ export function GenerateBibleButton({
 }: {
   projectId: string;
   endpoint: string;
-  kind: "characters" | "locations" | "storyboard";
+  kind: "characters" | "locations" | "props" | "storyboard";
   label: string;
 }) {
   const router = useRouter();

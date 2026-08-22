@@ -14,10 +14,11 @@ This build follows the phased plan in the product spec and keeps the project run
 - **Screenplay generation** (Screenwriter agent → per-episode scene breakdown + script text)
 - **Character Bible generation** (Character Designer agent → physical/personality/voice description + default wardrobe per character, reading the screenplay you've already written — never inventing characters that aren't in it)
 - **Location Bible generation** (Location Designer agent → architecture/lighting/palette per distinct location, merging scene headings that describe the same physical place)
+- **Prop Bible generation** (spec §16: Prop Designer agent → reads the screenplay for significant, plot-relevant, or visually recurring props — never invents one, and skips incidental background objects the story never calls attention to; attributes ownership to a character when the text makes that clear)
 - **Continuity linking**: once characters/locations exist, scenes are automatically reconciled to real Character/Location records (`packages/domain/src/services/continuityLinking.ts`) — relational `SceneCharacter` links and `Scene.locationId`, not just text
-- **Storyboard generation** (Director agent → breaks every scene into cinematic shot coverage: shot type, camera movement, lens, action, dialogue, duration — standard film grammar, 3-8 shots per scene)
-- **Locking**: characters and locations can be locked from the UI; a locked entity is never silently rewritten by a regeneration (spec §13-14, §58)
-- **Reference image generation** (character/location reference images via `ImageProvider` → OpenAI) with an Approve step, displayed inline on each card via signed storage URLs (spec §23, §40) — generation is refused once an entity is locked, so an approved identity can't be silently replaced
+- **Storyboard generation** (Director agent → breaks every scene into cinematic shot coverage: shot type, camera movement, lens, action, dialogue, duration — standard film grammar, 3-8 shots per scene). The Director is also given the project's known prop list and may only reference real ones per shot (never invents a prop); matched mentions create the relational `ScenePropLink`/`ShotProp` rows the continuity engine and prompt compiler already read from
+- **Locking**: characters, locations, wardrobe, and props can all be locked from the UI; a locked entity is never silently rewritten by a regeneration (spec §13-14, §16, §58)
+- **Reference image generation** for characters, locations, wardrobe, and props via `ImageProvider` (OpenAI), displayed inline via signed storage URLs (spec §23, §40) — generation is refused once an entity is locked, so an approved identity can't be silently replaced. Character/location references go through a separate Approve step (multiple candidates, one primary); wardrobe/prop each have a single reference slot, so regenerating one directly replaces it once unlocked
 - **Shot/video generation** — the full pipeline: `continuityEngine` resolves the character/wardrobe/location/prop/previous-shot graph for a shot → `promptCompiler` compiles the structured, continuity-constrained prompt → `VideoProvider` (Runway) generates the shot using the character's approved reference image for identity consistency → the result is downloaded and persisted to durable storage → the shot is marked ready with an inline video preview on its storyboard card (spec §20-24)
 - **Job state machine is now actually enforced**, not just defined: every service transitions status through a shared `transitionGenerationJob` helper that validates the move, a BullMQ retry after a failure correctly re-enters via `FAILED → RETRYING → PROCESSING` instead of crashing on an invalid transition, and cancelling a queued job is honored cooperatively before any provider call is made (`packages/domain/src/services/jobTransitions.ts`)
 - **Dialogue audio generation** (spec §28): synthesizes a shot's spoken dialogue in the speaking character's voice via `VoiceProvider` (ElevenLabs). A character's voice identity is assigned once (from a small default pool, split by gender) and reused on every regeneration so it doesn't drift; the audio plays inline on the shot card
@@ -33,7 +34,7 @@ This build follows the phased plan in the product spec and keeps the project run
 - Full relational schema for characters, locations, wardrobe, props, scenes, shots, timeline, exports, publications — dialogue/SFX/music already write real `TimelineItem` rows against each shot or episode, which is exactly what the future timeline editor will read from
 - Generation job state machine covering the entire QUEUED → PROVIDER_GENERATING → DOWNLOADING → VALIDATING → FINALIZING → SUCCEEDED/FAILED lifecycle, with per-job-type shortcuts (a text-only agent call skips straight to SUCCEEDED; a media job walks the full pipeline)
 
-**Not yet built** (the next phases, per the spec's own phased roadmap): a real automated Quality Control pass on generated video (spec §27 — face/continuity/artifact detection; the job still walks through a VALIDATING state for structural consistency, it just doesn't score anything yet), wardrobe/prop UI cards and prop bible generation, the timeline editor UI (episode export today auto-assembles shots in scene/shot order and auto-mixes each shot's dialogue/SFX plus the episode score — there's no drag-and-drop re-sequencing or manual volume/timing control yet), trailer/social clip generation, publishing/discovery feed, mid-flight cancellation of an already-processing job (cancellation today reliably stops a still-queued job; a job actively mid-provider-call runs to completion since the provider adapters don't yet support aborting an in-flight request).
+**Not yet built** (the next phases, per the spec's own phased roadmap): a real automated Quality Control pass on generated video (spec §27 — face/continuity/artifact detection; the job still walks through a VALIDATING state for structural consistency, it just doesn't score anything yet), the timeline editor UI (episode export today auto-assembles shots in scene/shot order and auto-mixes each shot's dialogue/SFX plus the episode score — there's no drag-and-drop re-sequencing or manual volume/timing control yet), trailer/social clip generation, publishing/discovery feed, mid-flight cancellation of an already-processing job (cancellation today reliably stops a still-queued job; a job actively mid-provider-call runs to completion since the provider adapters don't yet support aborting an in-flight request).
 
 ## Tech stack
 
@@ -94,7 +95,7 @@ The seed creates a demo account: `demo@cinerra.app` / `demo-password-1234`, subs
 Add whichever provider keys you have to `.env`:
 
 - `ANTHROPIC_API_KEY` — powers the Story Architect, Screenwriter, Character Designer, Location Designer, and Director agents (Claude). **Required for any of the text generation flows to actually produce output** — without it, generation jobs fail with an honest "no language model provider is configured" message rather than faking a result.
-- `OPENAI_API_KEY` — character/location reference image generation. Without it, "Generate Reference" fails honestly instead of showing a placeholder image.
+- `OPENAI_API_KEY` — character/location/wardrobe/prop reference image generation. Without it, "Generate Reference" fails honestly instead of showing a placeholder image.
 - `RUNWAY_API_KEY` — shot video generation. Runway requires at least one reference image, so generate and approve a character reference first — without a configured provider, "Generate"/"Regenerate" on a shot fails honestly instead of faking a clip.
 - `ELEVENLABS_API_KEY` — dialogue voice synthesis, sound effect generation, and episode music/score generation (three separate ElevenLabs APIs, one key). Without it, "Generate Dialogue Audio", "Generate Sound Effect", and "Generate Score" all fail honestly instead of faking a clip.
 
@@ -148,7 +149,7 @@ packages/
   billing/   Stripe wrapper + fair-use policy (no customer-facing credits)
   config/    Env validation (Zod) + password hashing, shared everywhere
   database/  Prisma schema, client, seed script
-  domain/    Agents (Story Architect, Screenwriter, Character/Location
+  domain/    Agents (Story Architect, Screenwriter, Character/Location/Prop
              Designer, Director), prompt compiler, continuity engine +
              linking, job state machine + transition enforcement,
              reference image / shot video orchestration services
@@ -164,9 +165,14 @@ Sign up → Create Movie → Enter Story Idea → Generate
   → Screenwriter generates the screenplay for an episode (scenes persisted)
   → Character Designer generates the character bible (lock any character)
   → Location Designer generates the location bible (lock any location)
+  → Prop Designer generates the prop bible (lock any prop)
   → scenes are automatically reconciled to real characters/locations
-  → Director agent breaks every scene into a shot list (storyboard)
-  → user generates a reference image per character/location, approves it
+  → Director agent breaks every scene into a shot list (storyboard),
+    only referencing real props from the prop bible — matches become
+    ScenePropLink/ShotProp rows
+  → user generates a reference image per character/location (approve it),
+    and per wardrobe/prop (regenerating directly replaces it, no approve
+    step — see below)
   → user generates each shot's video (continuity-compiled prompt +
     approved reference image → Runway → durable storage → inline preview)
   → user generates dialogue audio for shots with speaking lines

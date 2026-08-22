@@ -1,6 +1,7 @@
 import { LockButton } from "./LockButton";
 import { GenerateReferenceButton } from "./create/GenerateReferenceButton";
 import { ApproveReferenceButton } from "./create/ApproveReferenceButton";
+import { WardrobeRow, type WardrobeRowProps } from "./WardrobeRow";
 
 export interface CharacterCardProps {
   id: string;
@@ -16,6 +17,7 @@ export interface CharacterCardProps {
   isLocked: boolean;
   primaryReference: { id: string; imageUrl: string; approvedAt: Date | null } | null;
   imageProviderConfigured: boolean;
+  wardrobes: Omit<WardrobeRowProps, "projectId" | "imageProviderConfigured">[];
 }
 
 /** CharacterCard (spec §76): shows a Character Bible entry, its reference image, and its lock state. */
@@ -61,6 +63,14 @@ export function CharacterCard(props: CharacterCardProps) {
         {props.voiceProfile && <Row label="Voice" value={props.voiceProfile} />}
       </dl>
       {props.personality && <p className="mt-3 text-sm text-cinerra-text">{props.personality}</p>}
+
+      {props.wardrobes.length > 0 && (
+        <div className="mt-3 flex flex-col gap-1.5 border-t border-cinerra-border pt-3">
+          {props.wardrobes.map((w) => (
+            <WardrobeRow key={w.id} {...w} projectId={props.projectId} imageProviderConfigured={props.imageProviderConfigured} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

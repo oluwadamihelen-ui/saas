@@ -12,6 +12,7 @@ import { GenerateMusicButton } from "@/components/create/GenerateMusicButton";
 import { GenerateBibleButton } from "@/components/create/GenerateBibleButton";
 import { CharacterCard } from "@/components/CharacterCard";
 import { LocationCard } from "@/components/LocationCard";
+import { PropCard } from "@/components/PropCard";
 import { ShotCard } from "@/components/ShotCard";
 
 const JOB_TITLES: Record<GenerationKind, string> = {
@@ -19,6 +20,7 @@ const JOB_TITLES: Record<GenerationKind, string> = {
   script: "Writing your screenplay…",
   characters: "Building your character bible…",
   locations: "Building your location bible…",
+  props: "Building your prop bible…",
   storyboard: "Building your storyboard…",
   reference: "Generating reference image…",
   shot: "Generating shot…",
@@ -33,6 +35,7 @@ const VALID_KINDS = new Set<GenerationKind>([
   "script",
   "characters",
   "locations",
+  "props",
   "storyboard",
   "reference",
   "shot",
@@ -64,8 +67,12 @@ export default async function ProjectPage({
           timelineItems: { where: { track: "MUSIC" }, include: { audioItem: { include: { asset: true } } } },
         },
       },
-      characters: { orderBy: { code: "asc" }, include: { primaryReference: { include: { asset: true } } } },
+      characters: {
+        orderBy: { code: "asc" },
+        include: { primaryReference: { include: { asset: true } }, wardrobes: { orderBy: { createdAt: "asc" }, include: { referenceAsset: true } } },
+      },
       locations: { orderBy: { code: "asc" }, include: { primaryReference: { include: { asset: true } } } },
+      props: { orderBy: { code: "asc" }, include: { referenceAsset: true, ownerCharacter: true } },
       scenes: {
         orderBy: { number: "asc" },
         include: {
@@ -97,6 +104,16 @@ export default async function ProjectPage({
       primaryReferenceResolved: c.primaryReference
         ? { id: c.primaryReference.id, imageUrl: await getAssetDisplayUrl(c.primaryReference.asset.storageKey), approvedAt: c.primaryReference.approvedAt }
         : null,
+      wardrobesResolved: await Promise.all(
+        c.wardrobes.map(async (w) => ({
+          id: w.id,
+          code: w.code,
+          name: w.name,
+          clothing: w.clothing,
+          isLocked: w.isLocked,
+          referenceImageUrl: w.referenceAsset ? await getAssetDisplayUrl(w.referenceAsset.storageKey) : null,
+        })),
+      ),
     })),
   );
 
@@ -106,6 +123,13 @@ export default async function ProjectPage({
       primaryReferenceResolved: l.primaryReference
         ? { id: l.primaryReference.id, imageUrl: await getAssetDisplayUrl(l.primaryReference.asset.storageKey), approvedAt: l.primaryReference.approvedAt }
         : null,
+    })),
+  );
+
+  const propCards = await Promise.all(
+    project.props.map(async (p) => ({
+      ...p,
+      referenceImageUrl: p.referenceAsset ? await getAssetDisplayUrl(p.referenceAsset.storageKey) : null,
     })),
   );
 
@@ -270,6 +294,7 @@ export default async function ProjectPage({
                     isLocked={c.isLocked}
                     primaryReference={c.primaryReferenceResolved}
                     imageProviderConfigured={imageProviderConfigured}
+                    wardrobes={c.wardrobesResolved}
                   />
                 ))}
               </div>
@@ -310,6 +335,41 @@ export default async function ProjectPage({
               </div>
             ) : (
               <p className="text-sm text-cinerra-muted">No locations yet — the Location Designer reads your screenplay.</p>
+            )}
+          </section>
+        )}
+
+        {hasScript && (
+          <section className="mt-8">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Props</h2>
+              <GenerateBibleButton
+                projectId={project.id}
+                endpoint={`/api/projects/${project.id}/props/generate`}
+                kind="props"
+                label={project.props.length > 0 ? "Regenerate Props" : "Generate Props"}
+              />
+            </div>
+            {propCards.length > 0 ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {propCards.map((p) => (
+                  <PropCard
+                    key={p.id}
+                    id={p.id}
+                    projectId={project.id}
+                    code={p.code}
+                    name={p.name}
+                    description={p.description}
+                    continuityNotes={p.continuityNotes}
+                    ownerCharacterName={p.ownerCharacter?.name ?? null}
+                    isLocked={p.isLocked}
+                    referenceImageUrl={p.referenceImageUrl}
+                    imageProviderConfigured={imageProviderConfigured}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-cinerra-muted">No props yet — the Prop Designer reads your screenplay for significant, recurring props.</p>
             )}
           </section>
         )}

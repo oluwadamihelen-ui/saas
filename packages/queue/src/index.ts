@@ -11,6 +11,7 @@ export const QUEUE_NAMES = {
   scriptGeneration: "script-generation",
   characterGeneration: "character-generation", // Character + Wardrobe bible (text)
   locationGeneration: "location-generation", // Location bible (text)
+  propGeneration: "prop-generation", // Prop bible (text)
   storyboardGeneration: "storyboard-generation", // Director agent shot list (text)
   assetGeneration: "asset-generation", // character/location/wardrobe/prop reference images
   shotGeneration: "shot-generation", // video
