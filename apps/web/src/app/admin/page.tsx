@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { providerRegistry } from "@/lib/ai";
 import { Header } from "@/components/Header";
+import { ModerationQueue } from "@/components/ModerationQueue";
 
 const CAPABILITIES = ["TEXT", "IMAGE", "VIDEO", "VOICE", "MUSIC", "SOUND_EFFECT"] as const;
 
@@ -12,13 +13,25 @@ export default async function AdminPage() {
   if (!user?.id) redirect("/login");
   if (user.role !== "ADMIN") redirect("/");
 
-  const [userCount, activeSubscriptions, jobStats, plans, recentJobs] = await Promise.all([
+  const [userCount, activeSubscriptions, jobStats, plans, recentJobs, pendingPublications] = await Promise.all([
     prisma.user.count(),
     prisma.subscription.findMany({ where: { status: "ACTIVE" }, include: { plan: true } }),
     prisma.generationJob.groupBy({ by: ["status"], _count: true }),
     prisma.plan.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.generationJob.findMany({ orderBy: { createdAt: "desc" }, take: 20, include: { user: { select: { email: true } } } }),
+    prisma.publication.findMany({
+      where: { moderationStatus: "PENDING" },
+      orderBy: { publishedAt: "asc" },
+      include: { project: { select: { title: true } }, publishedBy: { select: { name: true, email: true } } },
+    }),
   ]);
+
+  const moderationQueueItems = pendingPublications.map((p) => ({
+    id: p.id,
+    projectTitle: p.project.title,
+    creatorName: p.publishedBy.name ?? p.publishedBy.email,
+    publishedAt: p.publishedAt.toISOString(),
+  }));
 
   const mrrCents = activeSubscriptions.reduce((sum, s) => sum + (s.interval === "MONTH" ? s.plan.priceMonthlyCents : s.plan.priceYearlyCents / 12), 0);
   const planDistribution = new Map<string, number>();
@@ -42,6 +55,23 @@ export default async function AdminPage() {
         </div>
 
         <section className="card mt-8">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Discover moderation queue</h2>
+            {moderationQueueItems.length > 0 && (
+              <span className="rounded-full bg-cinerra-gold/20 px-2.5 py-0.5 text-xs font-semibold text-cinerra-gold">
+                {moderationQueueItems.length} pending
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-sm text-cinerra-muted">
+            A publication only appears on Discover once approved here — publishing alone doesn&rsquo;t make it public.
+          </p>
+          <div className="mt-4">
+            <ModerationQueue items={moderationQueueItems} />
+          </div>
+        </section>
+
+        <section className="card mt-6">
           <h2 className="text-lg font-semibold">AI Providers</h2>
           <p className="mt-1 text-sm text-cinerra-muted">Configured via environment variables — never exposed to customers.</p>
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">

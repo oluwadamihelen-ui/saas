@@ -6,6 +6,10 @@ const publicationCardInclude = {
   publishedBy: { select: { name: true } },
 } as const;
 
+// Mirrors @cinerra/domain's isPublicationPubliclyVisible — Prisma's `where`
+// can't call a shared function, so the two must be kept in sync by hand.
+const PUBLICLY_VISIBLE_WHERE = { visibility: "PUBLIC", moderationStatus: "APPROVED" } as const;
+
 export interface DiscoverCardData {
   publicationId: string;
   projectId: string;
@@ -36,10 +40,10 @@ async function toCardData(publication: {
   };
 }
 
-/** Discover's "Popular" rail — most-viewed published movies, saves as a tiebreaker. */
+/** Discover's "Popular" rail — most-viewed published-and-approved movies, saves as a tiebreaker. */
 export async function listPopularPublications(limit: number): Promise<DiscoverCardData[]> {
   const publications = await prisma.publication.findMany({
-    where: { visibility: "PUBLIC" },
+    where: PUBLICLY_VISIBLE_WHERE,
     orderBy: [{ views: "desc" }, { saves: "desc" }],
     take: limit,
     include: publicationCardInclude,
@@ -47,10 +51,10 @@ export async function listPopularPublications(limit: number): Promise<DiscoverCa
   return Promise.all(publications.map(toCardData));
 }
 
-/** Discover's "New Releases" rail — most recently published movies. */
+/** Discover's "New Releases" rail — most recently published-and-approved movies. */
 export async function listNewReleasePublications(limit: number): Promise<DiscoverCardData[]> {
   const publications = await prisma.publication.findMany({
-    where: { visibility: "PUBLIC" },
+    where: PUBLICLY_VISIBLE_WHERE,
     orderBy: { publishedAt: "desc" },
     take: limit,
     include: publicationCardInclude,
@@ -58,7 +62,13 @@ export async function listNewReleasePublications(limit: number): Promise<Discove
   return Promise.all(publications.map(toCardData));
 }
 
-/** The current user's saved/favorited movies (My List, and the Projects "Collection" tab). */
+/**
+ * The current user's saved/favorited movies (My List, and the Projects
+ * "Collection" tab). Not moderation-gated: a favorite can only be created
+ * from the watch page, which is itself gated, so an already-saved item
+ * staying visible here even if later rejected is a rare, low-stakes edge
+ * case rather than a moderation bypass.
+ */
 export async function listUserFavorites(userId: string): Promise<DiscoverCardData[]> {
   const favorites = await prisma.favorite.findMany({
     where: { userId },

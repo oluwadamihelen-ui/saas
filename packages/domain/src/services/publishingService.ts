@@ -32,10 +32,13 @@ export async function publishProject(params: { userId: string; projectId: string
   if (!eligibility.eligible) throw new PublishNotEligibleError(eligibility.reason!);
 
   const publication = await prisma.$transaction(async (tx) => {
+    // Every (re)publish goes back into the moderation queue — a publish
+    // action is never itself sufficient to appear in Discover, per the
+    // moderation gate below.
     const pub = await tx.publication.upsert({
       where: { projectId: project.id },
-      create: { projectId: project.id, publishedById: params.userId, visibility: "PUBLIC" },
-      update: { visibility: "PUBLIC", publishedAt: new Date() },
+      create: { projectId: project.id, publishedById: params.userId, visibility: "PUBLIC", moderationStatus: "PENDING" },
+      update: { visibility: "PUBLIC", publishedAt: new Date(), moderationStatus: "PENDING", moderationNotes: null },
     });
     await tx.project.update({ where: { id: project.id }, data: { visibility: "PUBLIC", status: "PUBLISHED" } });
     return pub;
@@ -83,4 +86,40 @@ export async function toggleFavorite(params: { userId: string; publicationId: st
 /** Best-effort view counter for the public watch page — never blocks playback. */
 export async function recordPublicationView(publicationId: string): Promise<void> {
   await prisma.publication.update({ where: { id: publicationId }, data: { views: { increment: 1 } } }).catch(() => {});
+}
+
+export type ModerationDecision = "APPROVED" | "REJECTED";
+
+/**
+ * An admin's approve/reject decision on a pending publication (the
+ * Discover moderation queue) — the caller (an API route) is responsible
+ * for verifying the acting user actually has the ADMIN role; this service
+ * only records the decision and its audit trail.
+ */
+export async function reviewPublication(params: {
+  moderatorUserId: string;
+  publicationId: string;
+  decision: ModerationDecision;
+  notes?: string;
+}) {
+  const publication = await prisma.publication.findUnique({ where: { id: params.publicationId } });
+  if (!publication) throw new Error("NOT_FOUND");
+
+  const [updated] = await prisma.$transaction([
+    prisma.publication.update({
+      where: { id: params.publicationId },
+      data: { moderationStatus: params.decision, moderationNotes: params.notes ?? null },
+    }),
+    prisma.auditLog.create({
+      data: {
+        userId: params.moderatorUserId,
+        action: params.decision === "APPROVED" ? "PUBLICATION_APPROVED" : "PUBLICATION_REJECTED",
+        entityType: "Publication",
+        entityId: params.publicationId,
+        metadata: params.notes ? { notes: params.notes } : undefined,
+      },
+    }),
+  ]);
+
+  return updated;
 }

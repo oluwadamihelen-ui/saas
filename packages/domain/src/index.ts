@@ -10,6 +10,7 @@ export * from "./lib/musicPrompt.js";
 export * from "./lib/qualityControl.js";
 export * from "./lib/clipSelection.js";
 export * from "./lib/publishEligibility.js";
+export * from "./lib/publicationVisibility.js";
 export * from "./lib/timelineOrder.js";
 export * from "./agents/storyArchitect.js";
 export * from "./agents/screenwriter.js";

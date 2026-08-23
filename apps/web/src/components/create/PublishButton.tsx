@@ -10,12 +10,16 @@ export function PublishButton({
   eligible,
   ineligibleReason,
   publicationId,
+  moderationStatus,
+  moderationNotes,
 }: {
   projectId: string;
   isPublished: boolean;
   eligible: boolean;
   ineligibleReason?: string;
   publicationId?: string;
+  moderationStatus?: "PENDING" | "APPROVED" | "REJECTED";
+  moderationNotes?: string | null;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -42,10 +46,11 @@ export function PublishButton({
 
   return (
     <div className="flex flex-col items-end gap-1">
+      {isPublished && moderationStatus && <ModerationBadge status={moderationStatus} notes={moderationNotes} />}
       <div className="flex items-center gap-2">
         {isPublished && publicationId && (
           <Link href={`/watch/${publicationId}`} className="btn-secondary-sm">
-            View public page
+            {moderationStatus === "APPROVED" ? "View public page" : "Preview"}
           </Link>
         )}
         <button onClick={handleClick} disabled={loading} className={isPublished ? "btn-secondary-sm" : "btn-primary-sm"}>
@@ -55,4 +60,18 @@ export function PublishButton({
       {error && <p className="max-w-[16rem] text-right text-[11px] text-red-300">{error}</p>}
     </div>
   );
+}
+
+function ModerationBadge({ status, notes }: { status: "PENDING" | "APPROVED" | "REJECTED"; notes?: string | null }) {
+  if (status === "APPROVED") {
+    return <span className="text-[11px] font-medium text-emerald-400">Live on Discover</span>;
+  }
+  if (status === "REJECTED") {
+    return (
+      <span className="max-w-[16rem] text-right text-[11px] text-red-300">
+        Rejected{notes ? `: ${notes}` : "."} Publish again once fixed to resubmit.
+      </span>
+    );
+  }
+  return <span className="text-[11px] text-cinerra-gold">Pending review</span>;
 }

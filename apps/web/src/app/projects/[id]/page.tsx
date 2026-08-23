@@ -217,6 +217,8 @@ export default async function ProjectPage({
             eligible={publishEligibility.eligible}
             ineligibleReason={publishEligibility.reason}
             publicationId={project.publication?.id}
+            moderationStatus={project.publication?.moderationStatus as "PENDING" | "APPROVED" | "REJECTED" | undefined}
+            moderationNotes={project.publication?.moderationNotes}
           />
         </div>
 

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getAssetDisplayUrl } from "@/lib/storage";
-import { recordPublicationView } from "@cinerra/domain";
+import { recordPublicationView, isPublicationPubliclyVisible } from "@cinerra/domain";
 import { Header } from "@/components/Header";
 import { MobileNav } from "@/components/Nav";
 import { FavoriteButton } from "@/components/FavoriteButton";
@@ -33,9 +33,18 @@ export default async function WatchPage({ params }: { params: { id: string } }) 
     },
   });
 
-  if (!publication || publication.visibility !== "PUBLIC") notFound();
+  if (!publication) notFound();
 
-  await recordPublicationView(publication.id);
+  const isOwner = userId === publication.project.ownerId;
+  const publiclyVisible = isPublicationPubliclyVisible(publication);
+  // Non-owners only ever see a moderation-approved publication — sharing a
+  // direct link can't bypass the queue. The owner can still preview their
+  // own pending/rejected submission here, with a status banner below.
+  if (!isOwner && !publiclyVisible) notFound();
+
+  // Only count real public views — not the owner previewing their own
+  // pending/rejected submission before it's actually live.
+  if (publiclyVisible) await recordPublicationView(publication.id);
 
   const episodesWithVideo = await Promise.all(
     publication.project.episodes
@@ -52,6 +61,24 @@ export default async function WatchPage({ params }: { params: { id: string } }) 
     <div className="min-h-screen">
       <Header />
       <main className="mx-auto w-full max-w-4xl px-4 pb-24 pt-6 md:px-8">
+        {isOwner && publication.moderationStatus !== "APPROVED" && (
+          <div
+            className={`mb-6 rounded-xl border px-4 py-3 text-sm ${
+              publication.moderationStatus === "REJECTED"
+                ? "border-red-500/30 bg-red-500/10 text-red-200"
+                : "border-cinerra-gold/40 bg-cinerra-gold/10 text-cinerra-text"
+            }`}
+          >
+            {publication.moderationStatus === "REJECTED" ? (
+              <>
+                This movie was rejected during review{publication.moderationNotes ? `: ${publication.moderationNotes}` : "."} Only
+                you can see this page.
+              </>
+            ) : (
+              <>This movie is pending review and isn&rsquo;t visible on Discover yet. Only you can see this page.</>
+            )}
+          </div>
+        )}
         {episodesWithVideo.length === 0 ? (
           <p className="rounded-xl border border-cinerra-border bg-cinerra-surface p-6 text-sm text-cinerra-muted">
             This movie's video isn't available right now.
