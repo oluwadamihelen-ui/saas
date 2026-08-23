@@ -38,4 +38,13 @@ describe("isProviderConfigured", () => {
     const env = loadEnv({ ...REQUIRED_ENV, ANTHROPIC_API_KEY: "sk-ant-test" } as unknown as NodeJS.ProcessEnv);
     expect(isProviderConfigured.anthropic(env)).toBe(true);
   });
+
+  it("reports Sentry as configured once SENTRY_DSN is present", () => {
+    const withoutSentry = loadEnv(REQUIRED_ENV as unknown as NodeJS.ProcessEnv);
+    expect(isProviderConfigured.sentry(withoutSentry)).toBe(false);
+
+    resetEnvCacheForTests();
+    const withSentry = loadEnv({ ...REQUIRED_ENV, SENTRY_DSN: "https://key@sentry.io/1" } as unknown as NodeJS.ProcessEnv);
+    expect(isProviderConfigured.sentry(withSentry)).toBe(true);
+  });
 });

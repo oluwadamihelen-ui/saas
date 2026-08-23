@@ -3,10 +3,16 @@ import { env } from "./env";
 
 const globalForRateLimit = globalThis as unknown as { rateLimitRedis?: Redis };
 
-const redis = globalForRateLimit.rateLimitRedis ?? createRedisClient(env.REDIS_URL);
-
-if (process.env.NODE_ENV !== "production") {
-  globalForRateLimit.rateLimitRedis = redis;
+// Constructed lazily on first actual rate-limit check, not at module load —
+// this file is imported from auth.ts, which nearly every page pulls in via
+// Header's auth() call, so an eager connection here would mean Next.js
+// attempting a real Redis connection during static page generation at
+// build time (a login/signup attempt just never happens then).
+function getRedis(): Redis {
+  if (!globalForRateLimit.rateLimitRedis) {
+    globalForRateLimit.rateLimitRedis = createRedisClient(env.REDIS_URL);
+  }
+  return globalForRateLimit.rateLimitRedis;
 }
 
 export interface RateLimitResult {
@@ -25,6 +31,7 @@ export interface RateLimitResult {
  * billing-grade metering primitive.
  */
 export async function checkRateLimit(key: string, limit: number, windowSeconds: number): Promise<RateLimitResult> {
+  const redis = getRedis();
   const redisKey = `ratelimit:${key}`;
   const count = await redis.incr(redisKey);
   if (count === 1) {

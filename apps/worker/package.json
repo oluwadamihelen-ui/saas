@@ -19,7 +19,8 @@
     "@cinerra/domain": "workspace:*",
     "@cinerra/media": "workspace:*",
     "@cinerra/queue": "workspace:*",
-    "@cinerra/storage": "workspace:*"
+    "@cinerra/storage": "workspace:*",
+    "@sentry/node": "^10.70.0"
   },
   "devDependencies": {
     "dotenv-cli": "^7.4.2",

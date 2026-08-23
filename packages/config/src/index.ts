@@ -47,6 +47,10 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   RUNWAYML_API_SECRET: z.string().optional(),
   ELEVENLABS_API_KEY: z.string().optional(),
+
+  // --- Error monitoring (optional — errors are still logged to the
+  // console either way; this just also reports them to Sentry) ---
+  SENTRY_DSN: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -77,4 +81,5 @@ export const isProviderConfigured = {
   elevenlabs: (env: Env) => Boolean(env.ELEVENLABS_API_KEY),
   stripe: (env: Env) => Boolean(env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET),
   googleOAuth: (env: Env) => Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
+  sentry: (env: Env) => Boolean(env.SENTRY_DSN),
 };

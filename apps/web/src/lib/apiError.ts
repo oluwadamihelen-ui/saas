@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/node";
 import { ProviderNotConfiguredError } from "@cinerra/ai";
 import { PublishNotEligibleError } from "@cinerra/domain";
 import { FairUseLimitError } from "./fairUse";
@@ -29,5 +30,9 @@ export function toApiErrorResponse(error: unknown): NextResponse {
   }
   // eslint-disable-next-line no-console
   console.error(error);
+  // Safe to call unconditionally — captureException is a no-op if Sentry
+  // was never initialized (SENTRY_DSN unset), same honest-degrade pattern
+  // as every other optional provider in this codebase.
+  Sentry.captureException(error);
   return NextResponse.json({ error: "Something went wrong on our end. Your project is safe — please try again." }, { status: 500 });
 }

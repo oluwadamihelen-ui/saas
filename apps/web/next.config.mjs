@@ -11,6 +11,10 @@ const nextConfig = {
     "@cinerra/storage",
   ],
   eslint: { ignoreDuringBuilds: true },
+  // Enables instrumentation.ts, which initializes Sentry once at server
+  // startup when SENTRY_DSN is set. Stable without this flag as of
+  // Next.js 15 — still required to opt in on 14.x.
+  experimental: { instrumentationHook: true },
   webpack: (config) => {
     // Workspace packages use explicit ".js" extensions on relative imports
     // (required for Node ESM once compiled — see apps/worker's tsc build).
