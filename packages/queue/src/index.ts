@@ -1,4 +1,5 @@
 import { Queue, Worker, type ConnectionOptions, type Job, type Processor } from "bullmq";
+import Redis, { type RedisOptions } from "ioredis";
 
 /**
  * One BullMQ queue per generation job family (spec §25). Splitting queues
@@ -45,6 +46,18 @@ export function redisConnection(redisUrl: string): ConnectionOptions {
   };
 }
 
+/** A plain ioredis client against the same REDIS_URL BullMQ uses — for non-queue uses like rate limiting. */
+export function createRedisClient(redisUrl: string): Redis {
+  const url = new URL(redisUrl);
+  return new Redis({
+    host: url.hostname,
+    port: Number(url.port || 6379),
+    username: url.username || undefined,
+    password: url.password || undefined,
+    tls: url.protocol === "rediss:" ? {} : undefined,
+  } satisfies RedisOptions);
+}
+
 /** Lower number = processed first. Maps directly from Plan.queuePriority. */
 export function bullPriorityFor(queuePriority: "LOW" | "NORMAL" | "HIGH" | "HIGHEST"): number {
   switch (queuePriority) {
@@ -86,4 +99,5 @@ export function createGenerationWorker(
 }
 
 export type { Job };
+export type { Redis };
 export { Queue, Worker };

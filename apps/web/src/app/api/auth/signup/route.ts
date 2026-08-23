@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { createUserAccount, EmailAlreadyRegisteredError, TermsNotAcceptedError } from "@/lib/accounts";
 import { toApiErrorResponse } from "@/lib/apiError";
+import { checkSignupRateLimit, getClientIp } from "@/lib/rateLimit";
 
 const bodySchema = z.object({
   name: z.string().min(1).max(100),
@@ -12,6 +13,14 @@ const bodySchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const { allowed, retryAfterSeconds } = await checkSignupRateLimit(getClientIp(request.headers));
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Too many signup attempts. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } },
+      );
+    }
+
     const body = bodySchema.parse(await request.json());
     const user = await createUserAccount(body);
     return NextResponse.json({ id: user.id, email: user.email }, { status: 201 });

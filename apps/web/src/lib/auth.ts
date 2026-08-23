@@ -5,6 +5,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@cinerra/database";
 import { verifyPassword } from "@cinerra/config";
 import { env } from "./env";
+import { checkLoginRateLimit } from "./rateLimit";
 
 const providers = [
   Credentials({
@@ -17,6 +18,14 @@ const providers = [
       const email = credentials?.email as string | undefined;
       const password = credentials?.password as string | undefined;
       if (!email || !password) return null;
+
+      // Credential-stuffing/brute-force protection, keyed by the attempted
+      // email rather than the caller's IP (a distributed attack targeting
+      // one account would evade a per-IP limit). Returning null here reads
+      // identically to a wrong password to the UI, which is deliberate —
+      // it never confirms to a caller that they're being rate-limited.
+      const { allowed } = await checkLoginRateLimit(email);
+      if (!allowed) return null;
 
       const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
       if (!user?.passwordHash) return null;

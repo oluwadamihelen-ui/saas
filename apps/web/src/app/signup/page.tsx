@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { AuthError } from "next-auth";
 import { signIn } from "@/lib/auth";
 import { createUserAccount, EmailAlreadyRegisteredError, TermsNotAcceptedError } from "@/lib/accounts";
+import { checkSignupRateLimit, getClientIp } from "@/lib/rateLimit";
 import { Logo } from "@/components/Logo";
 
 export default function SignupPage({ searchParams }: { searchParams: { error?: string } }) {
@@ -12,6 +14,9 @@ export default function SignupPage({ searchParams }: { searchParams: { error?: s
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
     const termsAccepted = formData.get("termsAccepted") === "on";
+
+    const { allowed } = await checkSignupRateLimit(getClientIp(headers()));
+    if (!allowed) redirect("/signup?error=ratelimit");
 
     try {
       await createUserAccount({ name, email, password, termsAccepted });
@@ -49,6 +54,9 @@ export default function SignupPage({ searchParams }: { searchParams: { error?: s
           <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
             You must accept the Terms of Service and Privacy Policy to create an account.
           </p>
+        )}
+        {searchParams.error === "ratelimit" && (
+          <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">Too many attempts. Please try again in a while.</p>
         )}
         {searchParams.error === "1" && (
           <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">Something went wrong. Please try again.</p>
