@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { hashPassword, verifyPassword } from "@cinerra/config";
+import { createStripeClient } from "@cinerra/billing";
 import { welcomeEmail, passwordResetEmail } from "@cinerra/email";
 import { prisma } from "./db";
 import { emailClient } from "./email";
@@ -34,6 +35,12 @@ export class NoPasswordSetError extends Error {
 export class InvalidResetTokenError extends Error {
   constructor() {
     super("This password reset link is invalid or has expired.");
+  }
+}
+
+export class SubscriptionCancellationError extends Error {
+  constructor() {
+    super("We couldn't cancel your subscription with our payment provider. Please try again, or contact support.");
   }
 }
 
@@ -102,5 +109,48 @@ export async function resetPassword(token: string, newPassword: string): Promise
   await prisma.$transaction([
     prisma.user.update({ where: { id: resetToken.userId }, data: { passwordHash: hashPassword(newPassword) } }),
     prisma.passwordResetToken.update({ where: { id: resetToken.id }, data: { usedAt: new Date() } }),
+  ]);
+}
+
+/**
+ * Full self-serve account deletion. Cancels any live Stripe subscription
+ * first — subscription status only ever changes via a verified Stripe
+ * webhook (spec §44), and once the User row is gone there's no local
+ * record left for a webhook that arrives afterward to update, so an
+ * un-cancelled subscription would keep billing the customer indefinitely
+ * with nothing here to stop it — this is treated as a hard requirement,
+ * not an optional integration that can degrade silently.
+ *
+ * Every project the user owns is deleted in the same transaction as the
+ * User row, rather than relying on the User→Project cascade alone:
+ * Publication.publishedById has no ON DELETE action of its own, so a
+ * plain `user.delete()` throws a foreign key violation the moment the
+ * user has ever published anything. Deleting their Projects first cascades
+ * away the Publications (and everything else under each project) before
+ * the User row's own row is touched — verified against a real Postgres
+ * instance, not assumed, since this is exactly the kind of multi-path
+ * cascade that's easy to get wrong on paper.
+ */
+export async function deleteUserAccount(userId: string): Promise<void> {
+  const subscription = await prisma.subscription.findUnique({ where: { userId } });
+  if (subscription?.stripeSubscriptionId && subscription.status !== "CANCELED") {
+    if (!env.STRIPE_SECRET_KEY) {
+      console.error(
+        `[accounts] Deleting user ${userId} with a live Stripe subscription (${subscription.stripeSubscriptionId}) but STRIPE_SECRET_KEY isn't configured — it can't be cancelled here and will keep billing. Proceeding with deletion anyway; this subscription needs manual cancellation in Stripe.`,
+      );
+    } else {
+      try {
+        const stripe = createStripeClient(env.STRIPE_SECRET_KEY);
+        await stripe.subscriptions.cancel(subscription.stripeSubscriptionId);
+      } catch (error) {
+        console.error("[accounts] Failed to cancel Stripe subscription during account deletion:", error);
+        throw new SubscriptionCancellationError();
+      }
+    }
+  }
+
+  await prisma.$transaction([
+    prisma.project.deleteMany({ where: { ownerId: userId } }),
+    prisma.user.delete({ where: { id: userId } }),
   ]);
 }

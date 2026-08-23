@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
+import { auth, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { deleteUserAccount, SubscriptionCancellationError } from "@/lib/accounts";
 import { Header } from "@/components/Header";
 import { MobileNav, DesktopSidebar } from "@/components/Nav";
 import { EditNameForm } from "@/components/account/EditNameForm";
 import { ChangePasswordForm } from "@/components/account/ChangePasswordForm";
+import { DeleteAccountForm } from "@/components/account/DeleteAccountForm";
 import { ManageBillingButton } from "@/components/ManageBillingButton";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -16,7 +18,7 @@ const STATUS_LABEL: Record<string, string> = {
   INCOMPLETE: "Incomplete",
 };
 
-export default async function ProfilePage() {
+export default async function ProfilePage({ searchParams }: { searchParams: { error?: string } }) {
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!userId) redirect("/login");
@@ -25,6 +27,29 @@ export default async function ProfilePage() {
     where: { id: userId },
     include: { subscription: { include: { plan: true } } },
   });
+
+  async function deleteAccountAction(formData: FormData) {
+    "use server";
+    const currentSession = await auth();
+    const currentUserId = (currentSession?.user as { id?: string } | undefined)?.id;
+    if (!currentUserId) redirect("/login");
+
+    const confirmEmail = String(formData.get("confirmEmail") ?? "");
+    if (confirmEmail.toLowerCase() !== (currentSession?.user?.email ?? "").toLowerCase()) {
+      redirect("/profile?error=confirm-mismatch");
+    }
+
+    try {
+      await deleteUserAccount(currentUserId);
+    } catch (error) {
+      if (error instanceof SubscriptionCancellationError) {
+        redirect("/profile?error=billing");
+      }
+      throw error;
+    }
+
+    await signOut({ redirectTo: "/" });
+  }
 
   return (
     <div className="min-h-screen">
@@ -81,12 +106,19 @@ export default async function ProfilePage() {
           <section className="card mt-6 border-red-500/20">
             <h2 className="text-lg font-semibold text-red-300">Delete account</h2>
             <p className="mt-1 text-sm text-cinerra-muted">
-              This permanently deletes your account, movies, and generated media. To request deletion, email{" "}
-              <a href="mailto:privacy@cinerra.app" className="text-cinerra-accent underline">
-                privacy@cinerra.app
-              </a>{" "}
-              from your account&rsquo;s email address.
+              This permanently deletes your account, projects, movies, and generated media — including anything you&rsquo;ve published to Discover. This can&rsquo;t be undone.
             </p>
+            {searchParams.error === "billing" && (
+              <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                {new SubscriptionCancellationError().message}
+              </p>
+            )}
+            {searchParams.error === "confirm-mismatch" && (
+              <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                That didn&rsquo;t match your account email. Please try again.
+              </p>
+            )}
+            <DeleteAccountForm email={user.email} action={deleteAccountAction} />
           </section>
         </main>
       </div>
