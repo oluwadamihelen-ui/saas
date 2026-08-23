@@ -18,6 +18,7 @@ export const QUEUE_NAMES = {
   audioGeneration: "audio-generation", // dialogue / sfx / music
   episodeAssembly: "episode-assembly",
   export: "export",
+  clipGeneration: "clip-generation", // trailer / social clip
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];

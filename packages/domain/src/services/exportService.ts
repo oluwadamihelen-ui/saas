@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { prisma } from "@cinerra/database";
 import type { StorageClient } from "@cinerra/storage";
 import { buildAssetKey } from "@cinerra/storage";
-import { addSilentAudioTrack, concatVideos, FfmpegExecutionError, FfmpegNotAvailableError, mixAudioTracks, muxAudioOntoVideo, overlayMusic } from "@cinerra/media";
+import { concatVideos, FfmpegExecutionError, FfmpegNotAvailableError } from "@cinerra/media";
 import { checkEpisodeExportReadiness } from "../exportReadiness.js";
 import { resolveTargetSize } from "../lib/exportResolution.js";
+import { prepareShotSegments, overlayEpisodeMusicIfAny } from "./shotAssembly.js";
 import { beginProcessing, transitionGenerationJob, JobCancelledError } from "./jobTransitions.js";
 
 export interface StartEpisodeExportParams {
@@ -59,13 +60,6 @@ export async function startEpisodeExport(params: StartEpisodeExportParams): Prom
   return { generationJobId: job.id, exportId: exportRow.id };
 }
 
-async function downloadToFile(storage: StorageClient, storageKey: string, localPath: string): Promise<void> {
-  const url = await storage.getSignedDownloadUrl(storageKey, 3600);
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Failed to download asset for export (${response.status}).`);
-  await writeFile(localPath, Buffer.from(await response.arrayBuffer()));
-}
-
 export async function runEpisodeExportJob(storage: StorageClient, generationJobId: string): Promise<void> {
   const job = await prisma.generationJob.findUniqueOrThrow({ where: { id: generationJobId } });
 
@@ -100,62 +94,14 @@ export async function runEpisodeExportJob(storage: StorageClient, generationJobI
     const readiness = checkEpisodeExportReadiness(allShots);
     if (!readiness.ready) throw new Error(readiness.reason);
 
-    const musicTimelineItem = await prisma.timelineItem.findFirst({
-      where: { episodeId, track: "MUSIC" },
-      include: { audioItem: { include: { asset: true } } },
-    });
-
     await transitionGenerationJob(job.id, "DOWNLOADING");
     workDir = await mkdtemp(join(tmpdir(), "cinerra-export-"));
-
-    const preparedSegments: string[] = [];
-    let index = 0;
-    for (const shot of allShots) {
-      const videoAsset = shot.videoAsset!; // guaranteed by readiness check
-      const videoPath = join(workDir, `shot-${index}.mp4`);
-      await downloadToFile(storage, videoAsset.storageKey, videoPath);
-
-      const dialogueAsset = shot.timelineItems.find((t) => t.track === "DIALOGUE")?.audioItem?.asset;
-      const sfxAsset = shot.timelineItems.find((t) => t.track === "SFX")?.audioItem?.asset;
-      const preparedPath = join(workDir, `prepared-${index}.mp4`);
-
-      const audioPaths: string[] = [];
-      if (dialogueAsset) {
-        const path = join(workDir, `dialogue-${index}.mp3`);
-        await downloadToFile(storage, dialogueAsset.storageKey, path);
-        audioPaths.push(path);
-      }
-      if (sfxAsset) {
-        const path = join(workDir, `sfx-${index}.mp3`);
-        await downloadToFile(storage, sfxAsset.storageKey, path);
-        audioPaths.push(path);
-      }
-
-      if (audioPaths.length === 0) {
-        await addSilentAudioTrack(videoPath, preparedPath);
-      } else if (audioPaths.length === 1) {
-        await muxAudioOntoVideo(videoPath, audioPaths[0]!, preparedPath);
-      } else {
-        const mixedPath = join(workDir, `mixed-${index}.mp3`);
-        await mixAudioTracks(audioPaths, mixedPath);
-        await muxAudioOntoVideo(videoPath, mixedPath, preparedPath);
-      }
-      preparedSegments.push(preparedPath);
-      index++;
-    }
+    const preparedSegments = await prepareShotSegments(storage, workDir, allShots);
 
     await transitionGenerationJob(job.id, "FINALIZING");
     const concatenatedPath = join(workDir, "concatenated.mp4");
     await concatVideos(preparedSegments, concatenatedPath, targetSize);
-
-    let finalPath = concatenatedPath;
-    const musicAsset = musicTimelineItem?.audioItem?.asset;
-    if (musicAsset) {
-      const musicPath = join(workDir, "music.mp3");
-      await downloadToFile(storage, musicAsset.storageKey, musicPath);
-      finalPath = join(workDir, "final.mp4");
-      await overlayMusic(concatenatedPath, musicPath, finalPath);
-    }
+    const finalPath = await overlayEpisodeMusicIfAny(storage, workDir, episodeId, concatenatedPath);
 
     const finalBytes = await readFile(finalPath);
     const assetKey = buildAssetKey({ projectId: job.projectId, kind: "EXPORT", assetId: randomUUID(), ext: "mp4" });

@@ -14,6 +14,7 @@ import {
   runShotGenerationJob,
   runAudioGenerationJob,
   runEpisodeExportJob,
+  runClipGenerationJob,
 } from "@cinerra/domain";
 import { prisma } from "@cinerra/database";
 
@@ -78,6 +79,11 @@ const workers = [
   // own too — running many at once would just thrash the same CPU.
   createGenerationWorker(QUEUE_NAMES.export, connection, Number(process.env.WORKER_EXPORT_CONCURRENCY ?? 2), (job) =>
     withJobLogging(job, () => runEpisodeExportJob(storage, job.data.generationJobId)),
+  ),
+  // Trailer/social clip generation shares the same CPU-bound ffmpeg
+  // assembly as episode export, just on a smaller selection of shots.
+  createGenerationWorker(QUEUE_NAMES.clipGeneration, connection, Number(process.env.WORKER_EXPORT_CONCURRENCY ?? 2), (job) =>
+    withJobLogging(job, () => runClipGenerationJob(storage, job.data.generationJobId)),
   ),
 ];
 

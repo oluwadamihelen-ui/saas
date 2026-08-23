@@ -964,18 +964,30 @@ enum ExportStatus {
   FAILED
 }
 
+enum ExportKind {
+  EPISODE
+  TRAILER
+  SOCIAL_CLIP
+}
+
 model Export {
   id          String       @id @default(cuid())
   projectId   String
   project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   episodeId   String?
   episode     Episode?     @relation(fields: [episodeId], references: [id])
+  kind        ExportKind   @default(EPISODE)
   format      ExportFormat @default(MP4)
   resolution  String       // "720p" | "1080p" | "4K"
   aspectRatio AspectRatio
   status      ExportStatus @default(QUEUED)
   assetKey    String?
   errorMessage String?
+  // The shot ids actually assembled into this file, in order — only set
+  // for TRAILER/SOCIAL_CLIP, where the selection is a subset of the
+  // episode's shots rather than all of them (never fabricated: null until
+  // a real assembly has run).
+  clipShotIds Json?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

@@ -8,6 +8,7 @@ import { MobileNav } from "@/components/Nav";
 import { GenerationProgress, type GenerationKind } from "@/components/GenerationProgress";
 import { GenerateScriptButton } from "@/components/create/GenerateScriptButton";
 import { GenerateExportButton } from "@/components/create/GenerateExportButton";
+import { GenerateClipButton } from "@/components/create/GenerateClipButton";
 import { GenerateMusicButton } from "@/components/create/GenerateMusicButton";
 import { GenerateBibleButton } from "@/components/create/GenerateBibleButton";
 import { CharacterCard } from "@/components/CharacterCard";
@@ -28,6 +29,8 @@ const JOB_TITLES: Record<GenerationKind, string> = {
   soundEffect: "Generating sound effect…",
   music: "Composing episode score…",
   export: "Assembling and exporting your episode…",
+  trailer: "Assembling your trailer…",
+  socialClip: "Assembling your social clip…",
 };
 
 const VALID_KINDS = new Set<GenerationKind>([
@@ -43,6 +46,8 @@ const VALID_KINDS = new Set<GenerationKind>([
   "soundEffect",
   "music",
   "export",
+  "trailer",
+  "socialClip",
 ]);
 
 export default async function ProjectPage({
@@ -63,7 +68,10 @@ export default async function ProjectPage({
       episodes: {
         orderBy: { number: "asc" },
         include: {
-          exports: { orderBy: { createdAt: "desc" }, take: 1 },
+          // Enough rows to reliably include the latest attempt of each
+          // export kind (episode/trailer/social clip) even after several
+          // retries of one kind — see resolveLatestExport below.
+          exports: { orderBy: { createdAt: "desc" }, take: 20 },
           timelineItems: { where: { track: "MUSIC" }, include: { audioItem: { include: { asset: true } } } },
         },
       },
@@ -159,14 +167,22 @@ export default async function ProjectPage({
   const episodeCards = await Promise.all(
     project.episodes.map(async (episode) => {
       const episodeShots = project.scenes.filter((s) => s.episodeId === episode.id).flatMap((s) => s.shots);
-      const latestExport = episode.exports[0] ?? null;
       const musicAsset = episode.timelineItems[0]?.audioItem?.asset;
+
+      async function resolveLatestExport(kind: "EPISODE" | "TRAILER" | "SOCIAL_CLIP") {
+        // episode.exports is already ordered newest-first, so the first
+        // match for a kind is that kind's latest attempt.
+        const latest = episode.exports.find((e) => e.kind === kind) ?? null;
+        if (!latest) return null;
+        return { ...latest, downloadUrl: latest.assetKey ? await getAssetDisplayUrl(latest.assetKey) : null };
+      }
+
       return {
         ...episode,
         allShotsReady: episodeShots.length > 0 && episodeShots.every((s) => s.status === "READY"),
-        latestExport: latestExport
-          ? { ...latestExport, downloadUrl: latestExport.assetKey ? await getAssetDisplayUrl(latestExport.assetKey) : null }
-          : null,
+        latestExport: await resolveLatestExport("EPISODE"),
+        latestTrailer: await resolveLatestExport("TRAILER"),
+        latestSocialClip: await resolveLatestExport("SOCIAL_CLIP"),
         musicUrl: musicAsset ? await getAssetDisplayUrl(musicAsset.storageKey) : null,
       };
     }),
@@ -258,6 +274,40 @@ export default async function ProjectPage({
                           <GenerateMusicButton projectId={project.id} episodeId={episode.id} />
                         ) : (
                           <p className="text-right text-[11px] text-cinerra-muted">Music generation provider not configured.</p>
+                        )}
+                      </div>
+                    )}
+                    {episode.script && (
+                      <div className="mt-1 flex flex-col items-end gap-2 border-t border-cinerra-border pt-2">
+                        {episode.latestTrailer?.status === "SUCCEEDED" && episode.latestTrailer.downloadUrl ? (
+                          <a href={episode.latestTrailer.downloadUrl} target="_blank" rel="noreferrer" className="text-[11px] text-cinerra-accent hover:underline">
+                            Download trailer
+                          </a>
+                        ) : (
+                          <GenerateClipButton
+                            projectId={project.id}
+                            episodeId={episode.id}
+                            kind="TRAILER"
+                            label={episode.latestTrailer?.status === "FAILED" ? "Retry Trailer" : "Generate Trailer"}
+                          />
+                        )}
+                        {episode.latestTrailer?.status === "FAILED" && (
+                          <p className="max-w-[16rem] text-right text-[11px] text-red-300">{episode.latestTrailer.errorMessage}</p>
+                        )}
+                        {episode.latestSocialClip?.status === "SUCCEEDED" && episode.latestSocialClip.downloadUrl ? (
+                          <a href={episode.latestSocialClip.downloadUrl} target="_blank" rel="noreferrer" className="text-[11px] text-cinerra-accent hover:underline">
+                            Download social clip
+                          </a>
+                        ) : (
+                          <GenerateClipButton
+                            projectId={project.id}
+                            episodeId={episode.id}
+                            kind="SOCIAL_CLIP"
+                            label={episode.latestSocialClip?.status === "FAILED" ? "Retry Social Clip" : "Generate Social Clip"}
+                          />
+                        )}
+                        {episode.latestSocialClip?.status === "FAILED" && (
+                          <p className="max-w-[16rem] text-right text-[11px] text-red-300">{episode.latestSocialClip.errorMessage}</p>
                         )}
                       </div>
                     )}

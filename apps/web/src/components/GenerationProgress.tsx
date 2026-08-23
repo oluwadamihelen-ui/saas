@@ -83,6 +83,20 @@ const EXPORT_STEPS = [
   { key: "FINALIZING", label: "Assembling and encoding the episode" },
 ];
 
+const TRAILER_STEPS = [
+  { key: "QUEUED", label: "Queued for generation" },
+  { key: "PROCESSING", label: "Selecting a highlight shot from each scene" },
+  { key: "DOWNLOADING", label: "Gathering shot videos and dialogue audio" },
+  { key: "FINALIZING", label: "Assembling and encoding the trailer" },
+];
+
+const SOCIAL_CLIP_STEPS = [
+  { key: "QUEUED", label: "Queued for generation" },
+  { key: "PROCESSING", label: "Selecting a highlight shot from each scene" },
+  { key: "DOWNLOADING", label: "Gathering shot videos and dialogue audio" },
+  { key: "FINALIZING", label: "Cropping to vertical and encoding the clip" },
+];
+
 const STEPS_BY_KIND = {
   story: STORY_STEPS,
   script: SCRIPT_STEPS,
@@ -90,6 +104,8 @@ const STEPS_BY_KIND = {
   locations: LOCATIONS_STEPS,
   props: PROPS_STEPS,
   export: EXPORT_STEPS,
+  trailer: TRAILER_STEPS,
+  socialClip: SOCIAL_CLIP_STEPS,
   dialogue: DIALOGUE_STEPS,
   soundEffect: SOUND_EFFECT_STEPS,
   music: MUSIC_STEPS,
