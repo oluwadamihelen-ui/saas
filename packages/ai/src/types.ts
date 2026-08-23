@@ -71,6 +71,16 @@ export interface GenerateVideoInput {
   referenceImages?: ReferenceImage[];
   durationSeconds: number;
   aspectRatio: "16:9" | "9:16" | "1:1";
+  /**
+   * Video generation is the one capability that genuinely runs for
+   * minutes (an async provider task, usually polled). A caller that wants
+   * to support mid-flight cancellation passes a signal here; a provider
+   * that honors it must call its own cancel endpoint (not just stop
+   * polling locally) before throwing ProviderCancelledError, since an
+   * abort signal alone doesn't stop most providers' billed server-side
+   * work. Providers that don't support real cancellation may ignore this.
+   */
+  signal?: AbortSignal;
 }
 
 export interface GenerateImageToVideoInput extends GenerateVideoInput {

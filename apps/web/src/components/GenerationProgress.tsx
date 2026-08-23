@@ -118,7 +118,18 @@ function stepGlyph(stepKey: string, currentStatus: string): string {
 export function GenerationProgress({ jobId, kind, title }: { jobId: string; kind: GenerationKind; title: string }) {
   const router = useRouter();
   const [job, setJob] = useState<JobState | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const steps = STEPS_BY_KIND[kind] ?? STORY_STEPS;
+
+  async function handleCancel() {
+    setCancelling(true);
+    try {
+      await fetch(`/api/jobs/${jobId}/cancel`, { method: "POST" });
+      router.refresh();
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -157,12 +168,30 @@ export function GenerationProgress({ jobId, kind, title }: { jobId: string; kind
     );
   }
 
+  if (job.status === "CANCELLED") {
+    return (
+      <div className="card border-cinerra-border bg-cinerra-surface2">
+        <p className="font-semibold text-cinerra-text">Cancelled.</p>
+        <p className="mt-1 text-sm text-cinerra-muted">You cancelled this generation before it finished. Your project is safe — nothing was lost.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="card">
-      <p className="mb-4 flex items-center gap-2 font-semibold">
-        <span className="h-2 w-2 animate-pulse rounded-full bg-cinerra-accent" />
-        {title}
-      </p>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <p className="flex items-center gap-2 font-semibold">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-cinerra-accent" />
+          {title}
+        </p>
+        <button
+          onClick={handleCancel}
+          disabled={cancelling}
+          className="shrink-0 rounded-full border border-cinerra-border px-2.5 py-1 text-[11px] font-medium text-cinerra-muted hover:border-red-400 hover:text-red-300 disabled:opacity-60"
+        >
+          {cancelling ? "Cancelling…" : "Cancel"}
+        </button>
+      </div>
       <ul className="flex flex-col gap-2 text-sm">
         {steps.map((step) => (
           <li key={step.key} className="flex items-center gap-2 text-cinerra-muted">

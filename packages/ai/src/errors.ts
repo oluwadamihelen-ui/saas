@@ -28,3 +28,22 @@ export class ProviderGenerationError extends Error {
     this.cause2 = cause;
   }
 }
+
+/**
+ * Thrown by a provider adapter that noticed its caller's cancellation
+ * signal fired mid-request and actually stopped — including, where the
+ * provider supports it, calling that provider's own cancel endpoint so it
+ * stops billing/working server-side too, not just locally. Deliberately
+ * does NOT extend ProviderGenerationError: the router must propagate this
+ * immediately rather than failing over to another candidate, since the
+ * caller asked to stop, not to retry with a different provider.
+ */
+export class ProviderCancelledError extends Error {
+  readonly provider: string;
+
+  constructor(provider: string) {
+    super(`Generation was cancelled mid-request against ${provider}.`);
+    this.name = "ProviderCancelledError";
+    this.provider = provider;
+  }
+}

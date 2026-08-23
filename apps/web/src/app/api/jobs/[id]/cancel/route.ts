@@ -8,10 +8,13 @@ import { toApiErrorResponse } from "@/lib/apiError";
  * Cooperative cancellation (spec §24, §57): flips the job to CANCELLED.
  * Reliably stops a job still sitting in the queue — the worker checks for
  * this before it starts real (billed) work and exits cleanly instead of
- * retrying. A job already actively processing when cancelled currently
- * runs to completion rather than being interrupted mid-provider-call;
- * true mid-flight cancellation would require the provider adapters to
- * support aborting an in-flight request, which they don't yet.
+ * retrying. For SHOT_VIDEO jobs, a background poll in
+ * shotGenerationService also watches for this write while a Runway
+ * generation is actively in flight (typically minutes) and aborts it —
+ * including calling Runway's own cancel endpoint so it stops billing
+ * server-side too, not just locally. Other job types' provider calls are
+ * short single requests (seconds), so this write still reliably stops
+ * them before the next stage begins even without an explicit abort hook.
  *
  * Also resets whatever entity the job was populating back to its
  * pre-generation state, so the UI doesn't stay stuck showing "generating"

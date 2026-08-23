@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@cinerra/database";
-import type { ModelRouter } from "@cinerra/ai";
-import { ProviderGenerationError, ProviderNotConfiguredError } from "@cinerra/ai";
+import type { GenerateVideoResult, ModelRouter } from "@cinerra/ai";
+import { ProviderCancelledError, ProviderGenerationError, ProviderNotConfiguredError } from "@cinerra/ai";
 import type { StorageClient } from "@cinerra/storage";
 import { buildAssetKey } from "@cinerra/storage";
 import { compileShotPrompt } from "../promptCompiler.js";
@@ -52,6 +52,14 @@ export async function startShotGeneration(params: StartShotGenerationParams): Pr
  * configured, or the QC pass itself fails for any infrastructure reason,
  * the shot still completes and is marked READY — only a QC pass that
  * actually ran and found a problem marks the shot NEEDS_REVISION instead.
+ *
+ * True mid-flight cancellation (spec §24, §57): while the provider call is
+ * in flight (typically minutes — Runway's async task polling), a
+ * background poll watches this job's own row for the CANCELLED status the
+ * cancel API route writes, and aborts the in-flight request the moment it
+ * appears — including, for providers that support it, calling that
+ * provider's own cancel endpoint so it actually stops billed work
+ * server-side rather than just being ignored locally.
  */
 export async function runShotGenerationJob(router: ModelRouter, storage: StorageClient, generationJobId: string): Promise<void> {
   const job = await prisma.generationJob.findUniqueOrThrow({ where: { id: generationJobId } });
@@ -72,26 +80,47 @@ export async function runShotGenerationJob(router: ModelRouter, storage: Storage
 
     await transitionGenerationJob(job.id, "PROVIDER_GENERATING");
 
+    // Runway generation can take minutes; watch this job's own row so a
+    // cancel request (which just writes CANCELLED to the row) actually
+    // interrupts the in-flight provider call instead of being ignored
+    // until it finishes on its own.
+    const abortController = new AbortController();
+    const cancelPoll = setInterval(() => {
+      prisma.generationJob
+        .findUnique({ where: { id: job.id }, select: { status: true } })
+        .then((row) => {
+          if (row?.status === "CANCELLED") abortController.abort();
+        })
+        .catch(() => undefined);
+    }, 4000);
+
     const hasReferences = referenceImages.length > 0;
     const capability = hasReferences ? "IMAGE_TO_VIDEO" : "VIDEO";
-    const result = await router.execute(capability, "BEST_QUALITY", (provider) =>
-      hasReferences
-        ? provider.generateImageToVideo({
-            prompt: compiled.prompt,
-            negativePrompt: compiled.negativePrompt,
-            referenceImages,
-            sourceImageUrl: referenceImages[0]!.url,
-            durationSeconds: context.shot.durationSeconds,
-            aspectRatio: context.aspectRatio,
-          })
-        : provider.generateVideo({
-            prompt: compiled.prompt,
-            negativePrompt: compiled.negativePrompt,
-            referenceImages,
-            durationSeconds: context.shot.durationSeconds,
-            aspectRatio: context.aspectRatio,
-          }),
-    );
+    let result: GenerateVideoResult;
+    try {
+      result = await router.execute(capability, "BEST_QUALITY", (provider) =>
+        hasReferences
+          ? provider.generateImageToVideo({
+              prompt: compiled.prompt,
+              negativePrompt: compiled.negativePrompt,
+              referenceImages,
+              sourceImageUrl: referenceImages[0]!.url,
+              durationSeconds: context.shot.durationSeconds,
+              aspectRatio: context.aspectRatio,
+              signal: abortController.signal,
+            })
+          : provider.generateVideo({
+              prompt: compiled.prompt,
+              negativePrompt: compiled.negativePrompt,
+              referenceImages,
+              durationSeconds: context.shot.durationSeconds,
+              aspectRatio: context.aspectRatio,
+              signal: abortController.signal,
+            }),
+      );
+    } finally {
+      clearInterval(cancelPoll);
+    }
 
     await transitionGenerationJob(job.id, "DOWNLOADING");
     const assetKey = buildAssetKey({ projectId: job.projectId, kind: "GENERATED_VIDEO", assetId: randomUUID(), ext: "mp4" });
@@ -134,6 +163,14 @@ export async function runShotGenerationJob(router: ModelRouter, storage: Storage
 
     await transitionGenerationJob(job.id, "SUCCEEDED");
   } catch (error) {
+    if (error instanceof ProviderCancelledError) {
+      // The cancel API route already flipped the job to CANCELLED and
+      // reset the shot back to PENDING before this ever fired — nothing
+      // left to do but stop cleanly, exactly like the beginProcessing
+      // cancellation check above. Transitioning to FAILED here would be
+      // an invalid move out of a terminal state.
+      return;
+    }
     const message =
       error instanceof ProviderNotConfiguredError
         ? "Video generation isn't available yet — no video provider is configured. Add an AI provider API key in Settings."

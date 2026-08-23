@@ -5,7 +5,7 @@ import type {
   GenerateVideoToVideoInput,
   VideoProvider,
 } from "../../types.js";
-import { ProviderGenerationError } from "../../errors.js";
+import { ProviderCancelledError, ProviderGenerationError } from "../../errors.js";
 
 export interface RunwayVideoProviderOptions {
   apiKey: string;
@@ -60,7 +60,7 @@ export class RunwayVideoProvider implements VideoProvider {
       ratio: mapAspectRatio(input.aspectRatio),
       duration: input.durationSeconds,
     });
-    return this.pollUntilDone(task.id);
+    return this.pollUntilDone(task.id, input.signal);
   }
 
   async generateVideoToVideo(input: GenerateVideoToVideoInput): Promise<GenerateVideoResult> {
@@ -70,7 +70,7 @@ export class RunwayVideoProvider implements VideoProvider {
       model: this.modelId,
       ratio: mapAspectRatio(input.aspectRatio),
     });
-    return this.pollUntilDone(task.id);
+    return this.pollUntilDone(task.id, input.signal);
   }
 
   async analyzeVideo(): Promise<{ answer: string; meta: { provider: string; modelId: string } }> {
@@ -94,9 +94,14 @@ export class RunwayVideoProvider implements VideoProvider {
     return (await response.json()) as { id: string };
   }
 
-  private async pollUntilDone(taskId: string): Promise<GenerateVideoResult> {
+  private async pollUntilDone(taskId: string, signal?: AbortSignal): Promise<GenerateVideoResult> {
     const startedAt = Date.now();
     while (Date.now() - startedAt < this.maxPollMs) {
+      if (signal?.aborted) {
+        await this.cancelTask(taskId);
+        throw new ProviderCancelledError(this.providerName);
+      }
+
       const response = await fetch(`${RUNWAY_API_BASE}/tasks/${taskId}`, {
         headers: { Authorization: `Bearer ${this.apiKey}`, "X-Runway-Version": "2024-11-06" },
       });
@@ -117,6 +122,26 @@ export class RunwayVideoProvider implements VideoProvider {
       await sleep(this.pollIntervalMs);
     }
     throw new ProviderGenerationError(this.providerName, "Runway generation timed out waiting for a result.");
+  }
+
+  /**
+   * Runway's own docs are explicit that a local abort/timeout does NOT
+   * stop the task server-side — only calling this endpoint does. Without
+   * it, "cancelling" here would just mean we stop looking at a task
+   * Runway keeps generating (and billing) regardless.
+   */
+  private async cancelTask(taskId: string): Promise<void> {
+    try {
+      const response = await fetch(`${RUNWAY_API_BASE}/tasks/${taskId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${this.apiKey}`, "X-Runway-Version": "2024-11-06" },
+      });
+      if (!response.ok) {
+        console.error(`[runway] failed to cancel task ${taskId} (${response.status}) — it may keep running/billing on Runway's side.`);
+      }
+    } catch (error) {
+      console.error(`[runway] failed to cancel task ${taskId}:`, error instanceof Error ? error.message : error);
+    }
   }
 }
 
