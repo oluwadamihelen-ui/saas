@@ -7,6 +7,7 @@ const nextConfig = {
     "@cinerra/config",
     "@cinerra/database",
     "@cinerra/domain",
+    "@cinerra/email",
     "@cinerra/queue",
     "@cinerra/storage",
   ],

@@ -4,7 +4,7 @@ import { AuthError } from "next-auth";
 import { signIn } from "@/lib/auth";
 import { Logo } from "@/components/Logo";
 
-export default function LoginPage({ searchParams }: { searchParams: { error?: string } }) {
+export default function LoginPage({ searchParams }: { searchParams: { error?: string; reset?: string } }) {
   async function loginAction(formData: FormData) {
     "use server";
     try {
@@ -28,6 +28,9 @@ export default function LoginPage({ searchParams }: { searchParams: { error?: st
         <h1 className="mb-1 text-center text-xl font-semibold">Welcome back</h1>
         <p className="mb-6 text-center text-sm text-cinerra-muted">Sign in to keep making movies.</p>
 
+        {searchParams.reset && (
+          <p className="mb-4 rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">Password updated. Sign in with your new password.</p>
+        )}
         {searchParams.error && (
           <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">Invalid email or password.</p>
         )}
@@ -35,6 +38,11 @@ export default function LoginPage({ searchParams }: { searchParams: { error?: st
         <form action={loginAction} className="flex flex-col gap-3">
           <input name="email" type="email" required placeholder="Email" className="input" />
           <input name="password" type="password" required placeholder="Password" className="input" />
+          <div className="text-right">
+            <Link href="/forgot-password" className="text-xs text-cinerra-muted underline hover:text-cinerra-text">
+              Forgot password?
+            </Link>
+          </div>
           <button type="submit" className="btn-primary mt-2 w-full">
             Sign in
           </button>

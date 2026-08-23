@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/node";
 import { loadEnv } from "@cinerra/config";
+import { createEmailClient } from "@cinerra/email";
 import { ModelRouter, ProviderRegistry } from "@cinerra/ai";
 import { createGenerationWorker, redisConnection, QUEUE_NAMES, type GenerationJobPayload, type Job } from "@cinerra/queue";
 import { createStorageClient } from "@cinerra/storage";
@@ -41,6 +42,7 @@ process.on("uncaughtException", (error) => {
 const registry = new ProviderRegistry(env);
 const router = new ModelRouter(registry);
 const storage = createStorageClient(env);
+const emailClient = createEmailClient(env);
 const connection = redisConnection(env.REDIS_URL);
 
 // Global per-worker-process concurrency ceiling (distinct from the
@@ -114,7 +116,7 @@ const workers = [
   // provider-rate-limited, so it gets a small dedicated concurrency of its
   // own too — running many at once would just thrash the same CPU.
   createGenerationWorker(QUEUE_NAMES.export, connection, Number(process.env.WORKER_EXPORT_CONCURRENCY ?? 2), (job) =>
-    withJobLogging(job, () => runEpisodeExportJob(storage, job.data.generationJobId)),
+    withJobLogging(job, () => runEpisodeExportJob(storage, emailClient, env.APP_BASE_URL, job.data.generationJobId)),
   ),
   // Trailer/social clip generation shares the same CPU-bound ffmpeg
   // assembly as episode export, just on a smaller selection of shots.
@@ -135,7 +137,7 @@ for (const w of workers) {
 
 isFfmpegAvailable().then((available) => {
   console.log(
-    `[worker] Cinerra worker started. Concurrency=${WORKER_CONCURRENCY}. Providers configured: TEXT=${registry.isConfigured("TEXT")} IMAGE=${registry.isConfigured("IMAGE")} VIDEO=${registry.isConfigured("VIDEO")} VOICE=${registry.isConfigured("VOICE")} MUSIC=${registry.isConfigured("MUSIC")} SOUND_EFFECT=${registry.isConfigured("SOUND_EFFECT")}. FFmpeg available=${available}. Error monitoring: ${env.SENTRY_DSN ? "configured" : "not configured"}.`,
+    `[worker] Cinerra worker started. Concurrency=${WORKER_CONCURRENCY}. Providers configured: TEXT=${registry.isConfigured("TEXT")} IMAGE=${registry.isConfigured("IMAGE")} VIDEO=${registry.isConfigured("VIDEO")} VOICE=${registry.isConfigured("VOICE")} MUSIC=${registry.isConfigured("MUSIC")} SOUND_EFFECT=${registry.isConfigured("SOUND_EFFECT")}. FFmpeg available=${available}. Error monitoring: ${env.SENTRY_DSN ? "configured" : "not configured"}. Email: ${emailClient.configured ? "configured" : "not configured"}.`,
   );
 });
 

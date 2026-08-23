@@ -68,3 +68,8 @@ export async function checkSignupRateLimit(ip: string): Promise<RateLimitResult>
 export async function checkLoginRateLimit(email: string): Promise<RateLimitResult> {
   return checkRateLimit(`login:${email.toLowerCase()}`, 10, 15 * 60);
 }
+
+/** Password-reset request abuse (email bombing a target inbox, or probing which emails are registered), keyed by IP. */
+export async function checkPasswordResetRateLimit(ip: string): Promise<RateLimitResult> {
+  return checkRateLimit(`password-reset:${ip}`, 5, 60 * 60);
+}

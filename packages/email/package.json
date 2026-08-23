@@ -1,5 +1,5 @@
 {
-  "name": "@cinerra/domain",
+  "name": "@cinerra/email",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,11 +11,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@cinerra/ai": "workspace:*",
-    "@cinerra/database": "workspace:*",
-    "@cinerra/email": "workspace:*",
-    "@cinerra/media": "workspace:*",
-    "@cinerra/storage": "workspace:*"
+    "@cinerra/config": "workspace:*",
+    "resend": "^6.22.0"
   },
   "devDependencies": {
     "typescript": "^5.5.4",

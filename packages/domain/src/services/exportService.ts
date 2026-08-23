@@ -6,11 +6,44 @@ import { prisma } from "@cinerra/database";
 import type { StorageClient } from "@cinerra/storage";
 import { buildAssetKey } from "@cinerra/storage";
 import { concatVideos, FfmpegExecutionError, FfmpegNotAvailableError } from "@cinerra/media";
+import type { EmailClient } from "@cinerra/email";
+import { exportReadyEmail, exportFailedEmail } from "@cinerra/email";
 import { checkEpisodeExportReadiness } from "../exportReadiness.js";
 import { resolveTargetSize } from "../lib/exportResolution.js";
 import { resolveEpisodeShotOrder } from "../lib/timelineOrder.js";
 import { prepareShotSegments, overlayEpisodeMusicIfAny } from "./shotAssembly.js";
 import { beginProcessing, transitionGenerationJob, JobCancelledError } from "./jobTransitions.js";
+
+/**
+ * Best-effort notification — a failed or unconfigured email provider must
+ * never affect the export's own SUCCEEDED/FAILED outcome, so every call
+ * site swallows and logs rather than propagating.
+ */
+async function notifyExportOutcome(
+  email: EmailClient,
+  appBaseUrl: string,
+  episodeId: string,
+  projectId: string,
+  outcome: { status: "SUCCEEDED" } | { status: "FAILED"; errorMessage: string },
+): Promise<void> {
+  try {
+    const [episode, project] = await Promise.all([
+      prisma.episode.findUnique({ where: { id: episodeId }, select: { title: true } }),
+      prisma.project.findUnique({ where: { id: projectId }, select: { title: true, owner: { select: { email: true } } } }),
+    ]);
+    if (!episode || !project) return;
+
+    const projectUrl = `${appBaseUrl}/projects/${projectId}`;
+    const content =
+      outcome.status === "SUCCEEDED"
+        ? exportReadyEmail({ projectTitle: project.title, episodeTitle: episode.title, projectUrl })
+        : exportFailedEmail({ projectTitle: project.title, episodeTitle: episode.title, errorMessage: outcome.errorMessage, projectUrl });
+
+    await email.send({ to: project.owner.email, ...content });
+  } catch (error) {
+    console.error("[email] Failed to send export outcome notification:", error);
+  }
+}
 
 export interface StartEpisodeExportParams {
   userId: string;
@@ -61,7 +94,7 @@ export async function startEpisodeExport(params: StartEpisodeExportParams): Prom
   return { generationJobId: job.id, exportId: exportRow.id };
 }
 
-export async function runEpisodeExportJob(storage: StorageClient, generationJobId: string): Promise<void> {
+export async function runEpisodeExportJob(storage: StorageClient, email: EmailClient, appBaseUrl: string, generationJobId: string): Promise<void> {
   const job = await prisma.generationJob.findUniqueOrThrow({ where: { id: generationJobId } });
 
   try {
@@ -110,6 +143,7 @@ export async function runEpisodeExportJob(storage: StorageClient, generationJobI
 
     await prisma.export.update({ where: { id: exportId }, data: { status: "SUCCEEDED", assetKey } });
     await transitionGenerationJob(job.id, "SUCCEEDED");
+    await notifyExportOutcome(email, appBaseUrl, episodeId, job.projectId, { status: "SUCCEEDED" });
   } catch (error) {
     const message =
       error instanceof FfmpegNotAvailableError
@@ -120,6 +154,11 @@ export async function runEpisodeExportJob(storage: StorageClient, generationJobI
 
     await prisma.export.update({ where: { id: exportId }, data: { status: "FAILED", errorMessage: message } }).catch(() => undefined);
     await transitionGenerationJob(job.id, "FAILED", { errorMessage: message, attempts: { increment: 1 } });
+    // A transient failure may still succeed on BullMQ's retry — this can
+    // fire once before that happens, which is an accepted, documented
+    // rough edge (see README) rather than something worth the complexity
+    // of only notifying on final attempt exhaustion.
+    await notifyExportOutcome(email, appBaseUrl, episodeId, job.projectId, { status: "FAILED", errorMessage: message });
     throw error;
   } finally {
     if (workDir) await rm(workDir, { recursive: true, force: true }).catch(() => undefined);

@@ -18,6 +18,7 @@
     "@cinerra/config": "workspace:*",
     "@cinerra/database": "workspace:*",
     "@cinerra/domain": "workspace:*",
+    "@cinerra/email": "workspace:*",
     "@cinerra/queue": "workspace:*",
     "@cinerra/storage": "workspace:*",
     "@sentry/node": "^10.70.0",

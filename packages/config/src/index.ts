@@ -51,6 +51,12 @@ const envSchema = z.object({
   // --- Error monitoring (optional — errors are still logged to the
   // console either way; this just also reports them to Sentry) ---
   SENTRY_DSN: z.string().optional(),
+
+  // --- Transactional email (optional — an unconfigured send logs what
+  // would have gone out instead of pretending to send it; never blocks
+  // the action it's attached to, e.g. signup or an export finishing) ---
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -82,4 +88,5 @@ export const isProviderConfigured = {
   stripe: (env: Env) => Boolean(env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET),
   googleOAuth: (env: Env) => Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
   sentry: (env: Env) => Boolean(env.SENTRY_DSN),
+  email: (env: Env) => Boolean(env.RESEND_API_KEY),
 };
