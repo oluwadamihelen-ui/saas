@@ -36,22 +36,25 @@ export default async function HomePage() {
               aria-hidden
               className="pointer-events-none absolute -bottom-32 -left-16 h-80 w-80 rounded-full bg-cinerra-accent/25 blur-3xl"
             />
-            <div className="relative z-10 max-w-xl">
-              <span className="eyebrow">Cinematic AI Studio</span>
-              <h1 className="mt-3 font-display text-4xl font-bold leading-[1.05] text-white md:text-6xl">
-                Create your next movie with AI.
-              </h1>
-              <p className="mt-5 max-w-md text-base text-white/70 md:text-lg">
-                From idea to finished film — story, cast, cinematography, and score, generated end to end.
-              </p>
-              <div className="mt-9 flex flex-wrap gap-3">
-                <Link href="/projects/new?mode=INSPIRATION" className="btn-primary px-7 py-3.5 text-base">
-                  Create Movie
-                </Link>
-                <Link href="/projects/new?mode=ADAPTATION" className="btn-outline-light">
-                  Adapt a Story
-                </Link>
+            <div className="relative z-10 flex items-center justify-between gap-10">
+              <div className="max-w-xl">
+                <span className="eyebrow">Cinematic AI Studio</span>
+                <h1 className="mt-3 font-display text-4xl font-bold leading-[1.05] text-white md:text-6xl">
+                  Create your next movie with AI.
+                </h1>
+                <p className="mt-5 max-w-md text-base text-white/70 md:text-lg">
+                  From idea to finished film — story, cast, cinematography, and score, generated end to end.
+                </p>
+                <div className="mt-9 flex flex-wrap gap-3">
+                  <Link href="/projects/new?mode=INSPIRATION" className="btn-primary px-7 py-3.5 text-base">
+                    Create Movie
+                  </Link>
+                  <Link href="/projects/new?mode=ADAPTATION" className="btn-outline-light">
+                    Adapt a Story
+                  </Link>
+                </div>
               </div>
+              <FeaturedFilmCard />
             </div>
           </section>
 
@@ -85,6 +88,57 @@ export default async function HomePage() {
       </div>
       <MobileNav />
     </div>
+  );
+}
+
+function FeaturedFilmCard() {
+  return (
+    <div className="hidden shrink-0 lg:block">
+      <div className="group relative w-56 rotate-3 rounded-2xl border border-white/15 bg-gradient-to-br from-cinerra-accent/40 via-[#2a1140] to-cinerra-bg shadow-glow-lg transition duration-300 hover:rotate-0">
+        <div className="aspect-[2/3] overflow-hidden rounded-2xl">
+          <div className="relative flex h-full flex-col justify-between p-4">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_20%_0%,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0)_55%)]"
+            />
+            <span className="relative w-fit rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white backdrop-blur">
+              AI Generated
+            </span>
+
+            <div className="relative flex flex-1 items-center justify-center">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/30 bg-white/10 backdrop-blur transition group-hover:scale-105 group-hover:bg-white/20">
+                <PlayIcon />
+              </span>
+            </div>
+
+            <div className="relative">
+              <p className="font-display text-lg font-bold leading-tight text-white">The Last Horizon</p>
+              <p className="mt-1 text-[11px] text-white/60">Sci-Fi · Feature Film</p>
+              <div className="mt-3 flex items-center gap-1 text-[11px] font-medium text-cinerra-gold">
+                <StarIcon />
+                4.9 <span className="text-white/40">rating</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+      <path d="M8 5v14l11-7z" />
+    </svg>
+  );
+}
+
+function StarIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z" />
+    </svg>
   );
 }
 
