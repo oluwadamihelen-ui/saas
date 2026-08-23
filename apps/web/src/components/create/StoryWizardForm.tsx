@@ -30,6 +30,35 @@ const VISUAL_STYLES = [
   "CUSTOM",
 ];
 
+// Short, punchy premise hooks to jump-start Inspiration Mode — a one-tap
+// starting point, not a finished pitch; a creator is expected to edit
+// from here, not submit it verbatim.
+const INSPIRATION_PROMPTS = [
+  "The Vampire CEO Visits Me Every Night",
+  "The Hidden Billionaire Son-in-Law",
+  "My Ex-Husband Is Now My Bodyguard",
+  "She Faked Her Death to Escape an Arranged Marriage",
+  "The Nanny Is Secretly the Heiress",
+  "Trapped in a Marriage of Revenge",
+  "The Detective Who Falls for His Prime Suspect",
+  "Reborn as the Villain's Little Sister",
+  "My Rival at Work Is Actually My Soulmate",
+  "The Twin Swapped Places With Her Sister on Her Wedding Day",
+  "A Small-Town Nurse Discovers She's Royalty",
+  "He Adopted Her, Not Knowing She's His Long-Lost Daughter",
+  "The Contract Marriage That Turned Real",
+  "She Wakes Up Married to a Stranger After Amnesia",
+  "The Bodyguard Falls for the Mafia Boss's Daughter",
+  "Second Chance at Life, First Chance at Revenge",
+  "The Chef Who Cooks for a Family That Doesn't Know She's Their Long-Lost Relative",
+  "Trapped in a Time Loop the Night Before Her Wedding",
+];
+
+function sampleInspirationExamples(count = 2): string[] {
+  const shuffled = [...INSPIRATION_PROMPTS].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
+
 function toggle<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 }
@@ -39,6 +68,9 @@ export function StoryWizardForm({ initialMode }: { initialMode: "INSPIRATION" | 
   const [mode, setMode] = useState<"INSPIRATION" | "ADAPTATION">(initialMode);
   const [title, setTitle] = useState("");
   const [storyIdea, setStoryIdea] = useState("");
+  // Deterministic on first render (server and client must match on
+  // hydration) — reshuffled only in response to the user clicking refresh.
+  const [exampleIdeas, setExampleIdeas] = useState<string[]>(() => INSPIRATION_PROMPTS.slice(0, 2));
   const [sourceText, setSourceText] = useState("");
   const [sourceFileKey, setSourceFileKey] = useState<string | undefined>(undefined);
   const [uploadingFile, setUploadingFile] = useState(false);
@@ -152,6 +184,42 @@ export function StoryWizardForm({ initialMode }: { initialMode: "INSPIRATION" | 
             maxLength={20000}
             placeholder="Describe the movie you want to create…"
           />
+          <div className="mt-2 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setStoryIdea(INSPIRATION_PROMPTS[Math.floor(Math.random() * INSPIRATION_PROMPTS.length)]!)}
+              className="btn-secondary-sm"
+            >
+              🎲 Random Inspiration
+            </button>
+            <span className="text-xs text-cinerra-muted">{storyIdea.length}/20000</span>
+          </div>
+
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-medium text-cinerra-muted">Inspiration Example</span>
+              <button
+                type="button"
+                onClick={() => setExampleIdeas(sampleInspirationExamples())}
+                aria-label="Shuffle examples"
+                className="text-cinerra-muted transition hover:text-cinerra-text"
+              >
+                <RefreshIcon />
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {exampleIdeas.map((idea) => (
+                <button
+                  key={idea}
+                  type="button"
+                  onClick={() => setStoryIdea(idea)}
+                  className="rounded-full border border-cinerra-border px-3.5 py-1.5 text-xs font-medium text-cinerra-muted transition hover:border-cinerra-accent/60 hover:text-cinerra-text"
+                >
+                  {idea}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       ) : (
         <div>
@@ -272,6 +340,17 @@ export function StoryWizardForm({ initialMode }: { initialMode: "INSPIRATION" | 
         {submitting ? "Starting…" : "Next"}
       </button>
     </form>
+  );
+}
+
+function RefreshIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 2v6h-6" />
+      <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+      <path d="M3 22v-6h6" />
+      <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+    </svg>
   );
 }
 
