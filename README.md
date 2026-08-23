@@ -85,8 +85,10 @@ docker run --rm --network host minio/mc mc mb local/cinerra-media
 
 ## 4. Database setup
 
+`pnpm install` already ran the Prisma client generator automatically (a root `postinstall` hook), so you shouldn't need `pnpm db:generate` yourself unless you change `schema.prisma` later and want to regenerate without a full reinstall.
+
 ```bash
-pnpm db:generate   # generate the Prisma client
+pnpm db:generate   # regenerate the Prisma client after a schema change (optional right after install)
 pnpm db:migrate    # create the schema (prompts for a migration name on first run)
 pnpm db:seed       # seed plans, AI model routing table, and (non-production) a demo project
 ```
