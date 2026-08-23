@@ -27,7 +27,7 @@ export function GenerateShotButton({ shotId, projectId, label = "Generate" }: { 
       <button
         onClick={handleClick}
         disabled={loading}
-        className="rounded-full bg-cinerra-accent px-2.5 py-1 text-[11px] font-medium text-white hover:brightness-110 disabled:opacity-60"
+        className="btn-primary-xs"
       >
         {loading ? "Starting…" : label}
       </button>

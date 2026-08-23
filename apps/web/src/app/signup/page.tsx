@@ -33,8 +33,8 @@ export default function SignupPage({ searchParams }: { searchParams: { error?: s
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-cinerra-hero px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-cinerra-border bg-cinerra-surface p-8">
-        <Logo className="mb-6 block text-center" />
+      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-cinerra-surface/90 p-8 shadow-glow-lg backdrop-blur-sm">
+        <Logo className="mb-6 block justify-center text-center" />
         <h1 className="mb-1 text-center text-xl font-semibold">Start creating</h1>
         <p className="mb-6 text-center text-sm text-cinerra-muted">Unlimited AI movie creation. No credits, ever.</p>
 
@@ -49,7 +49,7 @@ export default function SignupPage({ searchParams }: { searchParams: { error?: s
           <input name="name" required placeholder="Full name" className="input" />
           <input name="email" type="email" required placeholder="Email" className="input" />
           <input name="password" type="password" required minLength={8} placeholder="Password (min. 8 characters)" className="input" />
-          <button type="submit" className="mt-2 rounded-full bg-cinerra-accent py-2.5 text-sm font-semibold text-white hover:brightness-110">
+          <button type="submit" className="btn-primary mt-2 w-full">
             Create account
           </button>
         </form>

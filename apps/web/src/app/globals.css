@@ -9,8 +9,14 @@
 }
 
 body {
-  background-color: #0a0a0d;
-  color: #f4f4f6;
+  background-color: #08080b;
+  background-image:
+    radial-gradient(60% 50% at 85% -10%, rgba(139, 92, 246, 0.14) 0%, rgba(139, 92, 246, 0) 60%),
+    radial-gradient(50% 40% at 6% 8%, rgba(236, 72, 153, 0.09) 0%, rgba(236, 72, 153, 0) 60%),
+    radial-gradient(40% 30% at 50% 100%, rgba(139, 92, 246, 0.07) 0%, rgba(139, 92, 246, 0) 60%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  color: #f5f5f7;
 }
 
 ::selection {
@@ -23,18 +29,50 @@ body {
   width: 6px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background-color: #26262f;
+  background-color: #28282f;
   border-radius: 9999px;
 }
 
 @layer components {
   .input {
-    @apply w-full rounded-lg border border-cinerra-border bg-cinerra-surface2 px-4 py-2.5 text-sm text-cinerra-text placeholder:text-cinerra-muted focus:border-cinerra-accent focus:outline-none;
+    @apply w-full rounded-lg border border-cinerra-border bg-cinerra-surface2 px-4 py-2.5 text-sm text-cinerra-text placeholder:text-cinerra-muted transition focus:border-cinerra-accent/70 focus:outline-none focus:ring-2 focus:ring-cinerra-accent/20;
   }
   .textarea {
     @apply input min-h-[140px] resize-y;
   }
   .card {
-    @apply rounded-xl border border-cinerra-border bg-cinerra-surface p-5;
+    @apply rounded-xl border border-cinerra-border/80 bg-cinerra-surface/90 p-5 shadow-card backdrop-blur-sm transition;
+  }
+  .card-hover {
+    @apply card hover:-translate-y-0.5 hover:border-cinerra-accent/40 hover:shadow-glow;
+  }
+
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.2em] text-cinerra-accent2;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-cinerra-accent px-6 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 hover:shadow-glow-lg disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none;
+  }
+  .btn-primary-sm {
+    @apply btn-primary px-4 py-1.5 text-xs;
+  }
+  .btn-primary-xs {
+    @apply btn-primary px-2.5 py-1 text-[11px];
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-cinerra-border bg-cinerra-surface2/60 px-6 py-2.5 text-sm font-semibold text-cinerra-text transition hover:border-cinerra-accent/50 hover:bg-cinerra-surface2 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-secondary-sm {
+    @apply btn-secondary px-4 py-1.5 text-xs;
+  }
+  .btn-secondary-xs {
+    @apply btn-secondary px-2.5 py-1 text-[11px];
+  }
+  .btn-outline-light {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-white/25 px-6 py-3 text-sm font-semibold text-white transition hover:border-white/50 hover:bg-white/10;
+  }
+  .btn-gold {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-cinerra-gold px-6 py-2.5 text-sm font-semibold text-[#26180a] shadow-glow-gold transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50;
   }
 }

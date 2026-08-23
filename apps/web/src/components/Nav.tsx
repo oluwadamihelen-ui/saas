@@ -22,16 +22,16 @@ const DESKTOP_ITEMS = [
 /** Mobile bottom nav (spec §52). */
 export function MobileNav() {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-cinerra-border bg-cinerra-bg/95 py-2 backdrop-blur md:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-cinerra-border/70 bg-cinerra-bg/95 py-2 backdrop-blur-md md:hidden">
       {MOBILE_ITEMS.map((item) => (
         <Link
           key={item.href}
           href={item.href}
-          className={`flex flex-col items-center gap-1 px-3 py-1 text-[11px] ${
-            item.accent ? "text-white" : "text-cinerra-muted"
+          className={`flex flex-col items-center gap-1 px-3 py-1 text-[11px] transition ${
+            item.accent ? "text-white" : "text-cinerra-muted hover:text-cinerra-text"
           }`}
         >
-          <span className={item.accent ? "flex h-9 w-9 items-center justify-center rounded-full bg-cinerra-accent" : ""}>
+          <span className={item.accent ? "flex h-9 w-9 items-center justify-center rounded-full bg-cinerra-accent shadow-glow" : ""}>
             <item.icon />
           </span>
           {item.label}
@@ -44,14 +44,16 @@ export function MobileNav() {
 /** Desktop sidebar (spec §52). */
 export function DesktopSidebar() {
   return (
-    <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-56 shrink-0 flex-col gap-1 border-r border-cinerra-border p-4 md:flex">
+    <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-56 shrink-0 flex-col gap-1 border-r border-cinerra-border/70 p-4 md:flex">
       {DESKTOP_ITEMS.map((item) => (
         <Link
           key={item.href}
           href={item.href}
-          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-cinerra-muted transition hover:bg-cinerra-surface hover:text-cinerra-text"
+          className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-cinerra-muted transition hover:bg-cinerra-surface2/70 hover:text-cinerra-text"
         >
-          <item.icon />
+          <span className="text-cinerra-muted transition group-hover:text-cinerra-accent">
+            <item.icon />
+          </span>
           {item.label}
         </Link>
       ))}

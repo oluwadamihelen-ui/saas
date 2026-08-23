@@ -37,7 +37,7 @@ export function GenerateBibleButton({
       <button
         onClick={handleClick}
         disabled={loading}
-        className="rounded-full bg-cinerra-accent px-5 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-60"
+        className="btn-primary px-5 py-2"
       >
         {loading ? "Starting…" : label}
       </button>

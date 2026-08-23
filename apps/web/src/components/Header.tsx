@@ -8,12 +8,12 @@ export async function Header() {
   const user = session?.user;
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-cinerra-border bg-cinerra-bg/90 px-4 backdrop-blur md:px-8">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-cinerra-border/70 bg-cinerra-bg/80 px-4 shadow-[0_1px_0_0_rgba(255,255,255,0.03)] backdrop-blur-md md:px-8">
       <div className="flex items-center gap-8">
-        <Link href="/">
+        <Link href="/" className="transition hover:opacity-90">
           <Logo />
         </Link>
-        <div className="hidden items-center gap-1 rounded-full border border-cinerra-border bg-cinerra-surface px-4 py-2 text-sm text-cinerra-muted md:flex md:w-80">
+        <div className="hidden items-center gap-1 rounded-full border border-cinerra-border bg-cinerra-surface/80 px-4 py-2 text-sm text-cinerra-muted transition focus-within:border-cinerra-accent/50 md:flex md:w-80">
           <SearchIcon />
           <input
             type="search"
@@ -26,13 +26,10 @@ export async function Header() {
       <div className="flex items-center gap-3">
         {user ? (
           <>
-            <Link
-              href="/projects/new"
-              className="hidden rounded-full bg-cinerra-accent px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 md:block"
-            >
+            <Link href="/projects/new" className="btn-primary-sm hidden md:inline-flex">
               + Create
             </Link>
-            <button className="hidden h-9 w-9 items-center justify-center rounded-full border border-cinerra-border text-cinerra-muted hover:text-cinerra-text md:flex" aria-label="Notifications">
+            <button className="hidden h-9 w-9 items-center justify-center rounded-full border border-cinerra-border text-cinerra-muted transition hover:border-cinerra-accent/40 hover:text-cinerra-text md:flex" aria-label="Notifications">
               <BellIcon />
             </button>
             <form
@@ -41,13 +38,16 @@ export async function Header() {
                 await signOut({ redirectTo: "/login" });
               }}
             >
-              <button className="flex h-9 w-9 items-center justify-center rounded-full bg-cinerra-surface2 text-sm font-semibold uppercase text-cinerra-text" title="Sign out">
+              <button
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-cinerra-accent text-sm font-semibold uppercase text-white ring-2 ring-cinerra-bg transition hover:brightness-110"
+                title="Sign out"
+              >
                 {user.name?.[0] ?? user.email?.[0] ?? "U"}
               </button>
             </form>
           </>
         ) : (
-          <Link href="/login" className="rounded-full border border-cinerra-border px-4 py-2 text-sm text-cinerra-text">
+          <Link href="/login" className="btn-secondary px-4 py-2 text-sm">
             Sign in
           </Link>
         )}

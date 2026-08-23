@@ -257,7 +257,7 @@ export default async function ProjectPage({
                         href={episode.latestExport.downloadUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="rounded-full bg-cinerra-accent px-4 py-1.5 text-xs font-medium text-white hover:brightness-110"
+                        className="btn-primary-sm"
                       >
                         Download ({episode.latestExport.resolution})
                       </a>

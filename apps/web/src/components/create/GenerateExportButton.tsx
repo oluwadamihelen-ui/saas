@@ -31,7 +31,7 @@ export function GenerateExportButton({ episodeId, projectId, label = "Export Epi
       <button
         onClick={handleClick}
         disabled={loading}
-        className="rounded-full bg-cinerra-accent px-4 py-1.5 text-xs font-medium text-white hover:brightness-110 disabled:opacity-60"
+        className="btn-primary-sm"
       >
         {loading ? "Starting…" : label}
       </button>

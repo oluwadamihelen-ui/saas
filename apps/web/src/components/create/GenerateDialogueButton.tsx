@@ -27,7 +27,7 @@ export function GenerateDialogueButton({ shotId, projectId, label = "Generate Di
       <button
         onClick={handleClick}
         disabled={loading}
-        className="rounded-full border border-cinerra-border px-2.5 py-1 text-[11px] font-medium text-cinerra-text hover:border-cinerra-accent disabled:opacity-60"
+        className="btn-secondary-xs font-medium"
       >
         {loading ? "Starting…" : label}
       </button>

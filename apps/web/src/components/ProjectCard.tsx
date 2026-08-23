@@ -22,15 +22,19 @@ export function ProjectCard({ id, title, status, episodeCount, updatedAt, visual
   return (
     <Link
       href={`/projects/${id}`}
-      className="group flex flex-col overflow-hidden rounded-xl border border-cinerra-border bg-cinerra-surface transition hover:-translate-y-0.5 hover:border-cinerra-accent/60"
+      className="group flex flex-col overflow-hidden rounded-xl border border-cinerra-border/80 bg-cinerra-surface shadow-card transition duration-200 hover:-translate-y-1 hover:border-cinerra-accent/50 hover:shadow-glow"
     >
-      <div className="flex aspect-[2/3] items-center justify-center bg-gradient-to-br from-cinerra-surface2 to-cinerra-bg text-cinerra-muted">
-        <span className="px-4 text-center text-sm">{visualStyle.replace(/_/g, " ")}</span>
+      <div className="relative flex aspect-[2/3] items-center justify-center overflow-hidden bg-gradient-to-br from-cinerra-surface2 via-cinerra-surface to-cinerra-bg text-cinerra-muted">
+        <div
+          aria-hidden
+          className="absolute inset-0 bg-cinerra-accent opacity-0 transition-opacity duration-300 group-hover:opacity-10"
+        />
+        <span className="relative px-4 text-center text-sm">{visualStyle.replace(/_/g, " ")}</span>
       </div>
       <div className="flex flex-1 flex-col gap-1 p-3">
         <h3 className="line-clamp-1 text-sm font-semibold text-cinerra-text">{title}</h3>
         <div className="flex items-center justify-between text-xs text-cinerra-muted">
-          <span className={status === "GENERATING" ? "text-cinerra-accent2" : ""}>{STATUS_LABEL[status] ?? status}</span>
+          <span className={status === "GENERATING" ? "font-medium text-cinerra-accent2" : ""}>{STATUS_LABEL[status] ?? status}</span>
           <span>{episodeCount} ep</span>
         </div>
         <span className="text-[11px] text-cinerra-muted">Updated {updated.toLocaleDateString()}</span>

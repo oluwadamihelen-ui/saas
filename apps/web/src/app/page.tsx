@@ -27,23 +27,28 @@ export default async function HomePage() {
       <div className="flex">
         <DesktopSidebar />
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-6 md:px-8">
-          <section className="relative overflow-hidden rounded-2xl bg-cinerra-hero px-6 py-14 md:px-12 md:py-20">
+          <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-cinerra-hero px-6 py-16 shadow-glow-lg md:px-14 md:py-24">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-cinerra-accent2/30 blur-3xl"
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -bottom-32 -left-16 h-80 w-80 rounded-full bg-cinerra-accent/25 blur-3xl"
+            />
             <div className="relative z-10 max-w-xl">
-              <h1 className="font-display text-3xl font-bold leading-tight text-white md:text-5xl">
+              <span className="eyebrow">Cinematic AI Studio</span>
+              <h1 className="mt-3 font-display text-4xl font-bold leading-[1.05] text-white md:text-6xl">
                 Create your next movie with AI.
               </h1>
-              <p className="mt-4 text-base text-white/70 md:text-lg">From idea to finished film.</p>
-              <div className="mt-8 flex flex-wrap gap-3">
-                <Link
-                  href="/projects/new?mode=INSPIRATION"
-                  className="rounded-full bg-cinerra-accent px-6 py-3 text-sm font-semibold text-white hover:brightness-110"
-                >
+              <p className="mt-5 max-w-md text-base text-white/70 md:text-lg">
+                From idea to finished film — story, cast, cinematography, and score, generated end to end.
+              </p>
+              <div className="mt-9 flex flex-wrap gap-3">
+                <Link href="/projects/new?mode=INSPIRATION" className="btn-primary px-7 py-3.5 text-base">
                   Create Movie
                 </Link>
-                <Link
-                  href="/projects/new?mode=ADAPTATION"
-                  className="rounded-full border border-white/30 px-6 py-3 text-sm font-semibold text-white hover:bg-white/10"
-                >
+                <Link href="/projects/new?mode=ADAPTATION" className="btn-outline-light">
                   Adapt a Story
                 </Link>
               </div>
@@ -85,8 +90,8 @@ export default async function HomePage() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="mt-10">
-      <h2 className="mb-4 text-lg font-semibold text-cinerra-text">{title}</h2>
+    <section className="mt-12">
+      <h2 className="mb-4 font-display text-xl font-semibold text-cinerra-text">{title}</h2>
       {children}
     </section>
   );

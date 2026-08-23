@@ -27,16 +27,12 @@ export function CheckoutButton({ planKey, disabled }: { planKey: string; disable
   }
 
   if (disabled) {
-    return <button disabled className="mt-6 rounded-full border border-cinerra-border py-2.5 text-sm font-semibold text-cinerra-muted">Current plan</button>;
+    return <button disabled className="btn-secondary mt-6 w-full opacity-60">Current plan</button>;
   }
 
   return (
     <div className="mt-6">
-      <button
-        onClick={handleClick}
-        disabled={loading}
-        className="w-full rounded-full bg-cinerra-accent py-2.5 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-60"
-      >
+      <button onClick={handleClick} disabled={loading} className="btn-primary w-full">
         {loading ? "Redirecting…" : "Subscribe"}
       </button>
       {error && <p className="mt-2 text-xs text-red-300">{error}</p>}

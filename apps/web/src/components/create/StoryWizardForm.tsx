@@ -222,7 +222,7 @@ export function StoryWizardForm({ initialMode }: { initialMode: "INSPIRATION" | 
       <button
         type="submit"
         disabled={submitting}
-        className="rounded-full bg-cinerra-accent py-3 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-60"
+        className="btn-primary w-full py-3"
       >
         {submitting ? "Starting…" : "Next"}
       </button>

@@ -42,7 +42,7 @@ export function GenerateClipButton({
       <button
         onClick={handleClick}
         disabled={loading}
-        className="rounded-full border border-cinerra-border px-4 py-1.5 text-xs font-medium text-cinerra-text hover:border-cinerra-accent disabled:opacity-60"
+        className="btn-secondary-sm font-medium"
       >
         {loading ? "Starting…" : label}
       </button>
