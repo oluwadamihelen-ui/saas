@@ -29,6 +29,22 @@ const connection = redisConnection(env.REDIS_URL);
 // this bounds how much this one worker instance does at once).
 const WORKER_CONCURRENCY = Number(process.env.WORKER_CONCURRENCY ?? 4);
 
+/**
+ * Provider adapters wrap the real underlying error (a rejected fetch, the
+ * SDK's own APIError with a status/message, etc.) in a generic, honest
+ * user-facing message via ProviderGenerationError's `cause2` field — but
+ * that real cause needs to actually reach the server logs, or every
+ * provider failure looks identical here and is undiagnosable from the
+ * worker console alone.
+ */
+function describeError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const cause = (error as { cause2?: unknown }).cause2;
+  if (cause === undefined) return error.message;
+  const causeText = cause instanceof Error ? `${cause.name}: ${cause.message}` : JSON.stringify(cause);
+  return `${error.message} — caused by: ${causeText}`;
+}
+
 async function withJobLogging(job: Job<GenerationJobPayload>, run: () => Promise<void>): Promise<void> {
   const startedAt = Date.now();
   console.log(`[worker] starting ${job.name} generationJobId=${job.data.generationJobId} attempt=${job.attemptsMade + 1}`);
@@ -36,7 +52,7 @@ async function withJobLogging(job: Job<GenerationJobPayload>, run: () => Promise
     await run();
     console.log(`[worker] finished ${job.name} generationJobId=${job.data.generationJobId} in ${Date.now() - startedAt}ms`);
   } catch (error) {
-    console.error(`[worker] failed ${job.name} generationJobId=${job.data.generationJobId}:`, error instanceof Error ? error.message : error);
+    console.error(`[worker] failed ${job.name} generationJobId=${job.data.generationJobId}:`, describeError(error));
     throw error; // let BullMQ apply the configured retry/backoff policy
   }
 }
