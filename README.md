@@ -43,7 +43,9 @@ Terms of Service and Privacy Policy pages now exist at `/terms` and `/privacy` (
 
 Discover is now actually moderated: publishing sets `Publication.moderationStatus` to `PENDING` (every (re)publish re-queues it, even a previously-approved one), and only a publication an admin has approved from the new "Discover moderation queue" section on `/admin` shows up on `/discover`, the home page rails, or is reachable by a non-owner at `/watch/[id]` — a direct link can't bypass the queue. The owner can still preview their own pending/rejected submission at its watch URL, with a status banner, and sees the same status on their project page's Publish control. Moderation is a manual admin approve/reject action with an optional note (recorded in `AuditLog`); there's no automated content-safety scan.
 
-**Remaining before launch** (not part of the original phased roadmap, but needed for a real public launch): a media library page (`/assets`, spec §59), account settings (`/profile` — provider API keys, billing management), transactional email (today `Notification` rows are in-app only), CI, error monitoring, rate limiting on unauthenticated routes, a security review pass, and closing the Google-OAuth terms-acceptance gap noted above.
+The media library (`/assets`, spec §59) is real: a cross-project browser over every `Asset` row a user's projects have generated — character/location/wardrobe/prop references, storyboard frames, shot video, dialogue/SFX/music audio, exports, uploaded source documents — filterable by type and by project, each with a signed download link. It reads the existing `Asset.type`/`Asset.kind` columns directly rather than needing new plumbing, since every generation service already writes a real `Asset` row for what it produces.
+
+**Remaining before launch** (not part of the original phased roadmap, but needed for a real public launch): account settings (`/profile` — provider API keys, billing management), transactional email (today `Notification` rows are in-app only), CI, error monitoring, rate limiting on unauthenticated routes, a security review pass, and closing the Google-OAuth terms-acceptance gap noted above.
 
 ## Tech stack
 
