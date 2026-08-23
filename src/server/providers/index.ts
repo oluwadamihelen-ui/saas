@@ -1,11 +1,18 @@
-import type { AIProvider, ImageProvider } from "./types";
+import type { AIProvider, ImageProvider, VoiceProvider, MusicProvider } from "./types";
 import { MockAIProvider } from "./mock/ai-provider";
 import { MockImageProvider } from "./mock/image-provider";
+import { MockVoiceProvider } from "./mock/voice-provider";
+import { MockMusicProvider } from "./mock/music-provider";
 
-export type { AIProvider, ImageProvider, ScriptAnalysis, StoryboardResult, StoryboardScene, StoryboardCharacter, GeneratedAsset } from "./types";
+export type {
+  AIProvider, ImageProvider, VoiceProvider, MusicProvider,
+  ScriptAnalysis, StoryboardResult, StoryboardScene, StoryboardCharacter, GeneratedAsset,
+} from "./types";
 
 let aiProvider: AIProvider | null = null;
 let imageProvider: ImageProvider | null = null;
+let voiceProvider: VoiceProvider | null = null;
+let musicProvider: MusicProvider | null = null;
 
 /**
  * Real adapters (OpenAI, Anthropic, etc.) get added here once API keys are
@@ -34,5 +41,29 @@ export function getImageProvider(): ImageProvider {
     default:
       imageProvider = new MockImageProvider();
       return imageProvider;
+  }
+}
+
+export function getVoiceProvider(): VoiceProvider {
+  if (voiceProvider) return voiceProvider;
+
+  const name = process.env.VOICE_PROVIDER ?? "mock";
+  switch (name) {
+    case "mock":
+    default:
+      voiceProvider = new MockVoiceProvider();
+      return voiceProvider;
+  }
+}
+
+export function getMusicProvider(): MusicProvider {
+  if (musicProvider) return musicProvider;
+
+  const name = process.env.MUSIC_PROVIDER ?? "mock";
+  switch (name) {
+    case "mock":
+    default:
+      musicProvider = new MockMusicProvider();
+      return musicProvider;
   }
 }

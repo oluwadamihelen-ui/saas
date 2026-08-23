@@ -23,7 +23,11 @@ export async function getProjectForUser(userId: string, projectId: string) {
     include: {
       scenes: {
         orderBy: { order: "asc" },
-        include: { characters: { include: { character: true } } },
+        include: {
+          characters: { include: { character: true } },
+          captions: { orderBy: { order: "asc" } },
+          voicePreset: true,
+        },
       },
       characters: { include: { character: true } },
       music: { include: { musicTrack: true } },
@@ -70,4 +74,36 @@ export async function deleteProjectForUser(userId: string, projectId: string) {
 
 export async function countProjectsForUser(userId: string) {
   return prisma.project.count({ where: { userId } });
+}
+
+/** A project has at most one active music track — attaching a new one replaces the current selection. */
+export async function attachMusicToProject(
+  userId: string,
+  projectId: string,
+  data: { musicTrackId: string; volume?: number; fadeInMs?: number; fadeOutMs?: number; loop?: boolean; duckUnderVoice?: boolean }
+) {
+  const project = await prisma.project.findFirst({ where: { id: projectId, userId } });
+  if (!project) throw new ProjectNotFoundError();
+
+  await prisma.projectMusic.deleteMany({ where: { projectId } });
+
+  return prisma.projectMusic.create({
+    data: {
+      projectId,
+      musicTrackId: data.musicTrackId,
+      volume: data.volume ?? 0.5,
+      fadeInMs: data.fadeInMs ?? 1000,
+      fadeOutMs: data.fadeOutMs ?? 2000,
+      loop: data.loop ?? true,
+      duckUnderVoice: data.duckUnderVoice ?? true,
+    },
+    include: { musicTrack: true },
+  });
+}
+
+export async function removeMusicFromProject(userId: string, projectId: string) {
+  const project = await prisma.project.findFirst({ where: { id: projectId, userId } });
+  if (!project) throw new ProjectNotFoundError();
+
+  await prisma.projectMusic.deleteMany({ where: { projectId } });
 }

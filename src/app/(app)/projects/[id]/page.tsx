@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Clapperboard } from "lucide-react";
 import { auth } from "@/server/auth";
 import { getProjectForUser, ProjectNotFoundError } from "@/server/projects/repository";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { VISUAL_STYLES, ASPECT_RATIOS } from "@/lib/style-options";
 import { GenerationTrigger } from "@/components/dashboard/generation-trigger";
 import { StoryboardGrid } from "@/components/dashboard/storyboard-grid";
@@ -51,7 +52,14 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           <h1 className="font-display text-2xl font-bold">{project.title}</h1>
           {project.description && <p className="mt-1 text-sm text-muted-foreground">{project.description}</p>}
         </div>
-        <Badge variant={STATUS_VARIANT[project.status]}>{project.status.replaceAll("_", " ")}</Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant={STATUS_VARIANT[project.status]}>{project.status.replaceAll("_", " ")}</Badge>
+          {project.scenes.length > 0 && (
+            <Button href={`/projects/${project.id}/edit`} size="sm">
+              <Clapperboard className="h-4 w-4" /> Open Editor
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">

@@ -5,9 +5,11 @@ import {
   getSceneImageQueue,
   type ProjectGenerateJobData,
   type SceneImageJobData,
+  type SceneVoiceJobData,
 } from "./queue";
 import { runProjectGeneration, markProjectReadyIfComplete } from "@/server/pipeline/orchestrator";
 import { runGenerateSceneImage } from "@/server/pipeline/generate-scene-image";
+import { runGenerateSceneVoice } from "@/server/pipeline/generate-scene-voice";
 import { prisma } from "@/server/db/client";
 
 const connection = getRedisConnection();
@@ -39,7 +41,15 @@ const sceneImageWorker = new Worker<SceneImageJobData>(
   { connection }
 );
 
-for (const worker of [projectGenerateWorker, sceneImageWorker]) {
+const sceneVoiceWorker = new Worker<SceneVoiceJobData>(
+  "scene-voice",
+  async (job) => {
+    await runGenerateSceneVoice(job.data.sceneId);
+  },
+  { connection }
+);
+
+for (const worker of [projectGenerateWorker, sceneImageWorker, sceneVoiceWorker]) {
   worker.on("failed", (job, err) => {
     console.error(`[worker] job ${job?.id} (${job?.queueName}) failed:`, err.message);
   });
@@ -48,9 +58,9 @@ for (const worker of [projectGenerateWorker, sceneImageWorker]) {
   });
 }
 
-console.log("Generation worker started — listening on queues: project-generate, scene-image");
+console.log("Generation worker started — listening on queues: project-generate, scene-image, scene-voice");
 
 process.on("SIGTERM", async () => {
-  await Promise.all([projectGenerateWorker.close(), sceneImageWorker.close()]);
+  await Promise.all([projectGenerateWorker.close(), sceneImageWorker.close(), sceneVoiceWorker.close()]);
   process.exit(0);
 });

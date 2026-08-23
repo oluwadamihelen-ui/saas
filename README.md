@@ -61,12 +61,15 @@ default to `mock`, so the app runs completely without external API keys.
 ```bash
 npm install
 npx prisma migrate dev   # applies the schema, generates the client
+npx prisma db seed       # populates the system voice/music libraries
 npm run dev              # web app
 npm run worker           # in a second terminal — processes generation jobs
 ```
 
-Visit http://localhost:3000. The worker must be running for storyboard/scene
-generation to complete — without it, generation jobs sit queued in Redis.
+Visit http://localhost:3000. The worker must be running for storyboard/scene/
+voice generation to complete — without it, generation jobs sit queued in
+Redis. The seed step is optional but the Voice/Music library pages and the
+per-scene voice picker are empty without it.
 
 ## Project structure
 
@@ -84,17 +87,21 @@ src/
     projects/           # auth-scoped repositories
     scenes/              # auth-scoped scene repository (ownership via project)
     characters/           # auth-scoped character repository
-    providers/             # AIProvider/ImageProvider interfaces + mock/ implementations
-    pipeline/                # generation stages: analyze-script, build-storyboard, generate-scene-image
-    jobs/                     # BullMQ queues (queue.ts) + worker process (worker.ts)
-    storage/                   # StorageProvider (local dev impl; swap in S3/R2 for prod)
+    captions/              # auth-scoped caption repository (ownership via scene->project)
+    providers/               # AIProvider/ImageProvider/VoiceProvider/MusicProvider + mock/ implementations
+    pipeline/                  # generation stages: analyze-script, build-storyboard,
+                                #   generate-scene-image, generate-scene-voice, generate-captions
+    jobs/                       # BullMQ queues (queue.ts) + worker process (worker.ts)
+    storage/                     # StorageProvider (local dev impl; swap in S3/R2 for prod)
   components/
     ui/                # base design system (Button, Card, Input, Badge...)
     marketing/           # public site sections/forms
     dashboard/            # authenticated app components
+      editor/               # the LEFT/CENTER/BOTTOM/RIGHT timeline editor
   lib/                # validation schemas, plans/credit config, utilities
 prisma/
   schema.prisma        # full data model
+  seed.ts               # system voice presets + music tracks (npx prisma db seed)
 docker-compose.yml     # Postgres + Redis for local/dev parity with prod
 ```
 
@@ -118,28 +125,45 @@ auditable `CreditLedgerEntry` for every grant and charge.
 
 ## AI providers (mock-first)
 
-`AI_PROVIDER` / `IMAGE_PROVIDER` in `.env` default to `mock`, resolved via the
-factories in `src/server/providers/index.ts`. `MockAIProvider` is a
-deterministic, rule-based storyboard/character generator (sentence
-splitting + heuristics — not a real LLM); `MockImageProvider` renders an SVG
-"scene card" placeholder rather than pretending to be a real image
-generation result. Both set `isMock: true`. To add a real provider,
-implement the `AIProvider`/`ImageProvider` interfaces in `src/server/providers/types.ts`
-and add a case to the relevant factory function — nothing else in the app
-depends on which implementation is active.
+`AI_PROVIDER` / `IMAGE_PROVIDER` / `VOICE_PROVIDER` / `MUSIC_PROVIDER` in
+`.env` default to `mock`, resolved via the factories in
+`src/server/providers/index.ts`. `MockAIProvider` is a deterministic,
+rule-based storyboard/character generator (sentence splitting + heuristics —
+not a real LLM); `MockImageProvider` renders an SVG "scene card" placeholder;
+`MockVoiceProvider`/`MockMusicProvider` synthesize real, valid, audible WAV
+files (`src/server/providers/mock/wav.ts`) — short tone sequences that track
+narration word count and speed, and mood-colored chords for music — rather
+than pretending to be real speech or a real composition. Every provider sets
+`isMock: true`. To add a real adapter, implement the corresponding interface
+in `src/server/providers/types.ts` and add a case to the relevant factory
+function — nothing else in the app depends on which implementation is active.
 
 ## Generation pipeline & jobs
 
 `POST /api/projects/:id/generate` enqueues a `project-generate` BullMQ job.
 The worker (`npm run worker`) runs `runScriptAnalysis` → `runBuildStoryboard`
 (creates/reuses `Character` rows by name and creates `Scene` rows), then fans
-out one `scene-image` job per scene. Every stage writes a `GenerationJob` row
-(`queued|processing|completed|failed`) and debits credits via the ledger
-before calling the provider — insufficient credits fails the job cleanly
-rather than running for free. The project detail page polls
-`GET /api/projects/:id/jobs` while generating and stops once scenes settle.
-A single scene can be regenerated independently via
-`POST /api/scenes/:id/regenerate` without rerunning the whole pipeline.
+out one `scene-image` job per scene. `POST /api/scenes/:id/generate-voice`
+enqueues a `scene-voice` job that synthesizes narration and then
+auto-generates timed captions from it (`runGenerateCaptions`, a proportional
+word-count heuristic — not audio-aligned transcription). Every stage writes
+a `GenerationJob` row (`queued|processing|completed|failed`) and debits
+credits via the ledger before calling the provider — insufficient credits
+fails the job cleanly rather than running for free. The project detail page
+polls `GET /api/projects/:id/jobs` while generating and stops once scenes
+settle. A single scene's image or voice can be regenerated independently
+without rerunning the whole pipeline.
+
+## The editor (`/projects/:id/edit`)
+
+A beginner-friendly (not professional-NLE-complexity) LEFT/CENTER/BOTTOM/
+RIGHT editor: a scene list, a preview that plays each scene's narration
+audio (or a timer, if a scene has none) and auto-advances with burnt-in
+caption overlays, a proportional-width timeline scrubber, and a right panel
+that toggles between per-scene voice settings (preset/speed/pitch + a
+captions list editor) and project-level background music (pick a track,
+set volume/fade/loop, with duck-under-narration applied live via JS volume
+ducking during playback — see `src/components/dashboard/editor/`).
 
 ## What's implemented vs. what's next
 
@@ -147,16 +171,22 @@ A single scene can be regenerated independently via
 dashboard shell, project CRUD, billing/credit ledger UI, original marketing
 site.
 
-**Phase B (this phase) — AI workflow**: mock `AIProvider`/`ImageProvider`,
-BullMQ job queue + worker, script analysis → storyboard → character
-extraction/reuse → scene image generation pipeline, full scene CRUD (edit,
-duplicate, delete, reorder, regenerate, add), and a full character library
-(create/edit/delete, generate a mock portrait, or upload your own reference
-image).
+**Phase B — AI workflow**: mock `AIProvider`/`ImageProvider`, BullMQ job
+queue + worker, script analysis → storyboard → character extraction/reuse →
+scene image generation pipeline, full scene CRUD (edit, duplicate, delete,
+reorder, regenerate, add), and a full character library (create/edit/delete,
+generate a mock portrait, or upload your own reference image).
 
-**Not yet built**: the voice studio and music library (Phase C), the
-timeline editor and captions (Phase C), Remotion rendering/export (Phase D),
-and Stripe billing (Phase E). Nothing in this codebase fakes AI output —
-scene/character generation is real (mock-provider) output end-to-end, not
-hardcoded fixtures, and areas not yet built show honest "coming in Phase X"
-states.
+**Phase C (this phase) — Creator experience**: mock `VoiceProvider`/
+`MusicProvider`, a seeded system voice library (14 voices across 7 styles)
+and music library (9 moods), per-scene voice generation with adjustable
+speed/pitch, auto-generated + manually editable captions, project-level
+background music with volume/fade/loop/duck settings, and the timeline
+editor described above.
+
+**Not yet built**: Remotion rendering/export (Phase D — the editor previews
+scenes client-side but does not yet composite a final video file), and
+Stripe billing (Phase E). Nothing in this codebase fakes AI output — every
+generated asset (images, storyboards, narration audio, music) is real
+mock-provider output produced end-to-end, not hardcoded fixtures, and areas
+not yet built show honest "coming in Phase X" states.

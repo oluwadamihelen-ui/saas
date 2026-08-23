@@ -95,6 +95,15 @@ export async function addSceneForUser(userId: string, projectId: string) {
   });
 }
 
+export async function updateSceneVoiceSettingsForUser(
+  userId: string,
+  sceneId: string,
+  data: { voicePresetId?: string | null; voiceSpeed?: number; voicePitch?: number }
+) {
+  await getSceneForUser(userId, sceneId);
+  return prisma.scene.update({ where: { id: sceneId }, data });
+}
+
 export async function moveSceneForUser(userId: string, sceneId: string, direction: "up" | "down") {
   const scene = await getSceneForUser(userId, sceneId);
 

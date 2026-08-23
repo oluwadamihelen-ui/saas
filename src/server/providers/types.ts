@@ -54,6 +54,30 @@ export interface AIProvider {
   }): Promise<StoryboardResult>;
 }
 
+export interface VoiceProvider {
+  readonly name: string;
+  readonly isMock: boolean;
+
+  synthesize(input: {
+    text: string;
+    style: string;
+    language: string;
+    accent?: string;
+    speed: number;
+    pitch: number;
+  }): Promise<GeneratedAsset & { durationSeconds: number }>;
+}
+
+export interface MusicProvider {
+  readonly name: string;
+  readonly isMock: boolean;
+
+  generateTrack(input: {
+    mood: string;
+    durationSeconds: number;
+  }): Promise<GeneratedAsset & { durationSeconds: number }>;
+}
+
 export interface ImageProvider {
   readonly name: string;
   readonly isMock: boolean;

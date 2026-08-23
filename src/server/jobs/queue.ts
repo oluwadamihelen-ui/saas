@@ -14,17 +14,21 @@ export function getRedisConnection(): IORedis {
 
 export type ProjectGenerateJobData = { projectId: string };
 export type SceneImageJobData = { sceneId: string; projectId: string };
+export type SceneVoiceJobData = { sceneId: string; projectId: string };
 
 const globalForQueues = globalThis as unknown as {
   projectGenerateQueue?: Queue<ProjectGenerateJobData>;
   sceneImageQueue?: Queue<SceneImageJobData>;
+  sceneVoiceQueue?: Queue<SceneVoiceJobData>;
 };
+
+const defaultJobOptions = { removeOnComplete: 100, removeOnFail: 100 };
 
 export function getProjectGenerateQueue(): Queue<ProjectGenerateJobData> {
   if (!globalForQueues.projectGenerateQueue) {
     globalForQueues.projectGenerateQueue = new Queue<ProjectGenerateJobData>("project-generate", {
       connection: getRedisConnection(),
-      defaultJobOptions: { removeOnComplete: 100, removeOnFail: 100 },
+      defaultJobOptions,
     });
   }
   return globalForQueues.projectGenerateQueue;
@@ -34,8 +38,18 @@ export function getSceneImageQueue(): Queue<SceneImageJobData> {
   if (!globalForQueues.sceneImageQueue) {
     globalForQueues.sceneImageQueue = new Queue<SceneImageJobData>("scene-image", {
       connection: getRedisConnection(),
-      defaultJobOptions: { removeOnComplete: 100, removeOnFail: 100 },
+      defaultJobOptions,
     });
   }
   return globalForQueues.sceneImageQueue;
+}
+
+export function getSceneVoiceQueue(): Queue<SceneVoiceJobData> {
+  if (!globalForQueues.sceneVoiceQueue) {
+    globalForQueues.sceneVoiceQueue = new Queue<SceneVoiceJobData>("scene-voice", {
+      connection: getRedisConnection(),
+      defaultJobOptions,
+    });
+  }
+  return globalForQueues.sceneVoiceQueue;
 }
