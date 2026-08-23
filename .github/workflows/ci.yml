@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck-and-test:
+    name: Typecheck & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    # Boot-time env validation (packages/config) requires these to be set
+    # even for a build — they're placeholder values, never real credentials,
+    # matching what apps/web/package.json's own "build" script needs to
+    # get past loadEnv() without a live Postgres/Redis/S3 behind them.
+    env:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://cinerra:cinerra@localhost:5432/cinerra
+      REDIS_URL: redis://localhost:6379
+      STORAGE_ENDPOINT: http://localhost:9000
+      STORAGE_REGION: auto
+      STORAGE_BUCKET: cinerra-media
+      STORAGE_ACCESS_KEY_ID: cinerra
+      STORAGE_SECRET_ACCESS_KEY: cinerra-secret
+      STORAGE_FORCE_PATH_STYLE: "true"
+      AUTH_SECRET: ci-build-only-secret-not-for-real-use-0000000000
+      APP_BASE_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build

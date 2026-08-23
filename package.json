@@ -10,7 +10,7 @@
     "postinstall": "pnpm --filter @cinerra/database generate",
     "dev": "pnpm --filter @cinerra/web dev",
     "dev:worker": "pnpm --filter @cinerra/worker dev",
-    "build": "pnpm -r --filter=./packages/* build && pnpm --filter @cinerra/web build && pnpm --filter @cinerra/worker build",
+    "build": "pnpm --filter @cinerra/web build && pnpm --filter @cinerra/worker build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
