@@ -59,6 +59,16 @@ model User {
   favorites         Favorite[]
   ownedOrganization Organization? @relation("OrganizationOwner")
 
+  wallet              Wallet?
+  coinPurchases       CoinPurchase[]
+  contentEntitlements ContentEntitlement[]
+  revenueAsPublisher  RevenueTransaction[] @relation("PublisherRevenue")
+  revenueAsViewer     RevenueTransaction[] @relation("ViewerRevenue")
+  creatorEarnings     CreatorEarning[]
+  payoutAccount       PayoutAccount?
+  payouts             Payout[]
+  viewingEvents       ViewingEvent[]
+
   @@index([organizationId])
 }
 
@@ -293,6 +303,16 @@ model Project {
   posterAssetId  String?
   posterAsset    Asset?        @relation("ProjectPoster", fields: [posterAssetId], references: [id])
 
+  // Coin economy (spec's monetization system): a project is either fully
+  // free, or paid at exactly one scope — the whole movie, per episode, or
+  // per scene. `coinPrice` is only meaningful when scope = MOVIE; episode-
+  // and scene-level prices live on Episode.coinPrice / Scene.coinPrice
+  // instead, since a MOVIE-scope project has one price but an
+  // EPISODE/SCENE-scope one has many.
+  monetizationMode  MonetizationMode          @default(FREE)
+  monetizationScope ContentMonetizationScope?
+  coinPrice         Int?
+
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -309,6 +329,9 @@ model Project {
   timelineItems  TimelineItem[]
   exports        Export[]
   publication    Publication?
+  entitlements   ContentEntitlement[]
+  revenueTransactions RevenueTransaction[]
+  viewingEvents  ViewingEvent[]
 
   @@index([ownerId])
   @@index([status])
@@ -542,9 +565,15 @@ model Episode {
   thumbnailAsset   Asset?   @relation(fields: [thumbnailAssetId], references: [id])
   publishedAt DateTime?
 
+  // Only meaningful when the owning Project.monetizationScope = EPISODE.
+  coinPrice Int?
+
   scenes        Scene[]
   exports       Export[]
   timelineItems TimelineItem[]
+  entitlements  ContentEntitlement[]
+  revenueTransactions RevenueTransaction[]
+  viewingEvents ViewingEvent[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -583,9 +612,21 @@ model Scene {
   rawLocationName   String?
   rawCharacterNames String[]
 
+  // Only meaningful when the owning Project.monetizationScope = SCENE.
+  // NOTE: there is no per-scene exported/streamable video in this
+  // codebase today (episode export/assembly is the only playable unit —
+  // see packages/domain/src/services/exportService.ts) — this field and
+  // its entitlement plumbing exist so a creator can configure scene
+  // pricing and a viewer's purchase is recorded correctly, but there is
+  // no scene-level player UI to gate on it yet. Building that is a
+  // separate, substantial feature (per-scene export) outside this phase.
+  coinPrice Int?
+
   characters      SceneCharacter[]
   props           ScenePropLink[]
   shots           Shot[]
+  entitlements    ContentEntitlement[]
+  revenueTransactions RevenueTransaction[]
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -1109,4 +1150,336 @@ model AuditLog {
 
   @@index([userId])
   @@index([entityType, entityId])
+}
+
+// ---------------------------------------------------------------------------
+// COIN ECONOMY / CREATOR MONETIZATION
+//
+// Viewers spend Cinerra Coins to unlock paid movies/episodes/scenes;
+// settled spend splits between the publisher and the platform per
+// PlatformSettings.publisherRevenueShareBps (a runtime-configurable
+// percentage in basis points — 5000 = 50.00% — never hard-coded, per the
+// spec). WalletTransaction is the immutable ledger and the only source of
+// truth for a balance; Wallet.balance is a cached read of it, always
+// written in the same DB transaction as the ledger row that changes it.
+// Settled financial rows are never edited or deleted — a correction is
+// always a new REVERSAL/REFUND row referencing the original.
+// ---------------------------------------------------------------------------
+
+enum ContentMonetizationScope {
+  MOVIE
+  EPISODE
+  SCENE
+}
+
+enum MonetizationMode {
+  FREE
+  PAID
+}
+
+enum WalletTransactionType {
+  COIN_PURCHASE
+  CONTENT_UNLOCK
+  CREATOR_REVENUE
+  PLATFORM_REVENUE
+  REFUND
+  REVERSAL
+  PAYOUT
+  ADJUSTMENT
+  PROMOTIONAL_CREDIT
+}
+
+enum CoinPurchaseStatus {
+  PENDING
+  COMPLETED
+  REFUNDED
+}
+
+enum CreatorEarningStatus {
+  PENDING
+  AVAILABLE
+  PAID
+  REVERSED
+  DISPUTED
+}
+
+enum ContentUnlockType {
+  MOVIE_UNLOCK
+  EPISODE_UNLOCK
+  SCENE_UNLOCK
+}
+
+enum PayoutStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+enum RefundStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum ViewingEventType {
+  STARTED
+  QUARTER
+  HALF
+  THREE_QUARTER
+  COMPLETED
+}
+
+// Every user has at most one Coin wallet, created lazily on first need
+// (a viewer buying coins, or a creator earning their first payout).
+model Wallet {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance   Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions WalletTransaction[]
+}
+
+model WalletTransaction {
+  id             String                @id @default(cuid())
+  walletId       String
+  wallet         Wallet                @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  userId         String
+  type           WalletTransactionType
+  amount         Int // signed: positive credits the wallet, negative debits it
+  balanceAfter   Int // Wallet.balance snapshot right after this row, for audit
+  referenceType  String? // e.g. "CoinPurchase", "ContentEntitlement", "Refund"
+  referenceId    String?
+  reversesId     String?
+  reverses       WalletTransaction?  @relation("Reversal", fields: [reversesId], references: [id])
+  reversedBy     WalletTransaction[] @relation("Reversal")
+  // Deterministic per logical operation (e.g. "unlock:<userId>:<scope>:<contentId>")
+  // so a concurrent or retried request collides on this DB-level unique
+  // constraint instead of creating a second charge — the actual
+  // concurrency safety net, not just a nice-to-have.
+  idempotencyKey String?               @unique
+  metadata       Json?
+  createdAt      DateTime              @default(now())
+
+  @@index([walletId, createdAt])
+  @@index([userId, createdAt])
+  @@index([referenceType, referenceId])
+}
+
+// Admin-configurable purchasable coin bundles (spec §4) — never hard-coded
+// prices in application code.
+model CoinPackage {
+  id         String   @id @default(cuid())
+  coins      Int
+  bonusCoins Int      @default(0)
+  priceCents Int
+  currency   String   @default("usd")
+  active     Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  purchases CoinPurchase[]
+}
+
+model CoinPurchase {
+  id            String             @id @default(cuid())
+  userId        String
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coinPackageId String
+  coinPackage   CoinPackage        @relation(fields: [coinPackageId], references: [id])
+  // Snapshot at purchase time — a later admin edit to the package must
+  // never change what an already-completed purchase is worth.
+  coinsCredited Int
+  amountCents   Int
+  currency      String
+  status        CoinPurchaseStatus @default(PENDING)
+  // Stripe's own idempotency: the checkout session id doubles as this
+  // purchase's dedup key, and the webhook handler upserts on it, so a
+  // replayed Stripe event can never credit coins twice.
+  stripeCheckoutSessionId String   @unique
+  stripePaymentIntentId   String?
+  completedAt   DateTime?
+  refundedAt    DateTime?
+  createdAt     DateTime           @default(now())
+
+  refund      Refund?
+  chargebacks Chargeback[]
+
+  @@index([userId])
+}
+
+model ContentEntitlement {
+  id         String                   @id @default(cuid())
+  userId     String
+  user       User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scope      ContentMonetizationScope
+  projectId  String
+  project    Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  episodeId  String?
+  episode    Episode?                 @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  sceneId    String?
+  scene      Scene?                   @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  unlockedAt DateTime                 @default(now())
+  // Set instead of deleting the row when a settled unlock is reversed
+  // (spec §28-29) — deleting it would cascade away the permanent
+  // RevenueTransaction/CreatorEarning it's linked to, which must survive
+  // regardless of what happens to access. Never deleted by application
+  // code; see reverseContentUnlock in apps/web/src/lib/monetization.ts.
+  revokedAt  DateTime?
+
+  revenueTransaction RevenueTransaction?
+
+  // Defense in depth against a duplicate row — NOT the primary guard
+  // against a double charge (Postgres treats NULLs as distinct, so two
+  // MOVIE-scope rows for the same project would both have
+  // episodeId=sceneId=null and slip past this). The real guard is
+  // WalletTransaction.idempotencyKey inside the same DB transaction —
+  // see unlockContent in apps/web/src/lib/monetization.ts.
+  @@unique([userId, projectId, episodeId, sceneId])
+  @@index([userId])
+  @@index([projectId])
+}
+
+model RevenueTransaction {
+  id                  String             @id @default(cuid())
+  publisherId         String
+  publisher           User               @relation("PublisherRevenue", fields: [publisherId], references: [id], onDelete: Cascade)
+  viewerId            String
+  viewer              User               @relation("ViewerRevenue", fields: [viewerId], references: [id], onDelete: Cascade)
+  projectId           String
+  project             Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  episodeId           String?
+  episode             Episode?           @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  sceneId             String?
+  scene               Scene?             @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  entitlementId        String            @unique
+  entitlement          ContentEntitlement @relation(fields: [entitlementId], references: [id], onDelete: Cascade)
+  unlockType          ContentUnlockType
+  coinAmount          Int // gross coins spent by the viewer
+  publisherShareCoins Int
+  platformShareCoins  Int
+  createdAt           DateTime           @default(now())
+
+  earning CreatorEarning?
+  refund  Refund?
+
+  @@index([publisherId, createdAt])
+  @@index([projectId])
+}
+
+model CreatorEarning {
+  id                   String               @id @default(cuid())
+  publisherId          String
+  publisher            User                 @relation(fields: [publisherId], references: [id], onDelete: Cascade)
+  revenueTransactionId String               @unique
+  revenueTransaction   RevenueTransaction   @relation(fields: [revenueTransactionId], references: [id], onDelete: Cascade)
+  coins                Int // the publisher's share, in coins
+  status               CreatorEarningStatus @default(PENDING)
+  // When the settlement hold (PlatformSettings.settlementPeriodDays) clears.
+  availableAt          DateTime
+  paidAt               DateTime?
+  payoutId             String?
+  payout               Payout?              @relation(fields: [payoutId], references: [id])
+  createdAt            DateTime             @default(now())
+
+  @@index([publisherId, status])
+}
+
+model PayoutAccount {
+  id                     String   @id @default(cuid())
+  userId                 String   @unique
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeConnectAccountId String?  @unique
+  onboardingComplete     Boolean  @default(false)
+  payoutsEnabled         Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model Payout {
+  id               String       @id @default(cuid())
+  publisherId      String
+  publisher        User         @relation(fields: [publisherId], references: [id], onDelete: Cascade)
+  coins            Int
+  amountCents      Int // fiat conversion at payout time — see the accounting-conversion note on CreatorEarning
+  currency         String       @default("usd")
+  status           PayoutStatus @default(PENDING)
+  stripeTransferId String?
+  createdAt        DateTime     @default(now())
+  paidAt           DateTime?
+
+  earnings CreatorEarning[]
+}
+
+model Refund {
+  id     String @id @default(cuid())
+  // Targets exactly one of: a fiat coin purchase refunded before the
+  // coins were spent, or a settled content-unlock transaction reversed
+  // per policy after the viewer already has access.
+  coinPurchaseId       String?             @unique
+  coinPurchase         CoinPurchase?       @relation(fields: [coinPurchaseId], references: [id])
+  revenueTransactionId String?             @unique
+  revenueTransaction   RevenueTransaction? @relation(fields: [revenueTransactionId], references: [id])
+  coinsReversed        Int
+  reason               String?
+  status               RefundStatus        @default(PENDING)
+  createdAt            DateTime            @default(now())
+  completedAt          DateTime?
+}
+
+model Chargeback {
+  id              String       @id @default(cuid())
+  coinPurchaseId  String
+  coinPurchase    CoinPurchase @relation(fields: [coinPurchaseId], references: [id], onDelete: Cascade)
+  stripeDisputeId String       @unique
+  status          String       @default("OPEN") // OPEN | WON | LOST
+  amountCents     Int
+  createdAt       DateTime     @default(now())
+  resolvedAt      DateTime?
+
+  @@index([coinPurchaseId])
+}
+
+// Meaningful viewing milestones (spec §32-33) — never every page refresh.
+// Scaffolded now; not yet wired into the player, which is a separate
+// follow-up (the monetization event that matters is the paid unlock
+// itself, which this model deliberately does not gate).
+model ViewingEvent {
+  id        String           @id @default(cuid())
+  userId    String?
+  user      User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  projectId String
+  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  episodeId String?
+  episode   Episode?         @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  type      ViewingEventType
+  createdAt DateTime         @default(now())
+
+  @@index([projectId, createdAt])
+  @@index([episodeId, createdAt])
+}
+
+// Single-row runtime configuration for the coin economy — admin-editable,
+// never hard-coded or requiring a redeploy to change (spec §43). Revenue
+// split rounding: publisherShare = floor(coinAmount * publisherRevenueShareBps / 10000),
+// platformShare = coinAmount - publisherShare — the platform absorbs the
+// remainder, guaranteeing viewer debit always exactly equals
+// publisherShare + platformShare with no leakage. Documented once here
+// rather than scattered across call sites.
+model PlatformSettings {
+  id                       String   @id @default("singleton")
+  publisherRevenueShareBps Int      @default(5000) // 5000 = 50.00%
+  settlementPeriodDays     Int      @default(7)
+  payoutMinimumCoins       Int      @default(1000)
+  minMovieCoinPrice        Int      @default(50)
+  maxMovieCoinPrice        Int      @default(500)
+  minEpisodeCoinPrice      Int      @default(5)
+  maxEpisodeCoinPrice      Int      @default(100)
+  minSceneCoinPrice        Int      @default(1)
+  maxSceneCoinPrice        Int      @default(25)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 }

@@ -14,6 +14,7 @@ import { GenerateClipButton } from "@/components/create/GenerateClipButton";
 import { GenerateMusicButton } from "@/components/create/GenerateMusicButton";
 import { GenerateBibleButton } from "@/components/create/GenerateBibleButton";
 import { PublishButton } from "@/components/create/PublishButton";
+import { MonetizationSettings } from "@/components/monetization/MonetizationSettings";
 import { CharacterCard } from "@/components/CharacterCard";
 import { LocationCard } from "@/components/LocationCard";
 import { PropCard } from "@/components/PropCard";
@@ -221,6 +222,20 @@ export default async function ProjectPage({
             moderationNotes={project.publication?.moderationNotes}
           />
         </div>
+
+        <section className="card mt-6">
+          <h2 className="text-lg font-semibold">Monetization</h2>
+          <p className="mt-1 text-sm text-cinerra-muted">Charge viewers Coins to watch, or keep this movie free.</p>
+          <div className="mt-4">
+            <MonetizationSettings
+              projectId={project.id}
+              episodes={project.episodes.map((e) => ({ id: e.id, number: e.number, title: e.title, coinPrice: e.coinPrice }))}
+              initialMode={project.monetizationMode}
+              initialScope={project.monetizationScope}
+              initialCoinPrice={project.coinPrice}
+            />
+          </div>
+        </section>
 
         {searchParams.job && (
           <div className="mt-6">

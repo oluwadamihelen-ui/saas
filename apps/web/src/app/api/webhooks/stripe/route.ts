@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { constructWebhookEvent, createStripeClient, HANDLED_WEBHOOK_EVENTS } from "@cinerra/billing";
 import { prisma } from "@/lib/db";
 import { env } from "@/lib/env";
+import { handleCoinPurchaseCompleted, handleCoinPurchaseRefunded } from "@/lib/coinPurchases";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +86,19 @@ export async function POST(request: NextRequest) {
           cancelAtPeriodEnd: subscription.cancel_at_period_end,
         },
       });
+    }
+
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object as Stripe.Checkout.Session;
+      if (session.mode === "payment" && session.metadata?.type === "coin_purchase") {
+        await handleCoinPurchaseCompleted(session);
+      }
+    }
+
+    if (event.type === "charge.refunded") {
+      const charge = event.data.object as Stripe.Charge;
+      const paymentIntentId = typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id;
+      if (paymentIntentId) await handleCoinPurchaseRefunded(paymentIntentId);
     }
 
     return NextResponse.json({ received: true });

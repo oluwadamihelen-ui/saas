@@ -31,6 +31,45 @@ export async function createPortalSession(stripe: Stripe, customerId: string, re
   return stripe.billingPortal.sessions.create({ customer: customerId, return_url: returnUrl });
 }
 
+export interface CreateCoinCheckoutSessionParams {
+  userId: string;
+  customerEmail: string;
+  productName: string;
+  amountCents: number;
+  currency: string;
+  successUrl: string;
+  cancelUrl: string;
+  /** Carried through to the completed session/payment_intent so the webhook handler can find the CoinPurchase row without trusting anything else from the client. */
+  metadata: Record<string, string>;
+}
+
+/**
+ * One-time (non-subscription) checkout for a coin package — inline
+ * price_data rather than a pre-created Stripe Price object, since coin
+ * package prices are admin-configured in our own database (CoinPackage),
+ * not synced to Stripe ahead of time.
+ */
+export async function createCoinCheckoutSession(stripe: Stripe, params: CreateCoinCheckoutSessionParams): Promise<Stripe.Checkout.Session> {
+  return stripe.checkout.sessions.create({
+    mode: "payment",
+    line_items: [
+      {
+        price_data: {
+          currency: params.currency,
+          product_data: { name: params.productName },
+          unit_amount: params.amountCents,
+        },
+        quantity: 1,
+      },
+    ],
+    customer_email: params.customerEmail,
+    client_reference_id: params.userId,
+    metadata: params.metadata,
+    success_url: params.successUrl,
+    cancel_url: params.cancelUrl,
+  });
+}
+
 /**
  * Verifies and parses an incoming Stripe webhook. Signature verification
  * (not just JSON.parse) is what makes subscription state trustworthy —
@@ -41,7 +80,7 @@ export function constructWebhookEvent(stripe: Stripe, rawBody: string | Buffer, 
   return stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
 }
 
-/** Subscription-status lifecycle events this platform reacts to. */
+/** Subscription-status and coin-economy lifecycle events this platform reacts to. */
 export const HANDLED_WEBHOOK_EVENTS = new Set([
   "checkout.session.completed",
   "customer.subscription.created",
@@ -49,4 +88,5 @@ export const HANDLED_WEBHOOK_EVENTS = new Set([
   "customer.subscription.deleted",
   "invoice.payment_failed",
   "invoice.paid",
+  "charge.refunded",
 ]);

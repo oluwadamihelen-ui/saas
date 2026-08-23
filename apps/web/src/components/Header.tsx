@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { auth, signOut } from "@/lib/auth";
+import { getWalletBalance } from "@/lib/wallet";
 import { Logo } from "./Logo";
 
 /** Header (spec §8): logo, search, notifications, create button, profile. */
 export async function Header() {
   const session = await auth();
-  const user = session?.user;
+  const user = session?.user as { id?: string; name?: string | null; email?: string | null } | undefined;
+  const balance = user?.id ? await getWalletBalance(user.id) : null;
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-cinerra-border/70 bg-cinerra-bg/80 px-4 shadow-[0_1px_0_0_rgba(255,255,255,0.03)] backdrop-blur-md md:px-8">
@@ -28,6 +30,13 @@ export async function Header() {
           <>
             <Link href="/projects/new" className="btn-primary-sm hidden md:inline-flex">
               + Create
+            </Link>
+            <Link
+              href="/wallet"
+              className="flex h-9 items-center gap-1.5 rounded-full border border-cinerra-border bg-cinerra-surface/80 px-3 text-sm font-medium text-cinerra-text transition hover:border-cinerra-accent/40"
+              title="Coin wallet"
+            >
+              🪙 {(balance ?? 0).toLocaleString()}
             </Link>
             <button className="hidden h-9 w-9 items-center justify-center rounded-full border border-cinerra-border text-cinerra-muted transition hover:border-cinerra-accent/40 hover:text-cinerra-text md:flex" aria-label="Notifications">
               <BellIcon />

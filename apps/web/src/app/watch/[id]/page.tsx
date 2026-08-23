@@ -3,10 +3,12 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getAssetDisplayUrl } from "@/lib/storage";
+import { getContentAccess } from "@/lib/monetization";
 import { recordPublicationView, isPublicationPubliclyVisible } from "@cinerra/domain";
 import { Header } from "@/components/Header";
 import { MobileNav } from "@/components/Nav";
 import { FavoriteButton } from "@/components/FavoriteButton";
+import { UnlockButton } from "@/components/monetization/UnlockButton";
 import { Footer } from "@/components/Footer";
 
 export default async function WatchPage({ params }: { params: { id: string } }) {
@@ -46,15 +48,44 @@ export default async function WatchPage({ params }: { params: { id: string } }) 
   // pending/rejected submission before it's actually live.
   if (publiclyVisible) await recordPublicationView(publication.id);
 
+  const project = publication.project;
+  const isPaid = project.monetizationMode === "PAID";
+  const scope = project.monetizationScope;
+
+  // Movie-scope: one unlock covers every episode. Episode-scope: each
+  // episode is checked and priced independently. Scene-scope has no
+  // per-scene player yet (see schema.prisma's note on Scene.coinPrice),
+  // so it isn't gated at this level — episodes stream as if free until
+  // that capability exists.
+  const movieAccess = isPaid && scope === "MOVIE" ? await getContentAccess(userId ?? null, "MOVIE", project.id) : null;
+
   const episodesWithVideo = await Promise.all(
     publication.project.episodes
       .filter((e) => e.exports[0]?.assetKey)
-      .map(async (e) => ({
-        id: e.id,
-        number: e.number,
-        title: e.title,
-        videoUrl: await getAssetDisplayUrl(e.exports[0]!.assetKey!),
-      })),
+      .map(async (e) => {
+        let locked = false;
+        let price: number | null = null;
+        let balance = 0;
+        if (isPaid && scope === "MOVIE") {
+          locked = !movieAccess!.unlocked;
+          price = movieAccess!.price;
+          balance = movieAccess!.balance;
+        } else if (isPaid && scope === "EPISODE" && e.coinPrice != null) {
+          const access = await getContentAccess(userId ?? null, "EPISODE", e.id);
+          locked = !access.unlocked;
+          price = access.price;
+          balance = access.balance;
+        }
+        return {
+          id: e.id,
+          number: e.number,
+          title: e.title,
+          locked,
+          price,
+          balance,
+          videoUrl: locked ? null : await getAssetDisplayUrl(e.exports[0]!.assetKey!),
+        };
+      }),
   );
 
   return (
@@ -83,10 +114,29 @@ export default async function WatchPage({ params }: { params: { id: string } }) 
           <p className="rounded-xl border border-cinerra-border bg-cinerra-surface p-6 text-sm text-cinerra-muted">
             This movie's video isn't available right now.
           </p>
+        ) : episodesWithVideo[0]!.locked ? (
+          <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-2xl border border-cinerra-border bg-cinerra-surface p-6 text-center">
+            <p className="font-display text-lg font-semibold text-cinerra-text">
+              {scope === "MOVIE" ? "Unlock this movie to watch" : "Unlock this episode to watch"}
+            </p>
+            {userId ? (
+              <UnlockButton
+                scope={scope === "MOVIE" ? "MOVIE" : "EPISODE"}
+                contentId={scope === "MOVIE" ? project.id : episodesWithVideo[0]!.id}
+                price={episodesWithVideo[0]!.price!}
+                balance={episodesWithVideo[0]!.balance}
+                label={scope === "MOVIE" ? "Unlock Movie" : "Unlock Episode"}
+              />
+            ) : (
+              <Link href="/login" className="btn-primary-sm">
+                Sign in to unlock — 🪙 {episodesWithVideo[0]!.price?.toLocaleString()}
+              </Link>
+            )}
+          </div>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-cinerra-border bg-black shadow-card">
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-            <video key={episodesWithVideo[0]!.id} src={episodesWithVideo[0]!.videoUrl} controls className="aspect-video w-full bg-black" />
+            <video key={episodesWithVideo[0]!.id} src={episodesWithVideo[0]!.videoUrl!} controls className="aspect-video w-full bg-black" />
           </div>
         )}
 
@@ -117,14 +167,29 @@ export default async function WatchPage({ params }: { params: { id: string } }) 
           <div className="mt-8">
             <h2 className="mb-3 font-display text-lg font-semibold text-cinerra-text">Episodes</h2>
             <div className="flex flex-col divide-y divide-cinerra-border rounded-xl border border-cinerra-border">
-              {episodesWithVideo.map((e) => (
-                <a key={e.id} href={e.videoUrl} target="_blank" rel="noreferrer" className="flex items-center justify-between px-4 py-3 text-sm hover:bg-cinerra-surface2/50">
-                  <span>
-                    Ep {e.number} — {e.title}
-                  </span>
-                  <span className="text-cinerra-muted">Watch →</span>
-                </a>
-              ))}
+              {episodesWithVideo.map((e) =>
+                e.locked ? (
+                  <div key={e.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
+                    <span className="text-cinerra-muted">
+                      Ep {e.number} — {e.title}
+                    </span>
+                    {userId ? (
+                      <UnlockButton scope="EPISODE" contentId={e.id} price={e.price!} balance={e.balance} label="Unlock" />
+                    ) : (
+                      <Link href="/login" className="btn-secondary-sm">
+                        🪙 {e.price?.toLocaleString()} — Sign in
+                      </Link>
+                    )}
+                  </div>
+                ) : (
+                  <a key={e.id} href={e.videoUrl!} target="_blank" rel="noreferrer" className="flex items-center justify-between px-4 py-3 text-sm hover:bg-cinerra-surface2/50">
+                    <span>
+                      Ep {e.number} — {e.title}
+                    </span>
+                    <span className="text-cinerra-muted">Watch →</span>
+                  </a>
+                ),
+              )}
             </div>
           </div>
         )}

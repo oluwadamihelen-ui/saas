@@ -15,6 +15,7 @@ const DESKTOP_ITEMS = [
   { href: "/projects", label: "Projects", icon: FolderIcon },
   { href: "/projects/new", label: "Create", icon: PlusIcon },
   { href: "/assets", label: "Assets", icon: ImageIcon },
+  { href: "/earnings", label: "Earnings", icon: CoinIcon },
   { href: "/studio", label: "Studio", icon: ClapperIcon },
   { href: "/profile", label: "Profile", icon: UserIcon },
 ];
@@ -123,6 +124,14 @@ function ImageIcon() {
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <circle cx="9" cy="9" r="2" />
       <path d="m21 15-5-5-9 9" />
+    </svg>
+  );
+}
+function CoinIcon() {
+  return (
+    <svg {...iconProps()}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.5 9.5c0-1 .9-1.5 2.5-1.5s2.5.6 2.5 1.5-1 1.3-2.5 1.5-2.5.6-2.5 1.5 1 1.5 2.5 1.5 2.5-.5 2.5-1.5M12 6.5v11" />
     </svg>
   );
 }

@@ -130,6 +130,20 @@ export async function resetPassword(token: string, newPassword: string): Promise
  * the User row's own row is touched — verified against a real Postgres
  * instance, not assumed, since this is exactly the kind of multi-path
  * cascade that's easy to get wrong on paper.
+ *
+ * KNOWN GAP (coin economy phase): deleting a publisher's Projects also
+ * cascades away every ContentEntitlement/RevenueTransaction/CreatorEarning
+ * tied to those projects — including OTHER viewers' purchase history and
+ * earnings records, which the coin economy's own design treats as
+ * permanent and never-deleted (see ContentEntitlement.revokedAt and
+ * reverseContentUnlock in apps/web/src/lib/monetization.ts). This is a
+ * real, unresolved interaction between two features built in different
+ * phases, not something this function accounts for yet — a publisher with
+ * monetized content and real viewer purchase history should not currently
+ * be allowed to self-delete without a follow-up fix (e.g. blocking
+ * deletion while unsettled/undisputed revenue exists, or restructuring
+ * RevenueTransaction's foreign keys so they survive project deletion the
+ * way AuditLog.userId already survives user deletion via SetNull).
  */
 export async function deleteUserAccount(userId: string): Promise<void> {
   const subscription = await prisma.subscription.findUnique({ where: { userId } });

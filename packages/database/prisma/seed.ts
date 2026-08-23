@@ -80,6 +80,44 @@ async function seedPlans() {
 }
 
 /**
+ * Coin economy defaults: the single PlatformSettings row (revenue split,
+ * settlement period, suggested price ranges — all admin-editable
+ * afterwards, never hard-coded elsewhere) and a starter set of purchasable
+ * coin packages. Prices here are only sensible starting defaults, not a
+ * business decision baked into the code.
+ */
+async function seedMonetization() {
+  await prisma.platformSettings.upsert({
+    where: { id: "singleton" },
+    update: {},
+    create: { id: "singleton" },
+  });
+
+  // The platform's own ledger account (double-entry symmetry — see
+  // apps/web/src/lib/wallet.ts's getPlatformUserId). Not a real login.
+  await prisma.user.upsert({
+    where: { email: "platform@cinerra.internal" },
+    update: {},
+    create: { email: "platform@cinerra.internal", name: "Cinerra Platform", status: "ACTIVE" },
+  });
+
+  const packages = [
+    { coins: 100, bonusCoins: 0, priceCents: 199, sortOrder: 0 },
+    { coins: 500, bonusCoins: 25, priceCents: 799, sortOrder: 1 },
+    { coins: 1200, bonusCoins: 100, priceCents: 1499, sortOrder: 2 },
+    { coins: 2500, bonusCoins: 300, priceCents: 2999, sortOrder: 3 },
+    { coins: 5500, bonusCoins: 750, priceCents: 5999, sortOrder: 4 },
+  ];
+
+  for (const pkg of packages) {
+    const existing = await prisma.coinPackage.findFirst({ where: { coins: pkg.coins, priceCents: pkg.priceCents } });
+    if (!existing) await prisma.coinPackage.create({ data: pkg });
+  }
+
+  console.log("Seeded platform settings and coin packages.");
+}
+
+/**
  * Model routing table. Rows describe *which* provider/model serves each
  * capability under each optimization mode — the router (packages/ai)
  * never hard-codes a provider. Whether a provider actually works at
@@ -371,6 +409,7 @@ async function seedDemoProject() {
 
 async function main() {
   await seedPlans();
+  await seedMonetization();
   await seedAiModels();
   await seedDemoProject();
 }
