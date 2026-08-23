@@ -131,19 +131,18 @@ export async function resetPassword(token: string, newPassword: string): Promise
  * instance, not assumed, since this is exactly the kind of multi-path
  * cascade that's easy to get wrong on paper.
  *
- * KNOWN GAP (coin economy phase): deleting a publisher's Projects also
- * cascades away every ContentEntitlement/RevenueTransaction/CreatorEarning
- * tied to those projects — including OTHER viewers' purchase history and
- * earnings records, which the coin economy's own design treats as
- * permanent and never-deleted (see ContentEntitlement.revokedAt and
- * reverseContentUnlock in apps/web/src/lib/monetization.ts). This is a
- * real, unresolved interaction between two features built in different
- * phases, not something this function accounts for yet — a publisher with
- * monetized content and real viewer purchase history should not currently
- * be allowed to self-delete without a follow-up fix (e.g. blocking
- * deletion while unsettled/undisputed revenue exists, or restructuring
- * RevenueTransaction's foreign keys so they survive project deletion the
- * way AuditLog.userId already survives user deletion via SetNull).
+ * Settled financial records survive account deletion by design:
+ * RevenueTransaction/CreatorEarning have onDelete: SetNull (not Cascade)
+ * on every relation to User/Project/Episode/Scene/ContentEntitlement, and
+ * snapshot projectTitle/episodeTitle at creation time — so a viewer
+ * deleting their account, a publisher deleting their account (which
+ * deletes their Projects here), or the project itself being deleted, all
+ * leave the other party's transaction/earnings history intact with just
+ * the deleted party's FK nulled out. reverseContentUnlock() in
+ * apps/web/src/lib/monetization.ts is written to reverse whichever legs
+ * are still live even after one party is gone. Verified against a real
+ * Postgres instance for both the viewer-deletes-first and
+ * publisher-deletes-first orderings, not assumed.
  */
 export async function deleteUserAccount(userId: string): Promise<void> {
   const subscription = await prisma.subscription.findUnique({ where: { userId } });

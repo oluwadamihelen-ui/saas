@@ -46,7 +46,9 @@ export class AlreadyReversedError extends Error {
 interface ResolvedContent {
   scope: ContentScope;
   projectId: string;
+  projectTitle: string;
   episodeId: string | null;
+  episodeTitle: string | null;
   sceneId: string | null;
   publisherId: string;
   coinPrice: number | null;
@@ -65,7 +67,9 @@ async function resolveContent(scope: ContentScope, contentId: string): Promise<R
     return {
       scope,
       projectId: project.id,
+      projectTitle: project.title,
       episodeId: null,
+      episodeTitle: null,
       sceneId: null,
       publisherId: project.ownerId,
       coinPrice: project.coinPrice,
@@ -78,19 +82,23 @@ async function resolveContent(scope: ContentScope, contentId: string): Promise<R
     return {
       scope,
       projectId: episode.projectId,
+      projectTitle: episode.project.title,
       episodeId: episode.id,
+      episodeTitle: episode.title,
       sceneId: null,
       publisherId: episode.project.ownerId,
       coinPrice: episode.coinPrice,
       monetizationMode: episode.project.monetizationMode,
     };
   }
-  const scene = await prisma.scene.findUnique({ where: { id: contentId }, include: { project: true } });
+  const scene = await prisma.scene.findUnique({ where: { id: contentId }, include: { project: true, episode: true } });
   if (!scene) throw new ContentNotFoundError();
   return {
     scope,
     projectId: scene.projectId,
+    projectTitle: scene.project.title,
     episodeId: scene.episodeId,
+    episodeTitle: scene.episode?.title ?? null,
     sceneId: scene.id,
     publisherId: scene.project.ownerId,
     coinPrice: scene.coinPrice,
@@ -181,7 +189,7 @@ export async function unlockContent(userId: string, scope: ContentScope, content
         data: { userId, scope, projectId: content.projectId, episodeId: content.episodeId, sceneId: content.sceneId },
       });
 
-      await recordWalletTransaction(tx, {
+      const { transaction: unlockTx } = await recordWalletTransaction(tx, {
         userId,
         type: "CONTENT_UNLOCK",
         amount: -price,
@@ -196,9 +204,12 @@ export async function unlockContent(userId: string, scope: ContentScope, content
           publisherId: content.publisherId,
           viewerId: userId,
           projectId: content.projectId,
+          projectTitle: content.projectTitle,
           episodeId: content.episodeId,
+          episodeTitle: content.episodeTitle,
           sceneId: content.sceneId,
           entitlementId: entitlement.id,
+          viewerUnlockTransactionId: unlockTx.id,
           unlockType,
           coinAmount: price,
           publisherShareCoins: publisherShare,
@@ -267,41 +278,55 @@ export async function reverseContentUnlock(revenueTransactionId: string, params:
   const existingRefund = await prisma.refund.findUnique({ where: { revenueTransactionId } });
   if (existingRefund) throw new AlreadyReversedError();
 
+  // Each leg's original ledger row is only required if that party's
+  // account still exists — a deleted viewer or publisher has no wallet
+  // left to credit/debit, and their own WalletTransaction history is
+  // deleted along with their account (spec's own deleteUserAccount), so
+  // it's expected to be gone too. The reversal still proceeds for
+  // whichever legs remain reversible, rather than hard-blocking the whole
+  // operation because one party is gone.
   const [viewerUnlockTx, creatorRevenueTx, platformRevenueTx] = await Promise.all([
-    // The CONTENT_UNLOCK row's idempotencyKey is deterministic per
-    // (viewer, scope, content), not per RevenueTransaction — its
-    // referenceId (the entitlement) is the reliable lookup instead.
-    prisma.walletTransaction.findFirst({ where: { referenceType: "ContentEntitlement", referenceId: revenueTx.entitlementId, type: "CONTENT_UNLOCK" } }),
-    prisma.walletTransaction.findUnique({ where: { idempotencyKey: `creator-revenue:${revenueTx.id}` } }),
+    revenueTx.viewerId ? prisma.walletTransaction.findUnique({ where: { id: revenueTx.viewerUnlockTransactionId } }) : null,
+    revenueTx.publisherId ? prisma.walletTransaction.findUnique({ where: { idempotencyKey: `creator-revenue:${revenueTx.id}` } }) : null,
     prisma.walletTransaction.findUnique({ where: { idempotencyKey: `platform-revenue:${revenueTx.id}` } }),
   ]);
-  if (!viewerUnlockTx || !creatorRevenueTx || !platformRevenueTx) {
-    throw new Error(`Original ledger rows for RevenueTransaction ${revenueTx.id} are incomplete — cannot reverse safely, needs manual review.`);
+  if (revenueTx.viewerId && !viewerUnlockTx) {
+    throw new Error(`Viewer's original CONTENT_UNLOCK ledger row for RevenueTransaction ${revenueTx.id} is missing — cannot reverse safely, needs manual review.`);
+  }
+  if (revenueTx.publisherId && !creatorRevenueTx) {
+    throw new Error(`Publisher's original CREATOR_REVENUE ledger row for RevenueTransaction ${revenueTx.id} is missing — cannot reverse safely, needs manual review.`);
+  }
+  if (!platformRevenueTx) {
+    throw new Error(`Platform's original PLATFORM_REVENUE ledger row for RevenueTransaction ${revenueTx.id} is missing — cannot reverse safely, needs manual review.`);
   }
 
   const platformUserId = await getPlatformUserId();
 
   await prisma.$transaction(async (tx) => {
-    await recordWalletTransaction(tx, {
-      userId: revenueTx.viewerId,
-      type: "REVERSAL",
-      amount: revenueTx.coinAmount,
-      referenceType: "RevenueTransaction",
-      referenceId: revenueTx.id,
-      reversesId: viewerUnlockTx.id,
-      idempotencyKey: `reversal:viewer:${revenueTx.id}`,
-      metadata: { reason: params.reason },
-    });
-    await recordWalletTransaction(tx, {
-      userId: revenueTx.publisherId,
-      type: "REVERSAL",
-      amount: -revenueTx.publisherShareCoins,
-      referenceType: "RevenueTransaction",
-      referenceId: revenueTx.id,
-      reversesId: creatorRevenueTx.id,
-      idempotencyKey: `reversal:publisher:${revenueTx.id}`,
-      metadata: { reason: params.reason },
-    });
+    if (revenueTx.viewerId && viewerUnlockTx) {
+      await recordWalletTransaction(tx, {
+        userId: revenueTx.viewerId,
+        type: "REVERSAL",
+        amount: revenueTx.coinAmount,
+        referenceType: "RevenueTransaction",
+        referenceId: revenueTx.id,
+        reversesId: viewerUnlockTx.id,
+        idempotencyKey: `reversal:viewer:${revenueTx.id}`,
+        metadata: { reason: params.reason },
+      });
+    }
+    if (revenueTx.publisherId && creatorRevenueTx) {
+      await recordWalletTransaction(tx, {
+        userId: revenueTx.publisherId,
+        type: "REVERSAL",
+        amount: -revenueTx.publisherShareCoins,
+        referenceType: "RevenueTransaction",
+        referenceId: revenueTx.id,
+        reversesId: creatorRevenueTx.id,
+        idempotencyKey: `reversal:publisher:${revenueTx.id}`,
+        metadata: { reason: params.reason },
+      });
+    }
     await recordWalletTransaction(tx, {
       userId: platformUserId,
       type: "REVERSAL",
@@ -320,12 +345,15 @@ export async function reverseContentUnlock(revenueTransactionId: string, params:
     await tx.refund.create({
       data: { revenueTransactionId: revenueTx.id, coinsReversed: revenueTx.coinAmount, reason: params.reason, status: "COMPLETED", completedAt: new Date() },
     });
-    if (params.revokeAccess) {
+    if (params.revokeAccess && revenueTx.entitlementId) {
       // Mark revoked rather than deleting the entitlement — deleting it
       // would cascade away this very RevenueTransaction/CreatorEarning via
       // ContentEntitlement's onDelete: Cascade relations, destroying the
       // permanent financial record the whole point of this function is to
       // preserve. Found by a real concurrency/reversal test, not assumed.
+      // (If entitlementId is already null, the entitlement itself is gone
+      // — e.g. the viewer deleted their account — so there's nothing left
+      // to revoke.)
       const entitlementRevoke = await tx.contentEntitlement.updateMany({
         where: { id: revenueTx.entitlementId, revokedAt: null },
         data: { revokedAt: new Date() },

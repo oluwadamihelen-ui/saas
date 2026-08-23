@@ -1343,25 +1343,43 @@ model ContentEntitlement {
   @@index([projectId])
 }
 
+// A settled financial record — must survive regardless of what happens
+// later to the accounts or content it references (spec: "never delete
+// settled financial transactions"). Every relation here is optional with
+// onDelete: SetNull rather than Cascade, deliberately: either the
+// publisher or the viewer deleting their own account, or the publisher
+// deleting the project itself, must never destroy the other party's
+// financial history. `projectTitle`/`episodeTitle` are snapshotted at
+// creation time (same pattern as OrganizationInvite.invitedByName) so
+// the transaction history stays legible even after a nulled FK — a real
+// record should show what the content WAS called at the time of the
+// sale, not rely on a live join that may return nothing.
 model RevenueTransaction {
-  id                  String             @id @default(cuid())
-  publisherId         String
-  publisher           User               @relation("PublisherRevenue", fields: [publisherId], references: [id], onDelete: Cascade)
-  viewerId            String
-  viewer              User               @relation("ViewerRevenue", fields: [viewerId], references: [id], onDelete: Cascade)
-  projectId           String
-  project             Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id                  String              @id @default(cuid())
+  publisherId         String?
+  publisher           User?               @relation("PublisherRevenue", fields: [publisherId], references: [id], onDelete: SetNull)
+  viewerId            String?
+  viewer              User?               @relation("ViewerRevenue", fields: [viewerId], references: [id], onDelete: SetNull)
+  projectId           String?
+  project             Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectTitle        String
   episodeId           String?
-  episode             Episode?           @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  episode             Episode?            @relation(fields: [episodeId], references: [id], onDelete: SetNull)
+  episodeTitle        String?
   sceneId             String?
-  scene               Scene?             @relation(fields: [sceneId], references: [id], onDelete: Cascade)
-  entitlementId        String            @unique
-  entitlement          ContentEntitlement @relation(fields: [entitlementId], references: [id], onDelete: Cascade)
+  scene               Scene?              @relation(fields: [sceneId], references: [id], onDelete: SetNull)
+  entitlementId       String?             @unique
+  entitlement         ContentEntitlement? @relation(fields: [entitlementId], references: [id], onDelete: SetNull)
+  // Plain id reference (not a relation) to the viewer's CONTENT_UNLOCK
+  // WalletTransaction — deliberately not a foreign key, so a reversal can
+  // always find the original ledger row to reverse even after entitlementId
+  // above has been nulled out by the entitlement's own deletion.
+  viewerUnlockTransactionId String
   unlockType          ContentUnlockType
   coinAmount          Int // gross coins spent by the viewer
   publisherShareCoins Int
   platformShareCoins  Int
-  createdAt           DateTime           @default(now())
+  createdAt           DateTime            @default(now())
 
   earning CreatorEarning?
   refund  Refund?
@@ -1372,8 +1390,11 @@ model RevenueTransaction {
 
 model CreatorEarning {
   id                   String               @id @default(cuid())
-  publisherId          String
-  publisher            User                 @relation(fields: [publisherId], references: [id], onDelete: Cascade)
+  // Optional/SetNull for the same reason as RevenueTransaction above — a
+  // publisher deleting their account must not erase the earning record
+  // itself, only its own link back to the (now-gone) publisher account.
+  publisherId          String?
+  publisher            User?                @relation(fields: [publisherId], references: [id], onDelete: SetNull)
   revenueTransactionId String               @unique
   revenueTransaction   RevenueTransaction   @relation(fields: [revenueTransactionId], references: [id], onDelete: Cascade)
   coins                Int // the publisher's share, in coins

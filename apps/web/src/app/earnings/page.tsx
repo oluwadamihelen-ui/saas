@@ -22,11 +22,14 @@ export default async function EarningsPage() {
 
   const [earnings, revenueTransactions] = await Promise.all([
     prisma.creatorEarning.findMany({ where: { publisherId: userId } }),
+    // Uses the projectTitle/episodeTitle snapshots taken at unlock time,
+    // not a live join — this stays legible even after the project or
+    // publisher account is later deleted (see schema.prisma's note on
+    // RevenueTransaction).
     prisma.revenueTransaction.findMany({
       where: { publisherId: userId },
       orderBy: { createdAt: "desc" },
       take: 50,
-      include: { project: { select: { title: true } }, episode: { select: { title: true } } },
     }),
   ]);
 
@@ -106,8 +109,8 @@ export default async function EarningsPage() {
                       return (
                         <tr key={tx.id}>
                           <td className="px-4 py-2 text-cinerra-muted">{tx.createdAt.toLocaleDateString()}</td>
-                          <td className="px-4 py-2">{tx.project.title}</td>
-                          <td className="px-4 py-2 text-cinerra-muted">{tx.episode?.title ?? "—"}</td>
+                          <td className="px-4 py-2">{tx.projectTitle}</td>
+                          <td className="px-4 py-2 text-cinerra-muted">{tx.episodeTitle ?? "—"}</td>
                           <td className="px-4 py-2">🪙 {tx.coinAmount.toLocaleString()}</td>
                           <td className="px-4 py-2">🪙 {tx.publisherShareCoins.toLocaleString()}</td>
                           <td className="px-4 py-2 text-cinerra-muted">{earning ? (STATUS_LABEL[earning.status] ?? earning.status) : "—"}</td>
