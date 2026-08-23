@@ -7,7 +7,15 @@ export class EmailAlreadyRegisteredError extends Error {
   }
 }
 
-export async function createUserAccount(params: { name: string; email: string; password: string }) {
+export class TermsNotAcceptedError extends Error {
+  constructor() {
+    super("You must accept the Terms of Service and Privacy Policy to create an account.");
+  }
+}
+
+export async function createUserAccount(params: { name: string; email: string; password: string; termsAccepted: boolean }) {
+  if (!params.termsAccepted) throw new TermsNotAcceptedError();
+
   const normalizedEmail = params.email.toLowerCase();
   const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) throw new EmailAlreadyRegisteredError();
@@ -19,6 +27,7 @@ export async function createUserAccount(params: { name: string; email: string; p
       name: params.name,
       email: normalizedEmail,
       passwordHash: hashPassword(params.password),
+      termsAcceptedAt: new Date(),
       ...(freePlan ? { subscription: { create: { planId: freePlan.id, status: "ACTIVE", interval: "MONTH" } } } : {}),
     },
   });

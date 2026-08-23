@@ -1,12 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { createUserAccount, EmailAlreadyRegisteredError } from "@/lib/accounts";
+import { createUserAccount, EmailAlreadyRegisteredError, TermsNotAcceptedError } from "@/lib/accounts";
 import { toApiErrorResponse } from "@/lib/apiError";
 
 const bodySchema = z.object({
   name: z.string().min(1).max(100),
   email: z.string().email(),
   password: z.string().min(8, "Password must be at least 8 characters."),
+  termsAccepted: z.literal(true, { errorMap: () => ({ message: "You must accept the Terms of Service and Privacy Policy." }) }),
 });
 
 export async function POST(request: NextRequest) {
@@ -20,6 +21,9 @@ export async function POST(request: NextRequest) {
     }
     if (error instanceof EmailAlreadyRegisteredError) {
       return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    if (error instanceof TermsNotAcceptedError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
     return toApiErrorResponse(error);
   }

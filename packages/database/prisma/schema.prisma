@@ -36,6 +36,11 @@ model User {
   avatarUrl         String?
   role              UserRole      @default(USER)
   status            AccountStatus @default(ACTIVE)
+  // When this user explicitly accepted the Terms of Service/Privacy Policy
+  // via the signup form — null for accounts created before this existed,
+  // or via a flow (e.g. Google OAuth) that doesn't yet run through it.
+  // Never backfilled with a fabricated timestamp.
+  termsAcceptedAt   DateTime?
   organizationId    String?
   organization      Organization? @relation(fields: [organizationId], references: [id])
   createdAt         DateTime      @default(now())

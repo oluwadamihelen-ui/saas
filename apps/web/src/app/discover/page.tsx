@@ -4,6 +4,7 @@ import { Header } from "@/components/Header";
 import { MobileNav, DesktopSidebar } from "@/components/Nav";
 import { DiscoverCard } from "@/components/DiscoverCard";
 import { EmptyState } from "@/components/EmptyState";
+import { Footer } from "@/components/Footer";
 import { listPopularPublications, listNewReleasePublications, type DiscoverCardData } from "@/lib/discover";
 
 export default async function DiscoverPage() {
@@ -26,6 +27,7 @@ export default async function DiscoverPage() {
           <Rail title="New Releases" items={newReleases} />
         </main>
       </div>
+      <Footer />
       <MobileNav />
     </div>
   );

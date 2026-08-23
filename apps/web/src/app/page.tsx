@@ -7,6 +7,7 @@ import { MobileNav, DesktopSidebar } from "@/components/Nav";
 import { ProjectCard } from "@/components/ProjectCard";
 import { DiscoverCard } from "@/components/DiscoverCard";
 import { EmptyState } from "@/components/EmptyState";
+import { Footer } from "@/components/Footer";
 import { listPopularPublications, listNewReleasePublications, type DiscoverCardData } from "@/lib/discover";
 
 export default async function HomePage() {
@@ -96,6 +97,7 @@ export default async function HomePage() {
           </Section>
         </main>
       </div>
+      <Footer />
       <MobileNav />
     </div>
   );

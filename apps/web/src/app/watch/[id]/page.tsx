@@ -7,6 +7,7 @@ import { recordPublicationView } from "@cinerra/domain";
 import { Header } from "@/components/Header";
 import { MobileNav } from "@/components/Nav";
 import { FavoriteButton } from "@/components/FavoriteButton";
+import { Footer } from "@/components/Footer";
 
 export default async function WatchPage({ params }: { params: { id: string } }) {
   const session = await auth();
@@ -101,6 +102,7 @@ export default async function WatchPage({ params }: { params: { id: string } }) 
           </div>
         )}
       </main>
+      <Footer />
       <MobileNav />
     </div>
   );

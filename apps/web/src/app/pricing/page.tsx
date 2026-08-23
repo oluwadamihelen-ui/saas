@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { Header } from "@/components/Header";
 import { MobileNav } from "@/components/Nav";
 import { CheckoutButton } from "@/components/CheckoutButton";
+import { Footer } from "@/components/Footer";
 
 function formatPrice(cents: number): string {
   if (cents === 0) return "$0";
@@ -76,6 +77,7 @@ export default async function PricingPage() {
           })}
         </div>
       </main>
+      <Footer />
       <MobileNav />
     </div>
   );

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { AuthError } from "next-auth";
 import { signIn } from "@/lib/auth";
-import { createUserAccount, EmailAlreadyRegisteredError } from "@/lib/accounts";
+import { createUserAccount, EmailAlreadyRegisteredError, TermsNotAcceptedError } from "@/lib/accounts";
 import { Logo } from "@/components/Logo";
 
 export default function SignupPage({ searchParams }: { searchParams: { error?: string } }) {
@@ -11,12 +11,16 @@ export default function SignupPage({ searchParams }: { searchParams: { error?: s
     const name = String(formData.get("name") ?? "");
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
+    const termsAccepted = formData.get("termsAccepted") === "on";
 
     try {
-      await createUserAccount({ name, email, password });
+      await createUserAccount({ name, email, password, termsAccepted });
     } catch (error) {
       if (error instanceof EmailAlreadyRegisteredError) {
         redirect("/signup?error=exists");
+      }
+      if (error instanceof TermsNotAcceptedError) {
+        redirect("/signup?error=terms");
       }
       redirect("/signup?error=1");
     }
@@ -41,6 +45,11 @@ export default function SignupPage({ searchParams }: { searchParams: { error?: s
         {searchParams.error === "exists" && (
           <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">An account with that email already exists.</p>
         )}
+        {searchParams.error === "terms" && (
+          <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            You must accept the Terms of Service and Privacy Policy to create an account.
+          </p>
+        )}
         {searchParams.error === "1" && (
           <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">Something went wrong. Please try again.</p>
         )}
@@ -49,6 +58,20 @@ export default function SignupPage({ searchParams }: { searchParams: { error?: s
           <input name="name" required placeholder="Full name" className="input" />
           <input name="email" type="email" required placeholder="Email" className="input" />
           <input name="password" type="password" required minLength={8} placeholder="Password (min. 8 characters)" className="input" />
+          <label className="mt-1 flex items-start gap-2 text-xs text-cinerra-muted">
+            <input type="checkbox" name="termsAccepted" required className="mt-0.5 accent-cinerra-accent" />
+            <span>
+              I agree to the{" "}
+              <Link href="/terms" className="text-cinerra-text underline" target="_blank">
+                Terms of Service
+              </Link>{" "}
+              and{" "}
+              <Link href="/privacy" className="text-cinerra-text underline" target="_blank">
+                Privacy Policy
+              </Link>
+              .
+            </span>
+          </label>
           <button type="submit" className="btn-primary mt-2 w-full">
             Create account
           </button>
