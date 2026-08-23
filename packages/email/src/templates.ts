@@ -88,3 +88,15 @@ export function exportFailedEmail(params: { projectTitle: string; episodeTitle: 
   const text = `We couldn't finish exporting ${params.episodeTitle} from ${params.projectTitle}.\n\n${params.errorMessage}\n\n${params.projectUrl}`;
   return { subject: `${params.episodeTitle} export failed`, html, text };
 }
+
+export function organizationInviteEmail(params: { organizationName: string; inviterName: string; acceptUrl: string }): EmailContent {
+  const preheader = `${params.inviterName} invited you to join ${params.organizationName} on Cinerra.`;
+  const html = layout(
+    preheader,
+    `<p><strong>${params.inviterName}</strong> invited you to join <strong>${params.organizationName}</strong>&rsquo;s studio team on Cinerra.</p>
+     ${button(params.acceptUrl, "Accept invite")}
+     <p style="margin-top:20px;color:#9a9aa8;font-size:13px;">This invite expires in 7 days. If you weren&rsquo;t expecting this, you can safely ignore this email.</p>`,
+  );
+  const text = `${params.inviterName} invited you to join ${params.organizationName}'s studio team on Cinerra.\n\nAccept the invite (expires in 7 days): ${params.acceptUrl}\n\nIf you weren't expecting this, you can safely ignore this email.`;
+  return { subject: `${params.inviterName} invited you to join ${params.organizationName} on Cinerra`, html, text };
+}

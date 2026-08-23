@@ -40,6 +40,10 @@ export function StoryWizardForm({ initialMode }: { initialMode: "INSPIRATION" | 
   const [title, setTitle] = useState("");
   const [storyIdea, setStoryIdea] = useState("");
   const [sourceText, setSourceText] = useState("");
+  const [sourceFileKey, setSourceFileKey] = useState<string | undefined>(undefined);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [genres, setGenres] = useState<string[]>([]);
   const [tones, setTones] = useState<string[]>([]);
   const [setting, setSetting] = useState("");
@@ -50,6 +54,25 @@ export function StoryWizardForm({ initialMode }: { initialMode: "INSPIRATION" | 
   const [visualStyle, setVisualStyle] = useState("LIVE_ACTION_FILM");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function handleFileUpload(file: File) {
+    setUploadError(null);
+    setUploadingFile(true);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/projects/source-document", { method: "POST", body });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Couldn't read that file.");
+      setSourceText(data.text as string);
+      setSourceFileKey(data.sourceFileKey as string);
+      setUploadedFileName(file.name);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Couldn't read that file.");
+    } finally {
+      setUploadingFile(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -72,6 +95,7 @@ export function StoryWizardForm({ initialMode }: { initialMode: "INSPIRATION" | 
           aspectRatio,
           visualStyle,
           sourceText: mode === "ADAPTATION" ? sourceText : undefined,
+          sourceFileKey: mode === "ADAPTATION" ? sourceFileKey : undefined,
         }),
       });
       const projectData = await projectRes.json();
@@ -135,10 +159,31 @@ export function StoryWizardForm({ initialMode }: { initialMode: "INSPIRATION" | 
           <textarea
             className="textarea"
             value={sourceText}
-            onChange={(e) => setSourceText(e.target.value)}
+            onChange={(e) => {
+              setSourceText(e.target.value);
+              setSourceFileKey(undefined);
+              setUploadedFileName(null);
+            }}
             placeholder="Paste your screenplay, novel excerpt, or treatment…"
           />
-          <p className="mt-1 text-xs text-cinerra-muted">File upload (PDF/DOCX/TXT) parsing runs through the same adaptation pipeline once storage is configured — paste text for now.</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <label className="btn-secondary-sm cursor-pointer">
+              {uploadingFile ? "Reading file…" : "Upload PDF, DOCX, or TXT"}
+              <input
+                type="file"
+                accept=".pdf,.docx,.txt"
+                className="hidden"
+                disabled={uploadingFile}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file) void handleFileUpload(file);
+                }}
+              />
+            </label>
+            {uploadedFileName && !uploadingFile && <span className="text-xs text-emerald-400">Loaded {uploadedFileName} — feel free to edit the text above.</span>}
+          </div>
+          {uploadError && <p className="mt-1 text-xs text-red-300">{uploadError}</p>}
         </div>
       )}
 

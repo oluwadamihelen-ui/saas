@@ -26,6 +26,7 @@ const createProjectSchema = z.object({
     .default("CINEMATIC_DRAMA"),
   customStyle: z.string().optional(),
   sourceText: z.string().optional(),
+  sourceFileKey: z.string().optional(),
 });
 
 export async function GET() {
@@ -58,6 +59,7 @@ export async function POST(request: NextRequest) {
         visualStyle: body.visualStyle,
         customStyle: body.customStyle,
         sourceText: body.sourceText,
+        sourceFileKey: body.sourceFileKey,
         status: "DRAFT",
       },
     });

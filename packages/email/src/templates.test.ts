@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { welcomeEmail, passwordResetEmail, exportReadyEmail, exportFailedEmail } from "./templates.js";
+import { welcomeEmail, passwordResetEmail, exportReadyEmail, exportFailedEmail, organizationInviteEmail } from "./templates.js";
 
 describe("email templates", () => {
   it("welcomeEmail includes the create-project link in both html and text", () => {
@@ -42,5 +42,18 @@ describe("email templates", () => {
     });
     expect(html).toContain("FFmpeg failed while processing the video.");
     expect(text).toContain("FFmpeg failed while processing the video.");
+  });
+
+  it("organizationInviteEmail names the inviter and organization, and includes the accept link", () => {
+    const { subject, html, text } = organizationInviteEmail({
+      organizationName: "Horizon Pictures",
+      inviterName: "Ada",
+      acceptUrl: "https://example.com/studio/invite?token=abc",
+    });
+    expect(subject).toContain("Horizon Pictures");
+    expect(html).toContain("Ada");
+    expect(html).toContain("Horizon Pictures");
+    expect(html).toContain("https://example.com/studio/invite?token=abc");
+    expect(text).toContain("https://example.com/studio/invite?token=abc");
   });
 });

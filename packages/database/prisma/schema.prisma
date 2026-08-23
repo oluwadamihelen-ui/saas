@@ -42,7 +42,7 @@ model User {
   // Never backfilled with a fabricated timestamp.
   termsAcceptedAt   DateTime?
   organizationId    String?
-  organization      Organization? @relation(fields: [organizationId], references: [id])
+  organization      Organization? @relation("OrganizationMembers", fields: [organizationId], references: [id])
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
@@ -57,19 +57,50 @@ model User {
   auditLogs         AuditLog[]
   publications      Publication[]
   favorites         Favorite[]
+  ownedOrganization Organization? @relation("OrganizationOwner")
 
   @@index([organizationId])
 }
 
+// A Studio-plan subscriber's team (spec's Studio-tier collaboration tools).
+// One owner per organization (the subscriber who created it); members join
+// via an emailed invite. Deleting the owner's account deletes the
+// organization with it (no ownership-transfer flow exists yet) — members
+// are left with `organizationId` cleared rather than being deleted
+// themselves, since their own projects are unaffected.
 model Organization {
   id        String   @id @default(cuid())
   name      String
   slug      String   @unique
+  ownerId   String   @unique
+  owner     User     @relation("OrganizationOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users     User[]
+  members   User[]   @relation("OrganizationMembers")
   projects  Project[]
+  invites   OrganizationInvite[]
+}
+
+// Pending/accepted invites to join an Organization. `invitedBy` is stored
+// as a plain snapshot rather than a live relation to User — it's shown
+// once and never needs the referential integrity a real FK would enforce,
+// and keeping it a plain field avoids a second User-facing FK on this
+// model competing with the Organization cascade above during account
+// deletion.
+model OrganizationInvite {
+  id             String    @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  invitedByName  String
+  token          String    @unique
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
 }
 
 model OAuthAccount {
