@@ -1,5 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { buildAddSilentAudioArgs, buildConcatArgs, buildExtractFrameArgs, buildMixAudioArgs, buildMuxAudioArgs, buildOverlayMusicArgs } from "./args.js";
+import {
+  buildAddSilentAudioArgs,
+  buildApplyVolumeArgs,
+  buildConcatArgs,
+  buildExtractFrameArgs,
+  buildMixAudioArgs,
+  buildMuxAudioArgs,
+  buildOverlayMusicArgs,
+} from "./args.js";
+
+describe("buildApplyVolumeArgs", () => {
+  it("applies a volume filter and re-encodes to mp3", () => {
+    const args = buildApplyVolumeArgs("in.mp3", "out.mp3", 0.5);
+    expect(args).toContain("-af");
+    expect(args).toContain("volume=0.5");
+    expect(args.at(-1)).toBe("out.mp3");
+  });
+
+  it("passes muted (volume 0) through the same filter rather than a special case", () => {
+    const args = buildApplyVolumeArgs("in.mp3", "out.mp3", 0);
+    expect(args).toContain("volume=0");
+  });
+});
 
 describe("buildMuxAudioArgs", () => {
   it("maps video from the first input and audio from the second, trimmed to the shorter", () => {

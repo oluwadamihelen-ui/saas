@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { FfmpegExecutionError, FfmpegNotAvailableError } from "./errors.js";
 import {
   buildAddSilentAudioArgs,
+  buildApplyVolumeArgs,
   buildConcatArgs,
   buildExtractFrameArgs,
   buildMixAudioArgs,
@@ -61,6 +62,11 @@ export async function concatVideos(inputPaths: string[], outputPath: string, tar
 /** Mixes a shot's dialogue and sound-effect audio down to one track before it's muxed onto the video. */
 export async function mixAudioTracks(audioPaths: string[], outputPath: string): Promise<void> {
   await runFfmpeg(buildMixAudioArgs(audioPaths, outputPath));
+}
+
+/** Applies the timeline editor's per-track volume override to an audio file before it's mixed/muxed. */
+export async function applyVolume(inputPath: string, outputPath: string, volume: number): Promise<void> {
+  await runFfmpeg(buildApplyVolumeArgs(inputPath, outputPath, volume));
 }
 
 /** Overlays a looping background score onto an already-assembled episode without re-encoding the video. */

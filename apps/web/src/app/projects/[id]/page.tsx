@@ -1,4 +1,5 @@
 import { redirect, notFound } from "next/navigation";
+import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getAssetDisplayUrl } from "@/lib/storage";
@@ -182,6 +183,7 @@ export default async function ProjectPage({
 
       return {
         ...episode,
+        hasShots: episodeShots.length > 0,
         allShotsReady: episodeShots.length > 0 && episodeShots.every((s) => s.status === "READY"),
         latestExport: await resolveLatestExport("EPISODE"),
         latestTrailer: await resolveLatestExport("TRAILER"),
@@ -260,6 +262,11 @@ export default async function ProjectPage({
                   <div className="flex flex-col items-end gap-2">
                     {episode.status === "DRAFT" && !episode.script && <GenerateScriptButton projectId={project.id} episodeId={episode.id} />}
                     {episode.script && !episode.allShotsReady && <span className="text-xs text-cinerra-accent">Script ready</span>}
+                    {episode.hasShots && (
+                      <Link href={`/projects/${project.id}/episodes/${episode.id}/timeline`} className="btn-secondary-sm">
+                        Edit Timeline
+                      </Link>
+                    )}
                     {episode.allShotsReady && episode.latestExport?.status !== "SUCCEEDED" && (
                       <GenerateExportButton
                         projectId={project.id}

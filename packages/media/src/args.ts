@@ -64,6 +64,16 @@ export function buildMixAudioArgs(audioPaths: string[], outputPath: string): str
   return ["-y", ...inputArgs, "-filter_complex", filter, "-map", "[aout]", "-c:a", "libmp3lame", outputPath];
 }
 
+/**
+ * Rescales an audio file's volume — the timeline editor's per-track volume
+ * override (spec's "manual volume/timing control" gap). `volume` is a
+ * linear multiplier (1 = unchanged, 0.5 = half, 2 = double); callers should
+ * skip calling this entirely at 1 to avoid a pointless re-encode.
+ */
+export function buildApplyVolumeArgs(inputPath: string, outputPath: string, volume: number): string[] {
+  return ["-y", "-i", inputPath, "-af", `volume=${volume}`, "-c:a", "libmp3lame", outputPath];
+}
+
 export interface OverlayMusicOptions {
   /** 0-1 relative volume for the music bed against the existing (dialogue/SFX) track. Defaults to 0.25 so dialogue stays intelligible. */
   musicVolume?: number;

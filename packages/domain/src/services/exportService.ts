@@ -8,6 +8,7 @@ import { buildAssetKey } from "@cinerra/storage";
 import { concatVideos, FfmpegExecutionError, FfmpegNotAvailableError } from "@cinerra/media";
 import { checkEpisodeExportReadiness } from "../exportReadiness.js";
 import { resolveTargetSize } from "../lib/exportResolution.js";
+import { resolveEpisodeShotOrder } from "../lib/timelineOrder.js";
 import { prepareShotSegments, overlayEpisodeMusicIfAny } from "./shotAssembly.js";
 import { beginProcessing, transitionGenerationJob, JobCancelledError } from "./jobTransitions.js";
 
@@ -20,12 +21,12 @@ export interface StartEpisodeExportParams {
 
 /**
  * Episode assembly/export (spec §31, §65): concatenates every shot's
- * generated video, in scene/shot order, muxing in each shot's dialogue
- * and sound-effect audio together (or silence, so every segment has a
- * matching audio track), then overlays the episode's background score
- * across the whole thing if one has been generated — the lightweight
- * timeline assembly this codebase implements today, ahead of a full
- * drag-and-drop timeline editor.
+ * generated video — in the timeline editor's manual order once a creator
+ * has set one, else natural scene/shot order — muxing in each shot's
+ * dialogue and sound-effect audio together (respecting any per-track
+ * volume/mute override, or silence if neither track exists), then
+ * overlays the episode's background score across the whole thing if one
+ * has been generated and isn't muted.
  */
 export async function startEpisodeExport(params: StartEpisodeExportParams): Promise<{ generationJobId: string; exportId: string }> {
   const episode = await prisma.episode.findUniqueOrThrow({ where: { id: params.episodeId }, include: { project: true } });
@@ -90,7 +91,7 @@ export async function runEpisodeExportJob(storage: StorageClient, generationJobI
         },
       },
     });
-    const allShots = scenes.flatMap((s) => s.shots);
+    const allShots = resolveEpisodeShotOrder(scenes.flatMap((s) => s.shots));
     const readiness = checkEpisodeExportReadiness(allShots);
     if (!readiness.ready) throw new Error(readiness.reason);
 

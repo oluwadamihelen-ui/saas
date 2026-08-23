@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { prisma } from "@cinerra/database";
 import type { StorageClient } from "@cinerra/storage";
-import { addSilentAudioTrack, mixAudioTracks, muxAudioOntoVideo, overlayMusic } from "@cinerra/media";
+import { addSilentAudioTrack, applyVolume, mixAudioTracks, muxAudioOntoVideo, overlayMusic } from "@cinerra/media";
 
 /**
  * Shared FFmpeg assembly steps used by both full episode export and
@@ -12,7 +12,20 @@ import { addSilentAudioTrack, mixAudioTracks, muxAudioOntoVideo, overlayMusic } 
 
 export interface AssemblableShot {
   videoAsset: { storageKey: string } | null;
-  timelineItems: Array<{ track: string; audioItem: { asset: { storageKey: string } } | null }>;
+  timelineItems: Array<{
+    track: string;
+    volume: number;
+    muted: boolean;
+    audioItem: { asset: { storageKey: string } } | null;
+  }>;
+}
+
+/** Applies the timeline editor's volume override to a downloaded audio file, skipping the re-encode when it's a no-op. */
+async function applyVolumeIfNeeded(path: string, workDir: string, label: string, volume: number): Promise<string> {
+  if (volume === 1) return path;
+  const outPath = join(workDir, `${label}.mp3`);
+  await applyVolume(path, outPath, volume);
+  return outPath;
 }
 
 export async function downloadToFile(storage: StorageClient, storageKey: string, localPath: string): Promise<void> {
@@ -37,20 +50,22 @@ export async function prepareShotSegments(storage: StorageClient, workDir: strin
     const videoPath = join(workDir, `shot-${index}.mp4`);
     await downloadToFile(storage, videoAsset.storageKey, videoPath);
 
-    const dialogueAsset = shot.timelineItems.find((t) => t.track === "DIALOGUE")?.audioItem?.asset;
-    const sfxAsset = shot.timelineItems.find((t) => t.track === "SFX")?.audioItem?.asset;
+    // Muted tracks (a timeline editor override) are treated as absent —
+    // same as a shot with no dialogue/SFX generated at all.
+    const dialogueItem = shot.timelineItems.find((t) => t.track === "DIALOGUE" && !t.muted);
+    const sfxItem = shot.timelineItems.find((t) => t.track === "SFX" && !t.muted);
     const preparedPath = join(workDir, `prepared-${index}.mp4`);
 
     const audioPaths: string[] = [];
-    if (dialogueAsset) {
+    if (dialogueItem?.audioItem) {
       const path = join(workDir, `dialogue-${index}.mp3`);
-      await downloadToFile(storage, dialogueAsset.storageKey, path);
-      audioPaths.push(path);
+      await downloadToFile(storage, dialogueItem.audioItem.asset.storageKey, path);
+      audioPaths.push(await applyVolumeIfNeeded(path, workDir, `dialogue-vol-${index}`, dialogueItem.volume));
     }
-    if (sfxAsset) {
+    if (sfxItem?.audioItem) {
       const path = join(workDir, `sfx-${index}.mp3`);
-      await downloadToFile(storage, sfxAsset.storageKey, path);
-      audioPaths.push(path);
+      await downloadToFile(storage, sfxItem.audioItem.asset.storageKey, path);
+      audioPaths.push(await applyVolumeIfNeeded(path, workDir, `sfx-vol-${index}`, sfxItem.volume));
     }
 
     if (audioPaths.length === 0) {
@@ -68,18 +83,18 @@ export async function prepareShotSegments(storage: StorageClient, workDir: strin
   return preparedSegments;
 }
 
-/** Overlays the episode's generated score onto an already-assembled video, if one exists. Returns the input path unchanged when there's no score. */
+/** Overlays the episode's generated score onto an already-assembled video, if one exists and isn't muted. Returns the input path unchanged otherwise. */
 export async function overlayEpisodeMusicIfAny(storage: StorageClient, workDir: string, episodeId: string, concatenatedPath: string): Promise<string> {
   const musicTimelineItem = await prisma.timelineItem.findFirst({
     where: { episodeId, track: "MUSIC" },
     include: { audioItem: { include: { asset: true } } },
   });
   const musicAsset = musicTimelineItem?.audioItem?.asset;
-  if (!musicAsset) return concatenatedPath;
+  if (!musicAsset || musicTimelineItem!.muted) return concatenatedPath;
 
   const musicPath = join(workDir, "music.mp3");
   await downloadToFile(storage, musicAsset.storageKey, musicPath);
   const finalPath = join(workDir, "final.mp4");
-  await overlayMusic(concatenatedPath, musicPath, finalPath);
+  await overlayMusic(concatenatedPath, musicPath, finalPath, { musicVolume: musicTimelineItem!.volume });
   return finalPath;
 }

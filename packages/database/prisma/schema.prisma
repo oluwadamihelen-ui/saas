@@ -624,6 +624,12 @@ model Shot {
   sceneId         String
   scene           Scene          @relation(fields: [sceneId], references: [id], onDelete: Cascade)
   order           Int
+  // Manual re-sequencing from the timeline editor — null until a creator
+  // has actually reordered this episode's timeline. Export/assembly falls
+  // back to scene.number/Shot.order (the natural screenplay order) unless
+  // every shot in the episode has this set, so an untouched episode's
+  // export behavior never changes.
+  timelineOrder   Int?
   shotType        ShotType
   cameraMovement  CameraMovement @default(LOCKED_OFF)
   lens            String?
