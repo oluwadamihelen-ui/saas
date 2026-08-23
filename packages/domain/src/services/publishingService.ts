@@ -1,5 +1,6 @@
 import { prisma } from "@cinerra/database";
 import { checkProjectPublishEligibility } from "../lib/publishEligibility.js";
+import { isPublicationPubliclyVisible } from "../lib/publicationVisibility.js";
 
 /** Thrown when a project doesn't yet have a real finished export to publish. */
 export class PublishNotEligibleError extends Error {
@@ -59,10 +60,21 @@ export async function unpublishProject(params: { userId: string; projectId: stri
   });
 }
 
-/** Toggles the current user's favorite/save on a published movie. */
+/**
+ * Toggles the current user's favorite/save on a published movie. Mirrors
+ * the exact visibility gate the public watch page enforces (spec's
+ * moderation-queue phase) — a non-owner can't favorite, and so can't
+ * surface via My List, a publication they aren't allowed to view in the
+ * first place (pending, rejected, or otherwise not yet public).
+ */
 export async function toggleFavorite(params: { userId: string; publicationId: string }): Promise<{ favorited: boolean }> {
-  const publication = await prisma.publication.findUnique({ where: { id: params.publicationId } });
+  const publication = await prisma.publication.findUnique({
+    where: { id: params.publicationId },
+    include: { project: { select: { ownerId: true } } },
+  });
   if (!publication) throw new Error("NOT_FOUND");
+  const isOwner = publication.project.ownerId === params.userId;
+  if (!isOwner && !isPublicationPubliclyVisible(publication)) throw new Error("NOT_FOUND");
 
   const existing = await prisma.favorite.findUnique({
     where: { userId_publicationId: { userId: params.userId, publicationId: params.publicationId } },

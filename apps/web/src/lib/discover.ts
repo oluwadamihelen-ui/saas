@@ -64,10 +64,11 @@ export async function listNewReleasePublications(limit: number): Promise<Discove
 
 /**
  * The current user's saved/favorited movies (My List, and the Projects
- * "Collection" tab). Not moderation-gated: a favorite can only be created
- * from the watch page, which is itself gated, so an already-saved item
- * staying visible here even if later rejected is a rare, low-stakes edge
- * case rather than a moderation bypass.
+ * "Collection" tab). Not moderation-gated here: toggleFavorite itself
+ * enforces the same visibility rule as the watch page (a non-owner can't
+ * favorite a non-public publication), so an already-saved item staying
+ * visible here even if later rejected is a rare, low-stakes edge case
+ * rather than a moderation bypass.
  */
 export async function listUserFavorites(userId: string): Promise<DiscoverCardData[]> {
   const favorites = await prisma.favorite.findMany({
