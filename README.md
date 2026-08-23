@@ -45,7 +45,9 @@ Discover is now actually moderated: publishing sets `Publication.moderationStatu
 
 The media library (`/assets`, spec §59) is real: a cross-project browser over every `Asset` row a user's projects have generated — character/location/wardrobe/prop references, storyboard frames, shot video, dialogue/SFX/music audio, exports, uploaded source documents — filterable by type and by project, each with a signed download link. It reads the existing `Asset.type`/`Asset.kind` columns directly rather than needing new plumbing, since every generation service already writes a real `Asset` row for what it produces.
 
-**Remaining before launch** (not part of the original phased roadmap, but needed for a real public launch): account settings (`/profile` — provider API keys, billing management), transactional email (today `Notification` rows are in-app only), CI, error monitoring, rate limiting on unauthenticated routes, a security review pass, and closing the Google-OAuth terms-acceptance gap noted above.
+`/profile` is real too: display name (editable), a password-change form (shown only for credentials accounts — OAuth-only accounts have no `passwordHash` to change), a Terms-acceptance readout, subscription/plan status with a "Manage billing" button wired to the Stripe customer portal endpoint that already existed but had no UI calling it, and a delete-account section pointing at the same `privacy@cinerra.app` contact flow the Privacy Policy describes (no self-serve deletion yet — that needs a real cascading-delete + Stripe-cancellation flow, intentionally out of scope here). There's still no per-user AI provider key concept in this codebase — provider keys are configured platform-wide via environment variables and shown read-only on `/admin`, not per-account.
+
+**Remaining before launch** (not part of the original phased roadmap, but needed for a real public launch): transactional email (today `Notification` rows are in-app only), CI, error monitoring, rate limiting on unauthenticated routes, a security review pass, self-serve account deletion, and closing the Google-OAuth terms-acceptance gap noted above.
 
 ## Tech stack
 
