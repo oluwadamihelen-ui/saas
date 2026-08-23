@@ -1,0 +1,86 @@
+import { prisma } from "@cinerra/database";
+import { checkProjectPublishEligibility } from "../lib/publishEligibility.js";
+
+/** Thrown when a project doesn't yet have a real finished export to publish. */
+export class PublishNotEligibleError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "PublishNotEligibleError";
+  }
+}
+
+async function loadOwnedProjectWithExports(projectId: string, userId: string) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { episodes: { include: { exports: { select: { kind: true, status: true } } } } },
+  });
+  if (!project) throw new Error("NOT_FOUND");
+  if (project.ownerId !== userId) throw new Error("FORBIDDEN");
+  return project;
+}
+
+/**
+ * Publishing/discovery (spec's publishing phase): makes a project visible
+ * in the public Discover feed. Only allowed once the project has a real
+ * finished episode export — publishing must point at something that
+ * actually exists, never a placeholder listing (spec §81 honesty rule).
+ */
+export async function publishProject(params: { userId: string; projectId: string }) {
+  const project = await loadOwnedProjectWithExports(params.projectId, params.userId);
+
+  const eligibility = checkProjectPublishEligibility(project.episodes);
+  if (!eligibility.eligible) throw new PublishNotEligibleError(eligibility.reason!);
+
+  const publication = await prisma.$transaction(async (tx) => {
+    const pub = await tx.publication.upsert({
+      where: { projectId: project.id },
+      create: { projectId: project.id, publishedById: params.userId, visibility: "PUBLIC" },
+      update: { visibility: "PUBLIC", publishedAt: new Date() },
+    });
+    await tx.project.update({ where: { id: project.id }, data: { visibility: "PUBLIC", status: "PUBLISHED" } });
+    return pub;
+  });
+
+  return publication;
+}
+
+/** Unpublishing removes the project from Discover and clears saved favorites — it does not delete the movie itself. */
+export async function unpublishProject(params: { userId: string; projectId: string }): Promise<void> {
+  const project = await prisma.project.findUnique({ where: { id: params.projectId } });
+  if (!project) throw new Error("NOT_FOUND");
+  if (project.ownerId !== params.userId) throw new Error("FORBIDDEN");
+
+  await prisma.$transaction(async (tx) => {
+    await tx.publication.deleteMany({ where: { projectId: project.id } });
+    await tx.project.update({ where: { id: project.id }, data: { visibility: "PRIVATE", status: "READY" } });
+  });
+}
+
+/** Toggles the current user's favorite/save on a published movie. */
+export async function toggleFavorite(params: { userId: string; publicationId: string }): Promise<{ favorited: boolean }> {
+  const publication = await prisma.publication.findUnique({ where: { id: params.publicationId } });
+  if (!publication) throw new Error("NOT_FOUND");
+
+  const existing = await prisma.favorite.findUnique({
+    where: { userId_publicationId: { userId: params.userId, publicationId: params.publicationId } },
+  });
+
+  if (existing) {
+    await prisma.$transaction([
+      prisma.favorite.delete({ where: { id: existing.id } }),
+      prisma.publication.update({ where: { id: params.publicationId }, data: { saves: { decrement: 1 } } }),
+    ]);
+    return { favorited: false };
+  }
+
+  await prisma.$transaction([
+    prisma.favorite.create({ data: { userId: params.userId, publicationId: params.publicationId } }),
+    prisma.publication.update({ where: { id: params.publicationId }, data: { saves: { increment: 1 } } }),
+  ]);
+  return { favorited: true };
+}
+
+/** Best-effort view counter for the public watch page — never blocks playback. */
+export async function recordPublicationView(publicationId: string): Promise<void> {
+  await prisma.publication.update({ where: { id: publicationId }, data: { views: { increment: 1 } } }).catch(() => {});
+}

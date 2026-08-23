@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getAssetDisplayUrl } from "@/lib/storage";
 import { providerRegistry } from "@/lib/ai";
+import { checkProjectPublishEligibility } from "@cinerra/domain";
 import { Header } from "@/components/Header";
 import { MobileNav } from "@/components/Nav";
 import { GenerationProgress, type GenerationKind } from "@/components/GenerationProgress";
@@ -11,6 +12,7 @@ import { GenerateExportButton } from "@/components/create/GenerateExportButton";
 import { GenerateClipButton } from "@/components/create/GenerateClipButton";
 import { GenerateMusicButton } from "@/components/create/GenerateMusicButton";
 import { GenerateBibleButton } from "@/components/create/GenerateBibleButton";
+import { PublishButton } from "@/components/create/PublishButton";
 import { CharacterCard } from "@/components/CharacterCard";
 import { LocationCard } from "@/components/LocationCard";
 import { PropCard } from "@/components/PropCard";
@@ -65,6 +67,7 @@ export default async function ProjectPage({
     where: { id: params.id },
     include: {
       storyBible: true,
+      publication: true,
       episodes: {
         orderBy: { number: "asc" },
         include: {
@@ -193,15 +196,27 @@ export default async function ProjectPage({
   const episodeStructure = (project.storyBible?.episodeStructure as Array<{ number: number; title: string; synopsis: string }> | null) ?? [];
   const hasScript = project.episodes.some((e) => e.script);
   const hasShots = project.scenes.some((s) => s.shots.length > 0);
+  const publishEligibility = checkProjectPublishEligibility(project.episodes);
 
   return (
     <div className="min-h-screen">
       <Header />
       <main className="mx-auto max-w-5xl px-4 pb-24 pt-8 md:px-8">
-        <h1 className="font-display text-2xl font-bold md:text-3xl">{project.title}</h1>
-        <p className="mt-1 text-sm text-cinerra-muted">
-          {project.format.replace(/_/g, " ")} · {project.aspectRatio.replace(/_/g, " ")} · {project.visualStyle.replace(/_/g, " ")}
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="font-display text-2xl font-bold md:text-3xl">{project.title}</h1>
+            <p className="mt-1 text-sm text-cinerra-muted">
+              {project.format.replace(/_/g, " ")} · {project.aspectRatio.replace(/_/g, " ")} · {project.visualStyle.replace(/_/g, " ")}
+            </p>
+          </div>
+          <PublishButton
+            projectId={project.id}
+            isPublished={Boolean(project.publication)}
+            eligible={publishEligibility.eligible}
+            ineligibleReason={publishEligibility.reason}
+            publicationId={project.publication?.id}
+          />
+        </div>
 
         {searchParams.job && (
           <div className="mt-6">

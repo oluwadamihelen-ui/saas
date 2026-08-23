@@ -5,18 +5,20 @@ import { prisma } from "@/lib/db";
 import { Header } from "@/components/Header";
 import { MobileNav, DesktopSidebar } from "@/components/Nav";
 import { ProjectCard } from "@/components/ProjectCard";
+import { DiscoverCard } from "@/components/DiscoverCard";
 import { EmptyState } from "@/components/EmptyState";
+import { listPopularPublications, listNewReleasePublications, type DiscoverCardData } from "@/lib/discover";
 
 export default async function HomePage() {
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!userId) redirect("/login");
 
-  const projects = await prisma.project.findMany({
-    where: { ownerId: userId },
-    orderBy: { updatedAt: "desc" },
-    take: 24,
-  });
+  const [projects, popular, newReleases] = await Promise.all([
+    prisma.project.findMany({ where: { ownerId: userId }, orderBy: { updatedAt: "desc" }, take: 24 }),
+    listPopularPublications(6),
+    listNewReleasePublications(6),
+  ]);
 
   const generating = projects.filter((p) => p.status === "GENERATING");
   const myMovies = projects;
@@ -78,11 +80,19 @@ export default async function HomePage() {
           </Section>
 
           <Section title="Popular">
-            <EmptyState title="Nothing published yet." description="Public movies from the Cinerra community will appear here once creators start publishing." />
+            {popular.length === 0 ? (
+              <EmptyState title="Nothing published yet." description="Public movies from the Cinerra community will appear here once creators start publishing." ctaLabel="Browse Discover" ctaHref="/discover" />
+            ) : (
+              <DiscoverGrid items={popular} />
+            )}
           </Section>
 
           <Section title="New Releases">
-            <EmptyState title="No new releases yet." description="Recently published productions will show up here." />
+            {newReleases.length === 0 ? (
+              <EmptyState title="No new releases yet." description="Recently published productions will show up here." />
+            ) : (
+              <DiscoverGrid items={newReleases} />
+            )}
           </Section>
         </main>
       </div>
@@ -156,6 +166,16 @@ function CardGrid({ projects }: { projects: Array<{ id: string; title: string; s
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
       {projects.map((p) => (
         <ProjectCard key={p.id} id={p.id} title={p.title} status={p.status} episodeCount={p.episodeCount} updatedAt={p.updatedAt} visualStyle={p.visualStyle} />
+      ))}
+    </div>
+  );
+}
+
+function DiscoverGrid({ items }: { items: DiscoverCardData[] }) {
+  return (
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+      {items.map((item) => (
+        <DiscoverCard key={item.publicationId} {...item} />
       ))}
     </div>
   );

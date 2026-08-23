@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ProviderNotConfiguredError } from "@cinerra/ai";
+import { PublishNotEligibleError } from "@cinerra/domain";
 import { FairUseLimitError } from "./fairUse";
 
 /**
@@ -13,6 +14,9 @@ export function toApiErrorResponse(error: unknown): NextResponse {
   }
   if (error instanceof ProviderNotConfiguredError) {
     return NextResponse.json({ error: error.message }, { status: 503 });
+  }
+  if (error instanceof PublishNotEligibleError) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
   }
   if (error instanceof Error && error.message === "UNAUTHORIZED") {
     return NextResponse.json({ error: "Please sign in to continue." }, { status: 401 });

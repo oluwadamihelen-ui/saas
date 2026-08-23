@@ -5,7 +5,9 @@ import { prisma } from "@/lib/db";
 import { Header } from "@/components/Header";
 import { MobileNav } from "@/components/Nav";
 import { ProjectCard } from "@/components/ProjectCard";
+import { DiscoverCard } from "@/components/DiscoverCard";
 import { EmptyState } from "@/components/EmptyState";
+import { listUserFavorites } from "@/lib/discover";
 
 const TABS = [
   { key: "creations", label: "My Creations" },
@@ -40,9 +42,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: { t
         <div className="mt-6">
           {tab === "creations" && <MyCreations userId={userId} />}
           {tab === "history" && <History userId={userId} />}
-          {tab === "collection" && (
-            <EmptyState title="No saved movies yet." description="Movies you save from Discover will appear here once publishing is enabled." />
-          )}
+          {tab === "collection" && <Collection userId={userId} />}
         </div>
       </main>
       <MobileNav />
@@ -59,6 +59,20 @@ async function MyCreations({ userId }: { userId: string }) {
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
       {projects.map((p) => (
         <ProjectCard key={p.id} id={p.id} title={p.title} status={p.status} episodeCount={p.episodeCount} updatedAt={p.updatedAt} visualStyle={p.visualStyle} />
+      ))}
+    </div>
+  );
+}
+
+async function Collection({ userId }: { userId: string }) {
+  const favorites = await listUserFavorites(userId);
+  if (favorites.length === 0) {
+    return <EmptyState title="No saved movies yet." description="Movies you save from Discover will appear here." ctaLabel="Browse Discover" ctaHref="/discover" />;
+  }
+  return (
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+      {favorites.map((item) => (
+        <DiscoverCard key={item.publicationId} {...item} />
       ))}
     </div>
   );
