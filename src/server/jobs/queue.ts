@@ -15,11 +15,13 @@ export function getRedisConnection(): IORedis {
 export type ProjectGenerateJobData = { projectId: string };
 export type SceneImageJobData = { sceneId: string; projectId: string };
 export type SceneVoiceJobData = { sceneId: string; projectId: string };
+export type ProjectRenderJobData = { renderJobId: string };
 
 const globalForQueues = globalThis as unknown as {
   projectGenerateQueue?: Queue<ProjectGenerateJobData>;
   sceneImageQueue?: Queue<SceneImageJobData>;
   sceneVoiceQueue?: Queue<SceneVoiceJobData>;
+  projectRenderQueue?: Queue<ProjectRenderJobData>;
 };
 
 const defaultJobOptions = { removeOnComplete: 100, removeOnFail: 100 };
@@ -52,4 +54,14 @@ export function getSceneVoiceQueue(): Queue<SceneVoiceJobData> {
     });
   }
   return globalForQueues.sceneVoiceQueue;
+}
+
+export function getProjectRenderQueue(): Queue<ProjectRenderJobData> {
+  if (!globalForQueues.projectRenderQueue) {
+    globalForQueues.projectRenderQueue = new Queue<ProjectRenderJobData>("project-render", {
+      connection: getRedisConnection(),
+      defaultJobOptions,
+    });
+  }
+  return globalForQueues.projectRenderQueue;
 }

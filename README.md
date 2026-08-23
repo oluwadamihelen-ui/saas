@@ -13,9 +13,10 @@ finished export, in one pipeline.
 - **Jobs/queue**: BullMQ + Redis (wired in Phase B for async AI generation)
 - **Styling**: Tailwind CSS v4 with an original design token set (see
   `src/app/globals.css`)
-- **Video rendering**: Remotion (Phase D)
+- **Video rendering**: Remotion (`@remotion/renderer` + `@remotion/bundler`),
+  driven headlessly by a Chrome/Chromium binary
 - **Storage**: S3-compatible object storage behind a `StorageProvider`
-  abstraction (Phase B/D)
+  abstraction (local-disk implementation for dev)
 
 ## Local development
 
@@ -55,6 +56,11 @@ npx auth secret   # writes a fresh AUTH_SECRET into .env
 
 See `.env.example` for the full list — AI/image/video/voice/music providers
 default to `mock`, so the app runs completely without external API keys.
+`REMOTION_BROWSER_EXECUTABLE` should point at a Chrome/Chromium binary
+(Remotion otherwise tries to download its own `chrome-headless-shell`,
+which needs network access to Remotion's CDN); `APP_URL` must be reachable
+by that browser process so it can fetch scene images/audio from
+`public/uploads` while rendering.
 
 ### Install & run
 
@@ -90,15 +96,21 @@ src/
     captions/              # auth-scoped caption repository (ownership via scene->project)
     providers/               # AIProvider/ImageProvider/VoiceProvider/MusicProvider + mock/ implementations
     pipeline/                  # generation stages: analyze-script, build-storyboard,
-                                #   generate-scene-image, generate-scene-voice, generate-captions
+                                #   generate-scene-image, generate-scene-voice,
+                                #   generate-captions, render-project
     jobs/                       # BullMQ queues (queue.ts) + worker process (worker.ts)
     storage/                     # StorageProvider (local dev impl; swap in S3/R2 for prod)
+    render/                       # auth-scoped RenderJob repository
   components/
     ui/                # base design system (Button, Card, Input, Badge...)
     marketing/           # public site sections/forms
     dashboard/            # authenticated app components
       editor/               # the LEFT/CENTER/BOTTOM/RIGHT timeline editor
   lib/                # validation schemas, plans/credit config, utilities
+  remotion/           # the video composition Remotion renders server-side:
+                       #   entry.tsx (registerRoot), StoryComposition.tsx,
+                       #   Scene.tsx (Ken Burns + captions + narration audio),
+                       #   BackgroundMusic.tsx (ducking/fade volume automation)
 prisma/
   schema.prisma        # full data model
   seed.ts               # system voice presets + music tracks (npx prisma db seed)
@@ -165,6 +177,28 @@ captions list editor) and project-level background music (pick a track,
 set volume/fade/loop, with duck-under-narration applied live via JS volume
 ducking during playback — see `src/components/dashboard/editor/`).
 
+## Rendering & export (`/projects/:id/export`)
+
+`POST /api/projects/:id/render` creates a `RenderJob` and enqueues a
+`project-render` BullMQ job (kept at worker concurrency 1 — it drives a
+headless Chrome instance and shouldn't run several at once per process).
+`runRenderProject` (`src/server/pipeline/render-project.ts`) bundles
+`src/remotion/entry.tsx` once per worker process lifetime (cached), builds
+`RenderInputProps` from the project's scenes/captions/music (converting
+`public/uploads` paths to absolute URLs via `APP_URL` so the headless
+browser can fetch them), then calls Remotion's `renderMedia`. Progress
+updates from Remotion's single 0..1 callback are bucketed into the stage
+labels a user actually cares about — Preparing render → Rendering scenes →
+Mixing audio → Encoding video → Finalizing — written to `RenderJob.progress`/
+`stage` for the export page to poll. The finished MP4 is uploaded through
+`StorageProvider` and set as `Project.finalVideoUrl`; the export page then
+shows a real `<video>` preview, a download link, a copy-link share action,
+and a way to render another version. Verified end-to-end: a real 3-scene
+project rendered to a structurally valid MP4 (parsed its `moov`/`mvhd`/`tkhd`
+boxes directly) with the correct 1280×720 dimensions, a duration matching
+the summed scene timings, and both a video and an audio track muxed
+together.
+
 ## What's implemented vs. what's next
 
 **Phase A — Foundation**: architecture, Postgres schema, Auth.js, protected
@@ -177,16 +211,20 @@ scene image generation pipeline, full scene CRUD (edit, duplicate, delete,
 reorder, regenerate, add), and a full character library (create/edit/delete,
 generate a mock portrait, or upload your own reference image).
 
-**Phase C (this phase) — Creator experience**: mock `VoiceProvider`/
-`MusicProvider`, a seeded system voice library (14 voices across 7 styles)
-and music library (9 moods), per-scene voice generation with adjustable
-speed/pitch, auto-generated + manually editable captions, project-level
-background music with volume/fade/loop/duck settings, and the timeline
-editor described above.
+**Phase C — Creator experience**: mock `VoiceProvider`/`MusicProvider`, a
+seeded system voice library (14 voices across 7 styles) and music library
+(9 moods), per-scene voice generation with adjustable speed/pitch,
+auto-generated + manually editable captions, project-level background music
+with volume/fade/loop/duck settings, and the timeline editor.
 
-**Not yet built**: Remotion rendering/export (Phase D — the editor previews
-scenes client-side but does not yet composite a final video file), and
-Stripe billing (Phase E). Nothing in this codebase fakes AI output — every
-generated asset (images, storyboards, narration audio, music) is real
-mock-provider output produced end-to-end, not hardcoded fixtures, and areas
-not yet built show honest "coming in Phase X" states.
+**Phase D (this phase) — Rendering**: real Remotion-based video composition
+and MP4 export, described above.
+
+**Not yet built**: Stripe billing (Phase E — the credit *ledger* already
+works end-to-end and gates every paid operation including render; this
+phase adds actual payment processing and plan upgrades) and production
+hardening (Phase F — broader automated test coverage, structured logging,
+rate-limit tuning, a security pass). Nothing in this codebase fakes AI
+output or a fake render — every generated asset (images, storyboards,
+narration audio, music, and now the final composited video) is real
+mock-provider/Remotion output produced end-to-end, not hardcoded fixtures.

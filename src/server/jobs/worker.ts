@@ -6,10 +6,12 @@ import {
   type ProjectGenerateJobData,
   type SceneImageJobData,
   type SceneVoiceJobData,
+  type ProjectRenderJobData,
 } from "./queue";
 import { runProjectGeneration, markProjectReadyIfComplete } from "@/server/pipeline/orchestrator";
 import { runGenerateSceneImage } from "@/server/pipeline/generate-scene-image";
 import { runGenerateSceneVoice } from "@/server/pipeline/generate-scene-voice";
+import { runRenderProject } from "@/server/pipeline/render-project";
 import { prisma } from "@/server/db/client";
 
 const connection = getRedisConnection();
@@ -49,7 +51,19 @@ const sceneVoiceWorker = new Worker<SceneVoiceJobData>(
   { connection }
 );
 
-for (const worker of [projectGenerateWorker, sceneImageWorker, sceneVoiceWorker]) {
+// Rendering bundles + drives a headless browser — kept at concurrency 1 so a
+// single worker process doesn't run multiple Chrome instances at once.
+const projectRenderWorker = new Worker<ProjectRenderJobData>(
+  "project-render",
+  async (job) => {
+    await runRenderProject(job.data.renderJobId);
+  },
+  { connection, concurrency: 1 }
+);
+
+const workers = [projectGenerateWorker, sceneImageWorker, sceneVoiceWorker, projectRenderWorker];
+
+for (const worker of workers) {
   worker.on("failed", (job, err) => {
     console.error(`[worker] job ${job?.id} (${job?.queueName}) failed:`, err.message);
   });
@@ -58,9 +72,9 @@ for (const worker of [projectGenerateWorker, sceneImageWorker, sceneVoiceWorker]
   });
 }
 
-console.log("Generation worker started — listening on queues: project-generate, scene-image, scene-voice");
+console.log("Generation worker started — listening on queues: project-generate, scene-image, scene-voice, project-render");
 
 process.on("SIGTERM", async () => {
-  await Promise.all([projectGenerateWorker.close(), sceneImageWorker.close(), sceneVoiceWorker.close()]);
+  await Promise.all(workers.map((w) => w.close()));
   process.exit(0);
 });

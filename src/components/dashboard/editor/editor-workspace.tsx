@@ -152,6 +152,9 @@ export function EditorWorkspace({
           <ArrowLeft className="h-4 w-4" /> Back to project
         </Link>
         <h1 className="font-display text-sm font-semibold">{project.title} — Editor</h1>
+        <Link href={`/projects/${project.id}/export`} className="text-sm font-medium text-brand-500 hover:text-brand-600">
+          Export →
+        </Link>
       </div>
 
       {scenes.length === 0 ? (

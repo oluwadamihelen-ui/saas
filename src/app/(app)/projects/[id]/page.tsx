@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Clapperboard } from "lucide-react";
+import { ArrowLeft, Clapperboard, Download } from "lucide-react";
 import { auth } from "@/server/auth";
 import { getProjectForUser, ProjectNotFoundError } from "@/server/projects/repository";
 import { Card } from "@/components/ui/card";
@@ -55,9 +55,14 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <div className="flex items-center gap-2">
           <Badge variant={STATUS_VARIANT[project.status]}>{project.status.replaceAll("_", " ")}</Badge>
           {project.scenes.length > 0 && (
-            <Button href={`/projects/${project.id}/edit`} size="sm">
-              <Clapperboard className="h-4 w-4" /> Open Editor
-            </Button>
+            <>
+              <Button href={`/projects/${project.id}/edit`} size="sm" variant="secondary">
+                <Clapperboard className="h-4 w-4" /> Open Editor
+              </Button>
+              <Button href={`/projects/${project.id}/export`} size="sm">
+                <Download className="h-4 w-4" /> Export
+              </Button>
+            </>
           )}
         </div>
       </div>
