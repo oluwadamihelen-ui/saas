@@ -69,15 +69,15 @@ A real viewer-coin economy and 50/50 creator revenue split now exists — built 
 
 **Core financial system (built, tested against real Postgres):**
 - **Wallet + ledger**: every user has a `Wallet` (a cached balance) backed by an append-only `WalletTransaction` ledger — the ledger is the source of truth; the cached balance is always written in the same DB transaction as the ledger row that changes it, never on its own. Nothing is ever deleted from the ledger; a correction is always a new row referencing the original via `reversesId`.
-- **Coin purchases**: admin-configurable `CoinPackage` rows (coins, bonus coins, fiat price, active flag — nothing hard-coded), a real Stripe one-time-payment Checkout session, and a webhook handler that only credits coins once Stripe confirms `checkout.session.completed` — never on the strength of the frontend's own "success" redirect. Idempotent: `CoinPurchase.stripeCheckoutSessionId` is unique, so a replayed webhook event finds the purchase already `COMPLETED` and no-ops.
+- **Coin purchases**: admin-configurable `CoinPackage` rows (coins, bonus coins, fiat price, active flag — nothing hard-coded), a real one-time-payment checkout on either Paystack or Korapay (viewer's choice), and a webhook handler that only credits coins once the provider confirms `charge.success` — never on the strength of the frontend's own "success" redirect. Idempotent: `CoinPurchase.providerReference` is unique (a reference *we* generate at checkout and the provider echoes back on every webhook for that charge), so a replayed webhook event finds the purchase already `COMPLETED` and no-ops.
 - **Content pricing**: a project is either free or paid at exactly one scope — the whole movie, or per episode (scene-level pricing exists in the data model and domain logic per the spec, but isn't exposed in the creator UI or enforced on the watch page yet, since there's no per-scene exported/streamable video in this codebase — only per-episode export exists — so there's nothing to actually gate at that granularity; wiring that up is future work once scene-level export exists). Admin-configurable suggested price ranges live in a `PlatformSettings` singleton row, never hard-coded.
 - **Entitlements + the atomic unlock**: `unlockContent` (`apps/web/src/lib/monetization.ts`) is the one critical transactional operation — checks for an existing entitlement, resolves price and publisher **server-side from the database** (never trusting anything the client sends), locks the wallet inside one DB transaction, deducts coins, creates the entitlement, splits revenue 50/50 (configurable via `PlatformSettings.publisherRevenueShareBps`, in basis points — never hard-coded as a literal 50/50 in application code), and commits everything together or rolls back everything together. Concurrency safety comes from `WalletTransaction.idempotencyKey`'s database-level unique constraint, not from the entitlement check alone — a losing concurrent request's entire transaction aborts on that constraint, so it never touches the wallet balance.
 - **Rounding**: the publisher's share is `floor(price × shareBps / 10000)`; the platform absorbs the remainder, so a viewer's debit always exactly equals `publisherShare + platformShare` with no leakage. Documented once, applied everywhere.
 - **True double-entry bookkeeping**: a seeded, non-login "Cinerra Platform" system account holds its own Wallet, so every settled unlock credits three real ledger rows (viewer debited, publisher credited, platform credited) that always sum to zero — not a derived "platform revenue" figure trusted without a matching ledger entry.
 - **Reversals** (`reverseContentUnlock`, admin-only): mirrors the original transaction — viewer refunded, publisher and platform both debited back — and marks the `CreatorEarning` `REVERSED` so it can never be paid out, whether or not it had already cleared its settlement hold. Revoking the viewer's access is a separate policy flag, not automatic.
-- **Refunds on the purchase side**: a Stripe `charge.refunded` webhook reverses the original `COIN_PURCHASE` ledger credit (never deleting it) and marks the `CoinPurchase` `REFUNDED`; idempotent the same way completion is.
+- **Refunds on the purchase side**: a Paystack `refund.processed` or Korapay `refund.success` webhook reverses the original `COIN_PURCHASE` ledger credit (never deleting it) and marks the `CoinPurchase` `REFUNDED`; idempotent the same way completion is.
 
-Verified directly against a real Postgres instance, not just typechecked: two concurrent identical unlock requests produce exactly one charge and one entitlement (never a double charge); a sequential re-unlock is a no-op; insufficient balance blocks cleanly with no partial state; a 21-coin price splits 10/11 exactly as documented; a full reversal restores wallet balances to their pre-unlock state and a second reversal attempt is rejected; a duplicate Stripe webhook delivery (both purchase-completed and refund) never double-applies.
+Verified directly against a real Postgres instance, not just typechecked: two concurrent identical unlock requests produce exactly one charge and one entitlement (never a double charge); a sequential re-unlock is a no-op; insufficient balance blocks cleanly with no partial state; a 21-coin price splits 10/11 exactly as documented; a full reversal restores wallet balances to their pre-unlock state and a second reversal attempt is rejected; a duplicate webhook delivery (both purchase-completed and refund, on either provider) never double-applies.
 
 **Three real bugs were found and fixed by that testing, not by inspection** — worth calling out because each is exactly the kind of subtle correctness issue a financial system can't ship with:
 1. The `CONTENT_UNLOCK` ledger row's `referenceId` was never actually set (an ordering bug — the entitlement didn't exist yet when the wallet transaction was recorded), which would have made a later reversal unable to find its own original transaction to reverse. Fixed by creating the entitlement first.
@@ -93,11 +93,11 @@ Verified directly against a real Postgres instance, not just typechecked: two co
 - **Promotional coins**, coin expiration, and the admin UI for editing `PlatformSettings` itself (the settings row exists and is read everywhere pricing/splits are calculated, but there's no admin screen to change it yet — only direct DB access).
 - Client-side (in-app) viewing-milestone tracking — `ViewingEvent` is scaffolded in the schema but not wired into the player.
 
-**Remaining before launch** (not part of the original phased roadmap, but needed for a real public launch): closing the Google-OAuth terms-acceptance gap noted above, real ESLint setup (`next lint` has never been configured, per the CI note above), client-side error capture (noted above), and the coin-economy gaps listed just above (creator payouts, fraud controls, and the settlement-period state-machine transition — the account-deletion cascade interaction has since been fixed, see the coin-economy notes above), and migrating coin purchases off Stripe onto Paystack/Korapay to match subscriptions and payouts.
+**Remaining before launch** (not part of the original phased roadmap, but needed for a real public launch): closing the Google-OAuth terms-acceptance gap noted above, real ESLint setup (`next lint` has never been configured, per the CI note above), client-side error capture (noted above), and the coin-economy gaps listed just above (creator payouts, fraud controls, and the settlement-period state-machine transition — the account-deletion cascade interaction and the Stripe-to-Paystack/Korapay migration have both since been completed, see the notes above).
 
 ## Tech stack
 
-Next.js 14 (App Router) · TypeScript · Tailwind · PostgreSQL + Prisma · Redis + BullMQ · S3-compatible storage · Paystack + Stripe · Auth.js (NextAuth v5) · Vitest
+Next.js 14 (App Router) · TypeScript · Tailwind · PostgreSQL + Prisma · Redis + BullMQ · S3-compatible storage · Paystack + Korapay · Auth.js (NextAuth v5) · Vitest
 
 ## Prerequisites
 
@@ -118,7 +118,7 @@ pnpm install
 cp .env.example .env
 ```
 
-Fill in `.env`. See the comments in `.env.example` for what each variable does. Required to boot: `DATABASE_URL`, `REDIS_URL`, `STORAGE_*`, `AUTH_SECRET`. Everything else (Paystack, Stripe, AI provider keys, Google OAuth) is optional — the app runs without them, and the relevant features honestly report "not configured" instead of faking output.
+Fill in `.env`. See the comments in `.env.example` for what each variable does. Required to boot: `DATABASE_URL`, `REDIS_URL`, `STORAGE_*`, `AUTH_SECRET`. Everything else (Paystack, Korapay, AI provider keys, Google OAuth) is optional — the app runs without them, and the relevant features honestly report "not configured" instead of faking output.
 
 Generate `AUTH_SECRET`:
 
@@ -170,10 +170,11 @@ The `AiModel` table (seeded by `pnpm db:seed`) is the admin-editable routing tab
 3. In your Paystack dashboard, add a webhook endpoint pointed at `https://yourapp.com/api/webhooks/paystack`.
 4. There's no hosted customer portal on Paystack (or Korapay) the way Stripe has — subscription cancellation is a direct in-app action (`/profile` → "Cancel subscription") that calls Paystack's `/subscription/disable` API instead.
 
-**Coin purchases (Stripe, for now)** — still run on Stripe pending their own migration to Paystack/Korapay:
-1. Set `STRIPE_SECRET_KEY` in `.env`.
-2. For local webhook testing: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`, then set `STRIPE_WEBHOOK_SECRET` to the value it prints.
-3. In production, add a webhook endpoint pointed at `https://yourapp.com/api/webhooks/stripe` subscribed to `checkout.session.completed` and `charge.refunded`.
+**Coin purchases (Paystack and/or Korapay, viewer's choice)**:
+1. Set `PAYSTACK_SECRET_KEY` and/or `KORAPAY_SECRET_KEY` in `.env` — the buy-Coins page only offers whichever provider(s) are actually configured, and shows a provider picker only when both are.
+2. Korapay wants the checkout amount in the *major* currency unit (naira, not kobo) — the opposite of Paystack's minor-unit convention — `createCoinPurchaseCheckout` converts for you; nothing to configure here.
+3. In your Korapay dashboard, add a webhook endpoint pointed at `https://yourapp.com/api/webhooks/korapay`; Korapay signs webhook payloads with `x-korapay-signature`, an HMAC-SHA256 of just the `data` object (not the full body) using the secret key.
+4. Paystack's webhook endpoint is the same one subscriptions use (`https://yourapp.com/api/webhooks/paystack`) — it dispatches by event type, so no separate setup is needed for coin purchases once step 3 of the subscriptions setup above is done.
 
 ## 7. Local development
 
@@ -203,7 +204,7 @@ pnpm typecheck      # TypeScript project-wide
 
 ## 10. Webhook configuration
 
-Two inbound webhooks exist today: `POST /api/webhooks/paystack` (subscription lifecycle, signature-verified against `PAYSTACK_SECRET_KEY` itself — Paystack has no separate webhook-signing secret) and `POST /api/webhooks/stripe` (coin purchases, signature-verified against `STRIPE_WEBHOOK_SECRET`). AI provider webhooks (e.g. Runway task completion) are not yet wired — the current video provider adapter polls instead; switching to a webhook-driven flow is a worker-side change only, the provider interface in `packages/ai` doesn't need to change.
+Two inbound webhooks exist today: `POST /api/webhooks/paystack` (subscription lifecycle AND coin purchases on Paystack, dispatched by event type, signature-verified against `PAYSTACK_SECRET_KEY` itself — Paystack has no separate webhook-signing secret) and `POST /api/webhooks/korapay` (coin purchases on Korapay, signature-verified against `KORAPAY_SECRET_KEY` — HMAC-SHA256 of just the `data` object, not the full body). AI provider webhooks (e.g. Runway task completion) are not yet wired — the current video provider adapter polls instead; switching to a webhook-driven flow is a worker-side change only, the provider interface in `packages/ai` doesn't need to change.
 
 ## Repository layout
 
@@ -213,7 +214,7 @@ apps/
   worker/    BullMQ worker — generation job processing
 packages/
   ai/        Provider abstraction: interfaces, registry, router, adapters
-  billing/   Paystack (subscriptions) + Stripe (coin purchases) wrappers + fair-use policy
+  billing/   Paystack + Korapay wrappers + fair-use policy
   config/    Env validation (Zod) + password hashing, shared everywhere
   database/  Prisma schema, client, seed script
   domain/    Agents (Story Architect, Screenwriter, Character/Location/Prop

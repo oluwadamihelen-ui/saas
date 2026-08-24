@@ -8,6 +8,26 @@ import {
 } from "@cinerra/billing";
 import { prisma } from "./db";
 import { env } from "./env";
+import { handleCoinPurchaseCompleted, handleCoinPurchaseRefunded } from "./coinPurchases";
+
+interface PaystackChargeEventData {
+  reference: string;
+  id: number;
+  status: string;
+  customer: { email: string };
+  metadata?: { type?: string } | null;
+}
+
+// Paystack's Refund API response's `data.transaction` object documents a
+// `reference` field pointing back at the original charge — the
+// refund.processed webhook is understood to mirror that response shape,
+// though this hasn't been confirmed against a live payload (no test
+// credentials available in this environment). Worth double-checking
+// against a real refund.processed delivery before relying on it in
+// production.
+interface PaystackRefundEventData {
+  transaction: { reference: string };
+}
 
 export class PaystackNotConfiguredError extends Error {
   constructor() {
@@ -60,13 +80,17 @@ export async function createSubscriptionCheckout(params: { userId: string; planK
 }
 
 /**
- * Paystack webhooks are the ONLY source of subscription truth (spec §44,
- * same rule as the earlier Stripe integration). Subscription-lifecycle
- * events are matched to a local user by customer email rather than the
- * metadata passed at checkout — Paystack doesn't reliably echo arbitrary
- * transaction metadata back onto every subscription event, but every
- * event does carry the customer object, and emails are unique in this
- * schema.
+ * The single Paystack webhook entry point — signature-verified once here,
+ * then dispatched by event type. Paystack webhooks are the ONLY source of
+ * both subscription and coin-purchase truth (spec §44, same rule as the
+ * earlier Stripe integration). Subscription-lifecycle events are matched
+ * to a local user by customer email rather than the metadata passed at
+ * checkout — Paystack doesn't reliably echo arbitrary transaction metadata
+ * back onto every subscription event, but every event does carry the
+ * customer object, and emails are unique in this schema. Coin-purchase
+ * events, by contrast, ARE tied directly to the original charge (not a
+ * derived subscription object), so those are matched by the reference we
+ * generated at checkout instead.
  */
 export async function handlePaystackWebhookEvent(rawBody: string, signature: string | null): Promise<void> {
   if (!env.PAYSTACK_SECRET_KEY) throw new PaystackNotConfiguredError();
@@ -75,6 +99,20 @@ export async function handlePaystackWebhookEvent(rawBody: string, signature: str
   }
 
   const event = JSON.parse(rawBody) as PaystackWebhookEvent;
+
+  if (event.event === "charge.success") {
+    const data = event.data as PaystackChargeEventData;
+    if (data.metadata?.type === "coin_purchase") {
+      await handleCoinPurchaseCompleted({ reference: data.reference, providerTransactionId: String(data.id) });
+    }
+    return;
+  }
+  if (event.event === "refund.processed") {
+    const data = event.data as PaystackRefundEventData;
+    await handleCoinPurchaseRefunded(data.transaction.reference);
+    return;
+  }
+
   if (!HANDLED_PAYSTACK_SUBSCRIPTION_EVENTS.has(event.event)) return;
 
   if (event.event === "invoice.payment_failed") {

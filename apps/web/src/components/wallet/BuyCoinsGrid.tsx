@@ -10,11 +10,16 @@ interface CoinPackage {
   currency: string;
 }
 
+type Provider = "PAYSTACK" | "KORAPAY";
+
+const PROVIDER_LABEL: Record<Provider, string> = { PAYSTACK: "Paystack", KORAPAY: "Korapay" };
+
 function formatPrice(cents: number, currency: string) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(cents / 100);
 }
 
-export function BuyCoinsGrid({ packages }: { packages: CoinPackage[] }) {
+export function BuyCoinsGrid({ packages, availableProviders }: { packages: CoinPackage[]; availableProviders: Provider[] }) {
+  const [provider, setProvider] = useState<Provider>(availableProviders[0]);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,7 +30,7 @@ export function BuyCoinsGrid({ packages }: { packages: CoinPackage[] }) {
       const res = await fetch("/api/coins/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ coinPackageId }),
+        body: JSON.stringify({ coinPackageId, provider }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Couldn't start checkout.");
@@ -38,6 +43,22 @@ export function BuyCoinsGrid({ packages }: { packages: CoinPackage[] }) {
 
   return (
     <div>
+      {availableProviders.length > 1 && (
+        <div className="mb-3 flex gap-2">
+          {availableProviders.map((p) => (
+            <button
+              key={p}
+              onClick={() => setProvider(p)}
+              disabled={loadingId !== null}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                provider === p ? "bg-cinerra-accent text-white" : "bg-cinerra-surface text-cinerra-muted hover:text-cinerra-text"
+              }`}
+            >
+              Pay with {PROVIDER_LABEL[p]}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {packages.map((pkg) => (
           <button

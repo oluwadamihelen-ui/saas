@@ -38,9 +38,9 @@ export default function PrivacyPage() {
                 documents, and the characters, images, video, audio, and exports Cinerra generates for you.
               </li>
               <li>
-                <span className="text-cinerra-text">Billing information:</span> if you subscribe to a paid plan, payment
-                details are collected and processed directly by Stripe — we don&rsquo;t receive or store your card
-                number.
+                <span className="text-cinerra-text">Billing information:</span> if you subscribe to a paid plan or buy
+                Coins, payment details are collected and processed directly by Paystack and/or Korapay (your choice,
+                where both are offered) — we don&rsquo;t receive or store your card number.
               </li>
               <li>
                 <span className="text-cinerra-text">Usage data:</span> basic technical data needed to operate the
@@ -53,7 +53,7 @@ export default function PrivacyPage() {
           <LegalSection title="3. How we use your information">
             <ul className="list-disc pl-5">
               <li>To provide the service — creating your account, running generations, and assembling exports.</li>
-              <li>To process payments and manage subscriptions through Stripe.</li>
+              <li>To process payments and manage subscriptions through Paystack and/or Korapay.</li>
               <li>To send you service-related messages, such as generation status or account notices.</li>
               <li>To maintain the security and integrity of the platform, including enforcing our Terms of Service.</li>
             </ul>
@@ -64,8 +64,8 @@ export default function PrivacyPage() {
               To generate content, the prompts and material you submit are sent to the AI provider(s) configured for
               your workspace — currently drawn from Anthropic (story/script text), OpenAI (images), Runway (video), and
               ElevenLabs (voice, sound effects, and music) — solely to produce your requested output. Generated files are
-              stored with our object storage provider. Payments are processed by Stripe. We don&rsquo;t sell your
-              personal information to anyone.
+              stored with our object storage provider. Payments are processed by Paystack and/or Korapay. We
+              don&rsquo;t sell your personal information to anyone.
             </p>
           </LegalSection>
 

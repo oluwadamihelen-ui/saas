@@ -10,9 +10,6 @@
     "lint": "echo 'no-op'",
     "test": "vitest run"
   },
-  "dependencies": {
-    "stripe": "^16.8.0"
-  },
   "devDependencies": {
     "typescript": "^5.5.4",
     "vitest": "^2.0.5"

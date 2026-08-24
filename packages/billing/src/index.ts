@@ -1,3 +1,3 @@
 export * from "./fairUse.js";
-export * from "./stripeClient.js";
 export * from "./paystackClient.js";
+export * from "./korapayClient.js";

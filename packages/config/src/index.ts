@@ -7,9 +7,9 @@ export { hashPassword, verifyPassword } from "./password.js";
  * application is declared here — nothing speculative (spec §71).
  *
  * Required vs optional matters: infrastructure (DB/Redis/storage/auth) is
- * required to boot at all. AI provider keys, Stripe, and OAuth are optional
- * — their absence must degrade to an honest "not configured" state (spec §81),
- * never a crash and never a fake success.
+ * required to boot at all. AI provider keys, Paystack/Korapay, and OAuth are
+ * optional — their absence must degrade to an honest "not configured" state
+ * (spec §81), never a crash and never a fake success.
  */
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -38,12 +38,11 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
 
-  // --- Billing: coin purchases still run on Stripe pending its own
-  // migration; subscriptions run on Paystack (Korapay has no subscription
-  // product — see the PaymentProvider enum's comment in schema.prisma) ---
-  STRIPE_SECRET_KEY: z.string().optional(),
-  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  // --- Billing: subscriptions run on Paystack only (Korapay has no
+  // subscription product — see the PaymentProvider enum's comment in
+  // schema.prisma); coin purchases run on either, viewer's choice ---
   PAYSTACK_SECRET_KEY: z.string().optional(),
+  KORAPAY_SECRET_KEY: z.string().optional(),
 
   // --- AI providers (all optional — router degrades honestly if unset) ---
   ANTHROPIC_API_KEY: z.string().optional(),
@@ -88,8 +87,8 @@ export const isProviderConfigured = {
   openai: (env: Env) => Boolean(env.OPENAI_API_KEY),
   runway: (env: Env) => Boolean(env.RUNWAYML_API_SECRET),
   elevenlabs: (env: Env) => Boolean(env.ELEVENLABS_API_KEY),
-  stripe: (env: Env) => Boolean(env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET),
   paystack: (env: Env) => Boolean(env.PAYSTACK_SECRET_KEY),
+  korapay: (env: Env) => Boolean(env.KORAPAY_SECRET_KEY),
   googleOAuth: (env: Env) => Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
   sentry: (env: Env) => Boolean(env.SENTRY_DSN),
   email: (env: Env) => Boolean(env.RESEND_API_KEY),

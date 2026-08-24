@@ -1,12 +1,12 @@
-import { createCoinCheckoutSession, createStripeClient } from "@cinerra/billing";
-import type Stripe from "stripe";
+import { createPaystackClient, createKorapayClient, verifyKorapayWebhookSignature, type KorapayWebhookEvent, type KorapayChargeEventData, type KorapayRefundEventData } from "@cinerra/billing";
+import type { PaymentProvider } from "@cinerra/database";
 import { prisma } from "./db";
 import { env } from "./env";
 import { recordWalletTransaction, isUniqueConstraintViolation } from "./wallet";
 
-export class StripeNotConfiguredError extends Error {
-  constructor() {
-    super("Buying coins isn't available yet — payments aren't configured on this server.");
+export class PaymentsNotConfiguredError extends Error {
+  constructor(provider: PaymentProvider) {
+    super(`Buying coins with ${provider === "PAYSTACK" ? "Paystack" : "Korapay"} isn't available yet — it isn't configured on this server.`);
   }
 }
 export class CoinPackageUnavailableError extends Error {
@@ -14,40 +14,67 @@ export class CoinPackageUnavailableError extends Error {
     super("That coin package isn't available.");
   }
 }
+export class KorapayNotConfiguredError extends Error {
+  constructor() {
+    super("Korapay isn't configured on this server.");
+  }
+}
+export class InvalidKorapayWebhookSignatureError extends Error {
+  constructor() {
+    super("Invalid webhook signature.");
+  }
+}
 
-export async function createCoinPurchaseCheckout(params: { userId: string; coinPackageId: string }) {
-  if (!env.STRIPE_SECRET_KEY) throw new StripeNotConfiguredError();
-
+export async function createCoinPurchaseCheckout(params: { userId: string; coinPackageId: string; provider: PaymentProvider }): Promise<{ url: string }> {
   const [user, coinPackage] = await Promise.all([
     prisma.user.findUniqueOrThrow({ where: { id: params.userId } }),
     prisma.coinPackage.findUnique({ where: { id: params.coinPackageId } }),
   ]);
   if (!coinPackage || !coinPackage.active) throw new CoinPackageUnavailableError();
 
-  const stripe = createStripeClient(env.STRIPE_SECRET_KEY);
   const totalCoins = coinPackage.coins + coinPackage.bonusCoins;
+  // Generated here (not by the provider) so it can double as this
+  // purchase's idempotency key — both Paystack and Korapay accept a
+  // caller-supplied reference and echo it back verbatim on every webhook
+  // for the resulting charge.
+  const reference = `coin:${params.userId}:${coinPackage.id}:${Date.now()}`;
 
-  const session = await createCoinCheckoutSession(stripe, {
-    userId: params.userId,
-    customerEmail: user.email,
-    productName: `${coinPackage.coins.toLocaleString()} Cinerra Coins${coinPackage.bonusCoins ? ` (+${coinPackage.bonusCoins} bonus)` : ""}`,
-    amountCents: coinPackage.priceCents,
-    currency: coinPackage.currency,
-    successUrl: `${env.APP_BASE_URL}/wallet?checkout=success`,
-    cancelUrl: `${env.APP_BASE_URL}/wallet?checkout=cancelled`,
-    // The webhook resolves everything it needs (package, coins, price) from
-    // this session id joined back to the CoinPurchase row it creates below
-    // — never from anything Stripe echoes back that could be tampered with
-    // client-side, since Stripe's own webhook signature only guarantees the
-    // event itself is authentic, not that a client didn't manipulate an
-    // unrelated field.
-    metadata: { type: "coin_purchase", userId: params.userId, coinPackageId: coinPackage.id },
-  });
+  let url: string;
+  if (params.provider === "PAYSTACK") {
+    if (!env.PAYSTACK_SECRET_KEY) throw new PaymentsNotConfiguredError("PAYSTACK");
+    const paystack = createPaystackClient(env.PAYSTACK_SECRET_KEY);
+    const result = await paystack.initializeTransaction({
+      email: user.email,
+      amount: coinPackage.priceCents, // Paystack wants the minor unit (kobo)
+      reference,
+      callbackUrl: `${env.APP_BASE_URL}/wallet?checkout=success`,
+      metadata: { type: "coin_purchase", userId: params.userId, coinPackageId: coinPackage.id },
+    });
+    url = result.authorization_url;
+  } else {
+    if (!env.KORAPAY_SECRET_KEY) throw new PaymentsNotConfiguredError("KORAPAY");
+    const korapay = createKorapayClient(env.KORAPAY_SECRET_KEY);
+    // Korapay wants the MAJOR currency unit (naira, not kobo) — the
+    // opposite convention from Paystack. priceCents is stored in the minor
+    // unit throughout this codebase (the same "cents" field Stripe's
+    // unit_amount used directly), so this is a real, deliberate conversion,
+    // not a rounding accident: get it wrong and Korapay charges 100x.
+    const majorAmount = coinPackage.priceCents / 100;
+    const result = await korapay.initializeCharge({
+      amount: majorAmount,
+      currency: coinPackage.currency,
+      reference,
+      customerEmail: user.email,
+      redirectUrl: `${env.APP_BASE_URL}/wallet?checkout=success`,
+      notificationUrl: `${env.APP_BASE_URL}/api/webhooks/korapay`,
+    });
+    url = result.checkout_url;
+  }
 
   // The PENDING row is created now, before the webhook — its unique
-  // stripeCheckoutSessionId is what makes crediting idempotent: the
-  // webhook only ever transitions this exact row from PENDING to
-  // COMPLETED, and a replayed event finds it already COMPLETED and no-ops.
+  // providerReference is what makes crediting idempotent: the webhook only
+  // ever transitions this exact row from PENDING to COMPLETED, and a
+  // replayed event finds it already COMPLETED and no-ops.
   await prisma.coinPurchase.create({
     data: {
       userId: params.userId,
@@ -56,30 +83,30 @@ export async function createCoinPurchaseCheckout(params: { userId: string; coinP
       amountCents: coinPackage.priceCents,
       currency: coinPackage.currency,
       status: "PENDING",
-      stripeCheckoutSessionId: session.id,
+      provider: params.provider,
+      providerReference: reference,
     },
   });
 
-  return session;
+  return { url };
 }
 
 /**
- * Called from the Stripe webhook route on `checkout.session.completed`
- * for a coin-purchase session. Idempotent: a duplicate delivery of the
- * same event finds the CoinPurchase already COMPLETED and does nothing.
- * Never credits coins on the strength of anything except a verified
- * Stripe event reaching this function — the frontend redirecting to a
+ * Called from the Paystack/Korapay webhook routes on a successful charge —
+ * looked up by the reference we generated at checkout, never trusts
+ * anything else the provider echoes back. Idempotent: a duplicate delivery
+ * of the same event finds the CoinPurchase already COMPLETED and does
+ * nothing. Never credits coins on the strength of anything except a
+ * verified webhook reaching this function — the frontend redirecting to a
  * "success" URL is not itself proof of payment.
  */
-export async function handleCoinPurchaseCompleted(session: Stripe.Checkout.Session): Promise<void> {
-  const purchase = await prisma.coinPurchase.findUnique({ where: { stripeCheckoutSessionId: session.id } });
+export async function handleCoinPurchaseCompleted(params: { reference: string; providerTransactionId?: string }): Promise<void> {
+  const purchase = await prisma.coinPurchase.findUnique({ where: { providerReference: params.reference } });
   if (!purchase) {
-    console.error(`[coins] checkout.session.completed for unknown session ${session.id} — ignoring.`);
+    console.error(`[coins] charge success for unknown reference ${params.reference} — ignoring.`);
     return;
   }
   if (purchase.status === "COMPLETED") return; // already credited — duplicate webhook delivery
-
-  const paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -90,11 +117,11 @@ export async function handleCoinPurchaseCompleted(session: Stripe.Checkout.Sessi
         referenceType: "CoinPurchase",
         referenceId: purchase.id,
         idempotencyKey: `coin-purchase:${purchase.id}`,
-        metadata: { stripeCheckoutSessionId: session.id },
+        metadata: { provider: purchase.provider, providerReference: params.reference },
       });
       await tx.coinPurchase.update({
         where: { id: purchase.id },
-        data: { status: "COMPLETED", completedAt: new Date(), stripePaymentIntentId: paymentIntentId },
+        data: { status: "COMPLETED", completedAt: new Date(), providerTransactionId: params.providerTransactionId },
       });
     });
   } catch (error) {
@@ -106,28 +133,29 @@ export async function handleCoinPurchaseCompleted(session: Stripe.Checkout.Sessi
 }
 
 /**
- * Called on a Stripe `charge.refunded` event for a coin purchase's
- * payment intent. Reverses the original COIN_PURCHASE wallet credit —
- * never deletes it — and marks the purchase REFUNDED. If the viewer
- * already spent some or all of those coins, the wallet can go negative
- * here; that's intentional (the debt is real and visible) rather than
- * silently capping it at zero, which would understate what happened.
+ * Called on a Paystack `refund.processed` or Korapay `refund.success`
+ * event for a coin purchase's original charge reference. Reverses the
+ * original COIN_PURCHASE wallet credit — never deletes it — and marks the
+ * purchase REFUNDED. If the viewer already spent some or all of those
+ * coins, the wallet can go negative here; that's intentional (the debt is
+ * real and visible) rather than silently capping it at zero, which would
+ * understate what happened.
  */
-export async function handleCoinPurchaseRefunded(paymentIntentId: string): Promise<void> {
-  const purchase = await prisma.coinPurchase.findFirst({ where: { stripePaymentIntentId: paymentIntentId } });
+export async function handleCoinPurchaseRefunded(reference: string): Promise<void> {
+  const purchase = await prisma.coinPurchase.findUnique({ where: { providerReference: reference } });
   if (!purchase) {
-    console.error(`[coins] charge.refunded for unknown payment_intent ${paymentIntentId} — ignoring.`);
+    console.error(`[coins] refund event for unknown reference ${reference} — ignoring.`);
     return;
   }
   if (purchase.status === "REFUNDED") return; // already reversed — duplicate webhook delivery
   if (purchase.status !== "COMPLETED") {
-    console.error(`[coins] charge.refunded for purchase ${purchase.id} that was never COMPLETED (status=${purchase.status}) — ignoring.`);
+    console.error(`[coins] refund event for purchase ${purchase.id} that was never COMPLETED (status=${purchase.status}) — ignoring.`);
     return;
   }
 
   const originalTransaction = await prisma.walletTransaction.findUnique({ where: { idempotencyKey: `coin-purchase:${purchase.id}` } });
   if (!originalTransaction) {
-    console.error(`[coins] charge.refunded for purchase ${purchase.id} but its original ledger row is missing — cannot reverse safely, needs manual review.`);
+    console.error(`[coins] refund event for purchase ${purchase.id} but its original ledger row is missing — cannot reverse safely, needs manual review.`);
     return;
   }
 
@@ -150,5 +178,32 @@ export async function handleCoinPurchaseRefunded(paymentIntentId: string): Promi
   } catch (error) {
     if (isUniqueConstraintViolation(error, "idempotencyKey")) return;
     throw error;
+  }
+}
+
+/**
+ * The single Korapay webhook entry point. Korapay signs only the `data`
+ * object (HMAC-SHA256), not the whole envelope — confirmed against
+ * Korapay's own published verification example — so the signature check
+ * re-serializes just that sub-object rather than the raw body.
+ */
+export async function handleKorapayWebhookEvent(rawBody: string, signature: string | null): Promise<void> {
+  if (!env.KORAPAY_SECRET_KEY) throw new KorapayNotConfiguredError();
+
+  const event = JSON.parse(rawBody) as KorapayWebhookEvent;
+  const dataJson = JSON.stringify(event.data);
+  if (!signature || !verifyKorapayWebhookSignature(dataJson, signature, env.KORAPAY_SECRET_KEY)) {
+    throw new InvalidKorapayWebhookSignatureError();
+  }
+
+  if (event.event === "charge.success") {
+    const data = event.data as KorapayChargeEventData;
+    await handleCoinPurchaseCompleted({ reference: data.reference });
+    return;
+  }
+  if (event.event === "refund.success") {
+    const data = event.data as KorapayRefundEventData;
+    await handleCoinPurchaseRefunded(data.payment_reference);
+    return;
   }
 }

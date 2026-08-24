@@ -91,9 +91,9 @@ export default function TermsPage() {
 
           <LegalSection title="7. Subscriptions and billing">
             <p>
-              Paid plans are billed through Stripe on a recurring basis (monthly or yearly, as selected) until cancelled.
+              Paid plans are billed through Paystack on a recurring basis (monthly or yearly, as selected) until cancelled.
               Each plan defines a fair-use concurrency limit — how many generations can run for your account at once —
-              rather than a consumable credit balance. You can cancel anytime from your billing portal; cancellation takes
+              rather than a consumable credit balance. You can cancel anytime from your account settings; cancellation takes
               effect at the end of the current billing period. Fees are non-refundable except where required by law.
             </p>
           </LegalSection>

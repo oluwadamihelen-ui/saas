@@ -24,6 +24,11 @@ export default async function WalletPage({ searchParams }: { searchParams: { che
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!userId) redirect("/login");
 
+  const availableProviders: ("PAYSTACK" | "KORAPAY")[] = [
+    ...(env.PAYSTACK_SECRET_KEY ? (["PAYSTACK"] as const) : []),
+    ...(env.KORAPAY_SECRET_KEY ? (["KORAPAY"] as const) : []),
+  ];
+
   const [balance, packages, recentActivity] = await Promise.all([
     getWalletBalance(userId),
     prisma.coinPackage.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
@@ -54,7 +59,7 @@ export default async function WalletPage({ searchParams }: { searchParams: { che
 
           <section className="mt-6">
             <h2 className="mb-3 text-lg font-semibold">Buy Coins</h2>
-            {!env.STRIPE_SECRET_KEY ? (
+            {availableProviders.length === 0 ? (
               <p className="rounded-xl border border-dashed border-cinerra-border/80 bg-cinerra-surface/30 px-4 py-6 text-center text-sm text-cinerra-muted">
                 Buying Coins isn't configured on this server yet.
               </p>
@@ -63,7 +68,7 @@ export default async function WalletPage({ searchParams }: { searchParams: { che
                 No Coin packages are available right now.
               </p>
             ) : (
-              <BuyCoinsGrid packages={packages} />
+              <BuyCoinsGrid packages={packages} availableProviders={availableProviders} />
             )}
           </section>
 

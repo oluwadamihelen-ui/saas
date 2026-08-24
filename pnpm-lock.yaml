@@ -157,10 +157,6 @@ importers:
         version: 2.1.9(@types/node@20.19.43)
 
   packages/billing:
-    dependencies:
-      stripe:
-        specifier: ^16.8.0
-        version: 16.12.0
     devDependencies:
       typescript:
         specifier: ^5.5.4
