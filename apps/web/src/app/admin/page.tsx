@@ -7,8 +7,11 @@ import { ModerationQueue } from "@/components/ModerationQueue";
 import { PlatformSettingsForm } from "@/components/admin/PlatformSettingsForm";
 import { GrantPromotionalCoinsForm } from "@/components/admin/GrantPromotionalCoinsForm";
 import { DailyRevenueChart } from "@/components/admin/DailyRevenueChart";
+import { RiskUserActions } from "@/components/admin/RiskUserActions";
+import { SuspendUserForm } from "@/components/admin/SuspendUserForm";
 import { getRevenueAnalytics } from "@/lib/analytics";
 import { getEngagementAnalytics } from "@/lib/viewingEvents";
+import { getFraudSignals } from "@/lib/trustSafety";
 
 const CAPABILITIES = ["TEXT", "IMAGE", "VIDEO", "VOICE", "MUSIC", "SOUND_EFFECT"] as const;
 
@@ -18,7 +21,7 @@ export default async function AdminPage() {
   if (!user?.id) redirect("/login");
   if (user.role !== "ADMIN") redirect("/");
 
-  const [userCount, activeSubscriptions, jobStats, plans, recentJobs, pendingPublications, platformSettings, revenueAnalytics, engagementAnalytics] = await Promise.all([
+  const [userCount, activeSubscriptions, jobStats, plans, recentJobs, pendingPublications, platformSettings, revenueAnalytics, engagementAnalytics, fraudSignals] = await Promise.all([
     prisma.user.count(),
     prisma.subscription.findMany({ where: { status: "ACTIVE" }, include: { plan: true } }),
     prisma.generationJob.groupBy({ by: ["status"], _count: true }),
@@ -32,6 +35,7 @@ export default async function AdminPage() {
     prisma.platformSettings.findUniqueOrThrow({ where: { id: "singleton" } }),
     getRevenueAnalytics(),
     getEngagementAnalytics(),
+    getFraudSignals(),
   ]);
 
   const moderationQueueItems = pendingPublications.map((p) => ({
@@ -243,6 +247,75 @@ export default async function AdminPage() {
             earned.
           </p>
           <GrantPromotionalCoinsForm />
+        </section>
+
+        <section className="card mt-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Risk &amp; Trust</h2>
+            {(fraudSignals.refundRisk.length > 0 || fraudSignals.velocityRisk.length > 0) && (
+              <span className="rounded-full bg-red-500/20 px-2.5 py-0.5 text-xs font-semibold text-red-300">
+                {fraudSignals.refundRisk.length + fraudSignals.velocityRisk.length} flagged
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-sm text-cinerra-muted">
+            Two real signals computed from actual purchase history — not a fraud score or ML model. A refund isn&rsquo;t
+            proof of abuse on its own, so these are for review, not automatic action; a creator watching their own
+            paid content is never flagged here, since no money moves.
+          </p>
+
+          <div className="mt-4">
+            <p className="mb-2 text-xs uppercase tracking-wide text-cinerra-muted">High refund rate (3+ purchases, 50%+ refunded)</p>
+            {fraudSignals.refundRisk.length === 0 ? (
+              <p className="text-sm text-cinerra-muted">No accounts currently flagged.</p>
+            ) : (
+              <div className="flex flex-col divide-y divide-cinerra-border rounded-xl border border-cinerra-border">
+                {fraudSignals.refundRisk.map((u) => (
+                  <div key={u.userId} className="flex items-center justify-between px-4 py-3 text-sm">
+                    <div>
+                      <p className="text-cinerra-text">{u.name ?? u.email}</p>
+                      <p className="text-xs text-cinerra-muted">
+                        {u.refundedPurchases}/{u.totalPurchases} purchases refunded ({(u.refundRate * 100).toFixed(0)}%)
+                        {u.accountStatus === "SUSPENDED" && " — suspended"}
+                      </p>
+                    </div>
+                    <RiskUserActions email={u.email} accountStatus={u.accountStatus} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6">
+            <p className="mb-2 text-xs uppercase tracking-wide text-cinerra-muted">Unusually fast repeat purchasing (5+ in 24h)</p>
+            {fraudSignals.velocityRisk.length === 0 ? (
+              <p className="text-sm text-cinerra-muted">No accounts currently flagged.</p>
+            ) : (
+              <div className="flex flex-col divide-y divide-cinerra-border rounded-xl border border-cinerra-border">
+                {fraudSignals.velocityRisk.map((u) => (
+                  <div key={u.userId} className="flex items-center justify-between px-4 py-3 text-sm">
+                    <div>
+                      <p className="text-cinerra-text">{u.name ?? u.email}</p>
+                      <p className="text-xs text-cinerra-muted">
+                        {u.purchaseCount} purchases in the last {u.windowHours}h
+                        {u.accountStatus === "SUSPENDED" && " — suspended"}
+                      </p>
+                    </div>
+                    <RiskUserActions email={u.email} accountStatus={u.accountStatus} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6">
+            <p className="mb-2 text-xs uppercase tracking-wide text-cinerra-muted">Suspend an account directly</p>
+            <p className="text-sm text-cinerra-muted">
+              For accounts flagged some other way (a support ticket, a chargeback notice). A suspended account can&rsquo;t sign
+              in, and any session it already has stops working on its very next request — not just at its next login.
+            </p>
+            <SuspendUserForm />
+          </div>
         </section>
 
         <section className="card mt-6">

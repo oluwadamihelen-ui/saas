@@ -6,6 +6,7 @@ import { FairUseLimitError } from "./fairUse";
 import { PaystackNotConfiguredError, PlanNotAvailableError, InvalidWebhookSignatureError, NoActiveSubscriptionError } from "./subscriptions";
 import { PayoutsNotConfiguredError, NoPayoutAccountError, BelowPayoutMinimumError, PayoutClaimConflictError, AccountResolutionFailedError } from "./payouts";
 import { UserNotFoundError, InvalidGrantAmountError } from "./promotionalCoins";
+import { UserNotFoundError as UserNotFoundForModerationError, CannotSuspendSelfError } from "./trustSafety";
 
 /**
  * Central error-to-response mapping. Every error surfaced to the browser
@@ -46,8 +47,17 @@ export function toApiErrorResponse(error: unknown): NextResponse {
   if (error instanceof InvalidGrantAmountError) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
+  if (error instanceof UserNotFoundForModerationError) {
+    return NextResponse.json({ error: error.message }, { status: 404 });
+  }
+  if (error instanceof CannotSuspendSelfError) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
   if (error instanceof Error && error.message === "UNAUTHORIZED") {
     return NextResponse.json({ error: "Please sign in to continue." }, { status: 401 });
+  }
+  if (error instanceof Error && error.message === "SUSPENDED") {
+    return NextResponse.json({ error: "Your account has been suspended. Contact support if you believe this is a mistake." }, { status: 403 });
   }
   if (error instanceof Error && error.message === "FORBIDDEN") {
     return NextResponse.json({ error: "You do not have access to this resource." }, { status: 403 });

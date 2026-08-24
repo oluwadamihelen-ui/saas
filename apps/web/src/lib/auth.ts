@@ -58,8 +58,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       if (session.user && token.userId) {
         (session.user as { id?: string }).id = token.userId as string;
-        const dbUser = await prisma.user.findUnique({ where: { id: token.userId as string }, select: { role: true } });
+        // Re-checked on every session resolution (not just at login) so a
+        // JWT issued before a suspension keeps working. Piggybacks on this
+        // existing per-request lookup rather than adding a second one.
+        const dbUser = await prisma.user.findUnique({ where: { id: token.userId as string }, select: { role: true, status: true } });
         (session.user as { role?: string }).role = dbUser?.role;
+        (session.user as { status?: string }).status = dbUser?.status;
       }
       return session;
     },
