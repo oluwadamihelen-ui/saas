@@ -9,6 +9,7 @@ import { Header } from "@/components/Header";
 import { MobileNav } from "@/components/Nav";
 import { FavoriteButton } from "@/components/FavoriteButton";
 import { UnlockButton } from "@/components/monetization/UnlockButton";
+import { WatchPlayer } from "@/components/watch/WatchPlayer";
 import { Footer } from "@/components/Footer";
 
 export default async function WatchPage({ params }: { params: { id: string } }) {
@@ -135,8 +136,13 @@ export default async function WatchPage({ params }: { params: { id: string } }) 
           </div>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-cinerra-border bg-black shadow-card">
-            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-            <video key={episodesWithVideo[0]!.id} src={episodesWithVideo[0]!.videoUrl!} controls className="aspect-video w-full bg-black" />
+            <WatchPlayer
+              key={episodesWithVideo[0]!.id}
+              projectId={publication.project.id}
+              episodeId={episodesWithVideo[0]!.id}
+              videoUrl={episodesWithVideo[0]!.videoUrl!}
+              className="aspect-video w-full bg-black"
+            />
           </div>
         )}
 

@@ -7,6 +7,7 @@ import { ModerationQueue } from "@/components/ModerationQueue";
 import { PlatformSettingsForm } from "@/components/admin/PlatformSettingsForm";
 import { DailyRevenueChart } from "@/components/admin/DailyRevenueChart";
 import { getRevenueAnalytics } from "@/lib/analytics";
+import { getEngagementAnalytics } from "@/lib/viewingEvents";
 
 const CAPABILITIES = ["TEXT", "IMAGE", "VIDEO", "VOICE", "MUSIC", "SOUND_EFFECT"] as const;
 
@@ -16,7 +17,7 @@ export default async function AdminPage() {
   if (!user?.id) redirect("/login");
   if (user.role !== "ADMIN") redirect("/");
 
-  const [userCount, activeSubscriptions, jobStats, plans, recentJobs, pendingPublications, platformSettings, revenueAnalytics] = await Promise.all([
+  const [userCount, activeSubscriptions, jobStats, plans, recentJobs, pendingPublications, platformSettings, revenueAnalytics, engagementAnalytics] = await Promise.all([
     prisma.user.count(),
     prisma.subscription.findMany({ where: { status: "ACTIVE" }, include: { plan: true } }),
     prisma.generationJob.groupBy({ by: ["status"], _count: true }),
@@ -29,6 +30,7 @@ export default async function AdminPage() {
     }),
     prisma.platformSettings.findUniqueOrThrow({ where: { id: "singleton" } }),
     getRevenueAnalytics(),
+    getEngagementAnalytics(),
   ]);
 
   const moderationQueueItems = pendingPublications.map((p) => ({
@@ -177,6 +179,35 @@ export default async function AdminPage() {
                   ))
                 )}
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="card mt-6">
+          <h2 className="text-lg font-semibold">Content engagement</h2>
+          <p className="mt-1 text-sm text-cinerra-muted">
+            Last 30 days. This is engagement (starts, completion), not purchase conversion — the watch page only ever plays content a viewer
+            already has access to, so there&rsquo;s no &ldquo;saw the paywall&rdquo; event to measure a real conversion funnel from.
+          </p>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <Stat label="Playback starts" value={engagementAnalytics.totalStarts.toLocaleString()} />
+            <Stat label="Completion rate" value={`${(engagementAnalytics.completionRate * 100).toFixed(0)}%`} />
+          </div>
+
+          <div className="mt-6">
+            <p className="mb-2 text-xs uppercase tracking-wide text-cinerra-muted">Most-watched content</p>
+            <div className="flex flex-col divide-y divide-cinerra-border">
+              {engagementAnalytics.topContent.length === 0 ? (
+                <p className="py-2 text-sm text-cinerra-muted">No playback yet.</p>
+              ) : (
+                engagementAnalytics.topContent.map((c) => (
+                  <div key={c.projectId} className="flex items-center justify-between py-2 text-sm">
+                    <span className="text-cinerra-text">{c.projectTitle}</span>
+                    <span className="font-medium">{c.starts.toLocaleString()} starts</span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </section>
