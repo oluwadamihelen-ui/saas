@@ -29,6 +29,25 @@ FROM web-base AS web-build
 COPY --from=web-deps /repo /repo
 COPY . .
 RUN pnpm --filter @cinerra/database generate
+# `next build` statically analyzes every route, which imports packages/config's
+# env schema at module load time — it needs *some* value for each required
+# var to pass validation, even though nothing actually connects to Postgres/
+# Redis/S3 during a production build. These never reach the runtime image:
+# web-runner starts fresh FROM web-base and only copies files (not ENV) from
+# this stage, so the real values docker-compose.yml supplies at `up` time are
+# what the container actually runs with. Matches .github/workflows/ci.yml's
+# own build step, which solves the identical problem the identical way.
+ENV NODE_ENV=production \
+    DATABASE_URL=postgresql://cinerra:cinerra@localhost:5432/cinerra \
+    REDIS_URL=redis://localhost:6379 \
+    STORAGE_ENDPOINT=http://localhost:9000 \
+    STORAGE_REGION=auto \
+    STORAGE_BUCKET=cinerra-media \
+    STORAGE_ACCESS_KEY_ID=cinerra \
+    STORAGE_SECRET_ACCESS_KEY=cinerra-secret \
+    STORAGE_FORCE_PATH_STYLE=true \
+    AUTH_SECRET=docker-build-only-secret-not-for-real-use-0000000000 \
+    APP_BASE_URL=http://localhost:3000
 RUN pnpm --filter @cinerra/web build
 
 FROM web-base AS web-runner
