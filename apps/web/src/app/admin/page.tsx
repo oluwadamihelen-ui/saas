@@ -5,6 +5,7 @@ import { providerRegistry } from "@/lib/ai";
 import { Header } from "@/components/Header";
 import { ModerationQueue } from "@/components/ModerationQueue";
 import { PlatformSettingsForm } from "@/components/admin/PlatformSettingsForm";
+import { GrantPromotionalCoinsForm } from "@/components/admin/GrantPromotionalCoinsForm";
 import { DailyRevenueChart } from "@/components/admin/DailyRevenueChart";
 import { getRevenueAnalytics } from "@/lib/analytics";
 import { getEngagementAnalytics } from "@/lib/viewingEvents";
@@ -232,6 +233,16 @@ export default async function AdminPage() {
               maxSceneCoinPrice: platformSettings.maxSceneCoinPrice,
             }}
           />
+        </section>
+
+        <section className="card mt-6">
+          <h2 className="text-lg font-semibold">Promotional coins</h2>
+          <p className="mt-1 text-sm text-cinerra-muted">
+            Grant a fixed batch of coins to a user that expires automatically after a set number of days. Unspent
+            coins from a grant are reclaimed the day it expires — this never affects coins the user purchased or
+            earned.
+          </p>
+          <GrantPromotionalCoinsForm />
         </section>
 
         <section className="card mt-6">

@@ -68,6 +68,7 @@ model User {
   payoutAccount       PayoutAccount?
   payouts             Payout[]
   viewingEvents       ViewingEvent[]
+  promotionalGrants   PromotionalGrant[]
 
   @@index([organizationId])
 }
@@ -1283,6 +1284,36 @@ model WalletTransaction {
   @@index([walletId, createdAt])
   @@index([userId, createdAt])
   @@index([referenceType, referenceId])
+}
+
+// A batch of admin-granted promotional coins with a real expiration date.
+// remainingCoins is tracked separately from Wallet.balance specifically so
+// expiration can be enforced — coins are fungible once merged into the
+// wallet balance, so without this per-grant ledger there would be no way
+// to tell which coins in a balance are "promotional and expiring" versus
+// purchased. consumePromotionalCoins() decrements remainingCoins (soonest-
+// expiring grant first) as a bookkeeping side-effect alongside every real
+// CONTENT_UNLOCK debit — it never gates or redirects the actual spend,
+// which always debits Wallet.balance the normal way.
+// userId is Cascade (not SetNull like RevenueTransaction) deliberately —
+// this is a single-party record tied to one user's own wallet, which
+// already cascades away with them; it isn't a settled transaction between
+// two parties that must survive either side's account deletion.
+// grantedByAdminId is a plain id, not a relation, so the admin who granted
+// it can later delete their own account without touching this row.
+model PromotionalGrant {
+  id                String    @id @default(cuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coins             Int // original grant amount
+  remainingCoins    Int // decremented via FIFO consumption as the user spends
+  reason            String?
+  grantedByAdminId  String?
+  expiresAt         DateTime
+  expiredAt         DateTime? // set once the expiration job has processed it
+  createdAt         DateTime  @default(now())
+
+  @@index([userId, expiresAt])
 }
 
 // Admin-configurable purchasable coin bundles (spec §4) — never hard-coded

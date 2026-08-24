@@ -29,10 +29,14 @@ export default async function WalletPage({ searchParams }: { searchParams: { che
     ...(env.KORAPAY_SECRET_KEY ? (["KORAPAY"] as const) : []),
   ];
 
-  const [balance, packages, recentActivity] = await Promise.all([
+  const [balance, packages, recentActivity, activeGrants] = await Promise.all([
     getWalletBalance(userId),
     prisma.coinPackage.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
     prisma.walletTransaction.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 20 }),
+    prisma.promotionalGrant.findMany({
+      where: { userId, remainingCoins: { gt: 0 }, expiresAt: { gt: new Date() } },
+      orderBy: { expiresAt: "asc" },
+    }),
   ]);
 
   return (
@@ -56,6 +60,27 @@ export default async function WalletPage({ searchParams }: { searchParams: { che
             <p className="text-sm text-cinerra-muted">Balance</p>
             <p className="mt-1 font-display text-4xl font-bold text-cinerra-text">🪙 {balance.toLocaleString()}</p>
           </section>
+
+          {activeGrants.length > 0 && (
+            <section className="card mt-6">
+              <h2 className="text-lg font-semibold">Promotional coins</h2>
+              <p className="mt-1 text-sm text-cinerra-muted">
+                These coins are already included in your balance above, but expire if unused — spend them before they do.
+              </p>
+              <div className="mt-3 flex flex-col divide-y divide-cinerra-border">
+                {activeGrants.map((grant) => (
+                  <div key={grant.id} className="flex items-center justify-between py-2 text-sm">
+                    <div>
+                      <p className="text-cinerra-text">
+                        🪙 {grant.remainingCoins.toLocaleString()} {grant.reason ? `— ${grant.reason}` : "promotional coins"}
+                      </p>
+                      <p className="text-xs text-cinerra-muted">Expires {grant.expiresAt.toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           <section className="mt-6">
             <h2 className="mb-3 text-lg font-semibold">Buy Coins</h2>

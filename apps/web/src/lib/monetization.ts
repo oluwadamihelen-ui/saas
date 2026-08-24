@@ -1,5 +1,6 @@
 import { prisma } from "./db";
 import { getOrCreateWallet, getWalletBalance, getPlatformUserId, recordWalletTransaction, isUniqueConstraintViolation } from "./wallet";
+import { consumePromotionalCoins } from "./promotionalCoins";
 
 export type ContentScope = "MOVIE" | "EPISODE" | "SCENE";
 
@@ -198,6 +199,11 @@ export async function unlockContent(userId: string, scope: ContentScope, content
         idempotencyKey,
         metadata: { scope, projectId: content.projectId, episodeId: content.episodeId, sceneId: content.sceneId },
       });
+      // Bookkeeping only — Wallet.balance above is already debited the
+      // normal way regardless of whether the viewer has any promotional
+      // coins; this just tracks how much of any still-active grant this
+      // spend used up, so expiration has something accurate to act on.
+      await consumePromotionalCoins(tx, userId, price);
 
       const revenueTx = await tx.revenueTransaction.create({
         data: {

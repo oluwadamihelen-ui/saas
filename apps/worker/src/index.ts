@@ -18,7 +18,7 @@ import {
   runEpisodeExportJob,
   runClipGenerationJob,
 } from "@cinerra/domain";
-import { prisma } from "@cinerra/database";
+import { prisma, expirePromotionalGrants } from "@cinerra/database";
 
 const env = loadEnv(process.env);
 
@@ -172,6 +172,32 @@ settlementQueue
   )
   .catch((error) => console.error("[worker] failed to schedule settlement-transition repeatable job:", error));
 
+/**
+ * Expires unused PromotionalGrant coins once expiresAt passes — daily
+ * rather than hourly like the settlement job above, since expiration is a
+ * coarser-grained event with no reason to check for it more often.
+ */
+const promotionalExpirationQueue = new Queue(QUEUE_NAMES.promotionalExpiration, { connection });
+const promotionalExpirationWorker = new Worker(
+  QUEUE_NAMES.promotionalExpiration,
+  async () => {
+    const count = await expirePromotionalGrants();
+    if (count > 0) console.log(`[worker] promotional-expiration: expired ${count} PromotionalGrant row(s)`);
+  },
+  { connection },
+);
+promotionalExpirationWorker.on("failed", (job, error) => {
+  console.error(`[worker] promotional-expiration job ${job?.id} failed:`, error.message);
+  Sentry.captureException(error, { tags: { jobType: "promotional-expiration" } });
+});
+promotionalExpirationQueue
+  .add(
+    "expire",
+    {},
+    { repeat: { every: 24 * 60 * 60 * 1000 }, jobId: "promotional-expiration-recurring" },
+  )
+  .catch((error) => console.error("[worker] failed to schedule promotional-expiration repeatable job:", error));
+
 isFfmpegAvailable().then((available) => {
   console.log(
     `[worker] Cinerra worker started. Concurrency=${WORKER_CONCURRENCY}. Providers configured: TEXT=${registry.isConfigured("TEXT")} IMAGE=${registry.isConfigured("IMAGE")} VIDEO=${registry.isConfigured("VIDEO")} VOICE=${registry.isConfigured("VOICE")} MUSIC=${registry.isConfigured("MUSIC")} SOUND_EFFECT=${registry.isConfigured("SOUND_EFFECT")}. FFmpeg available=${available}. Error monitoring: ${env.SENTRY_DSN ? "configured" : "not configured"}. Email: ${emailClient.configured ? "configured" : "not configured"}.`,
@@ -180,7 +206,13 @@ isFfmpegAvailable().then((available) => {
 
 async function shutdown(signal: string) {
   console.log(`[worker] received ${signal}, shutting down gracefully…`);
-  await Promise.all([...workers.map((w) => w.close()), settlementWorker.close(), settlementQueue.close()]);
+  await Promise.all([
+    ...workers.map((w) => w.close()),
+    settlementWorker.close(),
+    settlementQueue.close(),
+    promotionalExpirationWorker.close(),
+    promotionalExpirationQueue.close(),
+  ]);
   await prisma.$disconnect();
   await Sentry.close(2000); // flush any in-flight events before exiting; no-op if never initialized
   process.exit(0);

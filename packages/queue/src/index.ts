@@ -25,6 +25,9 @@ export const QUEUE_NAMES = {
   // settlement hold elapses). Registered as a BullMQ repeatable job rather
   // than plain generation jobs, so it carries no GenerationJobPayload.
   settlementTransition: "settlement-transition",
+  // Same pattern — expires unused PromotionalGrant coins once their
+  // expiresAt passes.
+  promotionalExpiration: "promotional-expiration",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
