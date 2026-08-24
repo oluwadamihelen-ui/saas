@@ -1,5 +1,8 @@
 # syntax=docker/dockerfile:1
 FROM node:20-slim AS base
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
 RUN corepack enable
 WORKDIR /repo
 
@@ -16,6 +19,10 @@ COPY packages/email/package.json packages/email/package.json
 COPY packages/media/package.json packages/media/package.json
 COPY packages/queue/package.json packages/queue/package.json
 COPY packages/storage/package.json packages/storage/package.json
+# The root postinstall script (`prisma generate`) fires during the install
+# below, so the schema it needs has to be here already — package.json
+# manifests alone (copied above, for Docker layer caching) aren't enough.
+COPY packages/database/prisma packages/database/prisma
 RUN pnpm install --frozen-lockfile
 
 FROM base AS build
