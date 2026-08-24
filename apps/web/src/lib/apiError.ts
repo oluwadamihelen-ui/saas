@@ -4,6 +4,7 @@ import { ProviderNotConfiguredError } from "@cinerra/ai";
 import { PublishNotEligibleError } from "@cinerra/domain";
 import { FairUseLimitError } from "./fairUse";
 import { PaystackNotConfiguredError, PlanNotAvailableError, InvalidWebhookSignatureError, NoActiveSubscriptionError } from "./subscriptions";
+import { PayoutsNotConfiguredError, NoPayoutAccountError, BelowPayoutMinimumError, PayoutClaimConflictError, AccountResolutionFailedError } from "./payouts";
 
 /**
  * Central error-to-response mapping. Every error surfaced to the browser
@@ -28,6 +29,15 @@ export function toApiErrorResponse(error: unknown): NextResponse {
   }
   if (error instanceof NoActiveSubscriptionError) {
     return NextResponse.json({ error: error.message }, { status: 404 });
+  }
+  if (error instanceof PayoutsNotConfiguredError) {
+    return NextResponse.json({ error: error.message }, { status: 503 });
+  }
+  if (error instanceof NoPayoutAccountError || error instanceof BelowPayoutMinimumError || error instanceof AccountResolutionFailedError) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+  if (error instanceof PayoutClaimConflictError) {
+    return NextResponse.json({ error: error.message }, { status: 409 });
   }
   if (error instanceof Error && error.message === "UNAUTHORIZED") {
     return NextResponse.json({ error: "Please sign in to continue." }, { status: 401 });

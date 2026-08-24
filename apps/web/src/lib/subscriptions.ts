@@ -2,13 +2,16 @@ import {
   createPaystackClient,
   verifyPaystackWebhookSignature,
   HANDLED_PAYSTACK_SUBSCRIPTION_EVENTS,
+  HANDLED_PAYSTACK_TRANSFER_EVENTS,
   type PaystackWebhookEvent,
   type PaystackSubscriptionEventData,
   type PaystackInvoiceEventData,
+  type PaystackTransferEventData,
 } from "@cinerra/billing";
 import { prisma } from "./db";
 import { env } from "./env";
 import { handleCoinPurchaseCompleted, handleCoinPurchaseRefunded } from "./coinPurchases";
+import { handlePayoutCompleted, handlePayoutFailed } from "./payouts";
 
 interface PaystackChargeEventData {
   reference: string;
@@ -110,6 +113,15 @@ export async function handlePaystackWebhookEvent(rawBody: string, signature: str
   if (event.event === "refund.processed") {
     const data = event.data as PaystackRefundEventData;
     await handleCoinPurchaseRefunded(data.transaction.reference);
+    return;
+  }
+  if (HANDLED_PAYSTACK_TRANSFER_EVENTS.has(event.event)) {
+    const data = event.data as PaystackTransferEventData;
+    if (event.event === "transfer.success") {
+      await handlePayoutCompleted(data.reference);
+    } else {
+      await handlePayoutFailed(data.reference, data.reason);
+    }
     return;
   }
 

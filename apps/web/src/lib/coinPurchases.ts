@@ -1,8 +1,17 @@
-import { createPaystackClient, createKorapayClient, verifyKorapayWebhookSignature, type KorapayWebhookEvent, type KorapayChargeEventData, type KorapayRefundEventData } from "@cinerra/billing";
+import {
+  createPaystackClient,
+  createKorapayClient,
+  verifyKorapayWebhookSignature,
+  type KorapayWebhookEvent,
+  type KorapayChargeEventData,
+  type KorapayRefundEventData,
+  type KorapayTransferEventData,
+} from "@cinerra/billing";
 import type { PaymentProvider } from "@cinerra/database";
 import { prisma } from "./db";
 import { env } from "./env";
 import { recordWalletTransaction, isUniqueConstraintViolation } from "./wallet";
+import { handlePayoutCompleted, handlePayoutFailed } from "./payouts";
 
 export class PaymentsNotConfiguredError extends Error {
   constructor(provider: PaymentProvider) {
@@ -204,6 +213,16 @@ export async function handleKorapayWebhookEvent(rawBody: string, signature: stri
   if (event.event === "refund.success") {
     const data = event.data as KorapayRefundEventData;
     await handleCoinPurchaseRefunded(data.payment_reference);
+    return;
+  }
+  if (event.event === "transfer.success") {
+    const data = event.data as KorapayTransferEventData;
+    await handlePayoutCompleted(data.reference);
+    return;
+  }
+  if (event.event === "transfer.failed") {
+    const data = event.data as KorapayTransferEventData;
+    await handlePayoutFailed(data.reference);
     return;
   }
 }

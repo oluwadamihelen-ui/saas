@@ -76,6 +76,36 @@ export function createPaystackClient(secretKey: string) {
         body: JSON.stringify({ code: params.code, token: params.token }),
       });
     },
+
+    /** GET /bank/resolve — verifies an account number against a bank code and returns the account holder's real name, so a payout destination is never saved on the strength of a typed-in number alone. */
+    resolveAccountNumber(params: { accountNumber: string; bankCode: string }): Promise<{ account_number: string; account_name: string }> {
+      const query = new URLSearchParams({ account_number: params.accountNumber, bank_code: params.bankCode });
+      return paystackRequest(secretKey, `/bank/resolve?${query.toString()}`, { method: "GET" });
+    },
+
+    /** POST /transferrecipient — must exist before any transfer can be initiated; the returned recipient_code is stored and reused for every future payout to this account. */
+    createTransferRecipient(params: { name: string; accountNumber: string; bankCode: string }): Promise<{ recipient_code: string }> {
+      return paystackRequest(secretKey, "/transferrecipient", {
+        method: "POST",
+        body: JSON.stringify({ type: "nuban", name: params.name, account_number: params.accountNumber, bank_code: params.bankCode, currency: "NGN" }),
+      });
+    },
+
+    /**
+     * POST /transfer — moves money from the platform's Paystack balance to
+     * a creator's bank account. Note: if OTP is enabled on the Paystack
+     * dashboard for transfers, this call comes back requiring a
+     * finalize-with-OTP step this client doesn't implement — a fully
+     * automated payout flow requires OTP disabled for API-initiated
+     * transfers in the dashboard settings (documented in README's Paystack
+     * setup section), not something this code can bypass on its own.
+     */
+    initiateTransfer(params: { amount: number; recipientCode: string; reference: string; reason?: string }): Promise<{ transfer_code: string; status: string }> {
+      return paystackRequest(secretKey, "/transfer", {
+        method: "POST",
+        body: JSON.stringify({ source: "balance", amount: params.amount, recipient: params.recipientCode, reference: params.reference, reason: params.reason }),
+      });
+    },
   };
 }
 
@@ -124,9 +154,18 @@ export interface PaystackInvoiceEventData {
   customer: PaystackCustomer;
 }
 
+export interface PaystackTransferEventData {
+  reference: string;
+  transfer_code: string;
+  status: string;
+  reason?: string;
+}
+
 export type PaystackWebhookEvent =
   | { event: "subscription.create" | "subscription.disable" | "subscription.not_renew"; data: PaystackSubscriptionEventData }
   | { event: "invoice.payment_failed"; data: PaystackInvoiceEventData }
+  | { event: "transfer.success" | "transfer.failed" | "transfer.reversed"; data: PaystackTransferEventData }
   | { event: string; data: unknown };
 
 export const HANDLED_PAYSTACK_SUBSCRIPTION_EVENTS = new Set(["subscription.create", "subscription.disable", "subscription.not_renew", "invoice.payment_failed"]);
+export const HANDLED_PAYSTACK_TRANSFER_EVENTS = new Set(["transfer.success", "transfer.failed", "transfer.reversed"]);

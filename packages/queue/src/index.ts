@@ -20,6 +20,11 @@ export const QUEUE_NAMES = {
   episodeAssembly: "episode-assembly",
   export: "export",
   clipGeneration: "clip-generation", // trailer / social clip
+  // Not a generation-job-family queue like the rest of these — a periodic
+  // maintenance task (CreatorEarning PENDING -> AVAILABLE once its
+  // settlement hold elapses). Registered as a BullMQ repeatable job rather
+  // than plain generation jobs, so it carries no GenerationJobPayload.
+  settlementTransition: "settlement-transition",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];

@@ -47,6 +47,32 @@ export interface InitializeChargeResult {
   reference: string;
 }
 
+export interface ResolveAccountParams {
+  bankCode: string;
+  accountNumber: string;
+}
+
+export interface ResolveAccountResult {
+  account_name: string;
+  account_number: string;
+}
+
+export interface InitiateDisbursementParams {
+  amount: number; // major currency unit, same convention as initializeCharge
+  currency: string;
+  reference: string;
+  bankCode: string;
+  accountNumber: string;
+  customerName: string;
+  customerEmail: string;
+  narration: string;
+}
+
+export interface InitiateDisbursementResult {
+  reference: string;
+  status: string;
+}
+
 export function createKorapayClient(secretKey: string) {
   return {
     /** POST /charges/initialize — one-time charge; returns a hosted checkout_url to redirect the customer to. */
@@ -60,6 +86,43 @@ export function createKorapayClient(secretKey: string) {
           customer: { email: params.customerEmail },
           redirect_url: params.redirectUrl,
           notification_url: params.notificationUrl,
+        }),
+      });
+    },
+
+    /**
+     * POST /misc/banks/resolve — verifies an account number against a bank
+     * code before it's saved as a payout destination. Field names here
+     * (`bank`/`account` in the request body) are inferred from secondary
+     * sources — developers.korapay.com is blocked by this environment's
+     * network egress policy, so this couldn't be confirmed against the
+     * official page directly. Worth a smoke test against Korapay's sandbox
+     * before relying on it in production.
+     */
+    resolveAccountNumber(params: ResolveAccountParams): Promise<ResolveAccountResult> {
+      return korapayRequest(secretKey, "/misc/banks/resolve", {
+        method: "POST",
+        body: JSON.stringify({ bank: params.bankCode, account: params.accountNumber }),
+      });
+    },
+
+    /**
+     * POST /transactions/disburse — moves money from the platform's Korapay
+     * balance to a creator's bank account, no pre-created recipient needed
+     * (unlike Paystack). Same field-name caveat as resolveAccountNumber
+     * above: inferred from secondary sources, not a directly confirmed
+     * official example.
+     */
+    initiateDisbursement(params: InitiateDisbursementParams): Promise<InitiateDisbursementResult> {
+      return korapayRequest(secretKey, "/transactions/disburse", {
+        method: "POST",
+        body: JSON.stringify({
+          reference: params.reference,
+          amount: params.amount,
+          currency: params.currency,
+          narration: params.narration,
+          bank_account: { bank: params.bankCode, account: params.accountNumber },
+          customer: { name: params.customerName, email: params.customerEmail },
         }),
       });
     },
@@ -101,9 +164,18 @@ export interface KorapayRefundEventData {
   status: string;
 }
 
+export interface KorapayTransferEventData {
+  reference: string;
+  amount: number;
+  currency: string;
+  status: string;
+  fee?: number;
+}
+
 export type KorapayWebhookEvent =
   | { event: "charge.success" | "charge.failed"; data: KorapayChargeEventData }
   | { event: "refund.success" | "refund.failed"; data: KorapayRefundEventData }
+  | { event: "transfer.success" | "transfer.failed"; data: KorapayTransferEventData }
   | { event: string; data: unknown };
 
-export const HANDLED_KORAPAY_EVENTS = new Set(["charge.success", "refund.success"]);
+export const HANDLED_KORAPAY_EVENTS = new Set(["charge.success", "refund.success", "transfer.success", "transfer.failed"]);

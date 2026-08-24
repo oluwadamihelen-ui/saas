@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/node";
 import { loadEnv } from "@cinerra/config";
 import { createEmailClient } from "@cinerra/email";
 import { ModelRouter, ProviderRegistry } from "@cinerra/ai";
-import { createGenerationWorker, redisConnection, QUEUE_NAMES, type GenerationJobPayload, type Job } from "@cinerra/queue";
+import { createGenerationWorker, redisConnection, QUEUE_NAMES, Queue, Worker, type GenerationJobPayload, type Job } from "@cinerra/queue";
 import { createStorageClient } from "@cinerra/storage";
 import { isFfmpegAvailable } from "@cinerra/media";
 import {
@@ -135,6 +135,43 @@ for (const w of workers) {
   });
 }
 
+/**
+ * Closes the settlement-hold gap flagged since the earnings page shipped:
+ * CreatorEarning.status never transitioned itself from PENDING to
+ * AVAILABLE once PlatformSettings.settlementPeriodDays elapsed — the
+ * earnings page computed it for display instead of trusting the stored
+ * status. A BullMQ repeatable job (not a plain setInterval) so scheduling
+ * is Redis-coordinated: safe even with multiple worker replicas running,
+ * and it survives a restart instead of silently going quiet.
+ */
+async function transitionSettledEarnings(): Promise<void> {
+  const result = await prisma.creatorEarning.updateMany({
+    where: { status: "PENDING", availableAt: { lte: new Date() } },
+    data: { status: "AVAILABLE" },
+  });
+  if (result.count > 0) {
+    console.log(`[worker] settlement-transition: ${result.count} CreatorEarning row(s) moved PENDING -> AVAILABLE`);
+  }
+}
+
+const settlementQueue = new Queue(QUEUE_NAMES.settlementTransition, { connection });
+const settlementWorker = new Worker(
+  QUEUE_NAMES.settlementTransition,
+  () => transitionSettledEarnings(),
+  { connection },
+);
+settlementWorker.on("failed", (job, error) => {
+  console.error(`[worker] settlement-transition job ${job?.id} failed:`, error.message);
+  Sentry.captureException(error, { tags: { jobType: "settlement-transition" } });
+});
+settlementQueue
+  .add(
+    "transition",
+    {},
+    { repeat: { every: 60 * 60 * 1000 }, jobId: "settlement-transition-recurring" },
+  )
+  .catch((error) => console.error("[worker] failed to schedule settlement-transition repeatable job:", error));
+
 isFfmpegAvailable().then((available) => {
   console.log(
     `[worker] Cinerra worker started. Concurrency=${WORKER_CONCURRENCY}. Providers configured: TEXT=${registry.isConfigured("TEXT")} IMAGE=${registry.isConfigured("IMAGE")} VIDEO=${registry.isConfigured("VIDEO")} VOICE=${registry.isConfigured("VOICE")} MUSIC=${registry.isConfigured("MUSIC")} SOUND_EFFECT=${registry.isConfigured("SOUND_EFFECT")}. FFmpeg available=${available}. Error monitoring: ${env.SENTRY_DSN ? "configured" : "not configured"}. Email: ${emailClient.configured ? "configured" : "not configured"}.`,
@@ -143,7 +180,7 @@ isFfmpegAvailable().then((available) => {
 
 async function shutdown(signal: string) {
   console.log(`[worker] received ${signal}, shutting down gracefully…`);
-  await Promise.all(workers.map((w) => w.close()));
+  await Promise.all([...workers.map((w) => w.close()), settlementWorker.close(), settlementQueue.close()]);
   await prisma.$disconnect();
   await Sentry.close(2000); // flush any in-flight events before exiting; no-op if never initialized
   process.exit(0);
