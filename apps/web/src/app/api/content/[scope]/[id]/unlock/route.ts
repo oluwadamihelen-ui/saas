@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/session";
 import { unlockContent, ContentNotFoundError, ContentNotPaidError, InsufficientCoinsError, type ContentScope } from "@/lib/monetization";
 import { toApiErrorResponse } from "@/lib/apiError";
+import { checkContentUnlockRateLimit } from "@/lib/rateLimit";
 
 const VALID_SCOPES = new Set(["MOVIE", "EPISODE", "SCENE"]);
 
@@ -17,6 +18,12 @@ export async function POST(_request: Request, { params }: { params: { scope: str
       return NextResponse.json({ error: "Invalid content scope." }, { status: 400 });
     }
     const userId = await requireUserId();
+
+    const { allowed, retryAfterSeconds } = await checkContentUnlockRateLimit(userId);
+    if (!allowed) {
+      return NextResponse.json({ error: "Too many unlock attempts. Please try again later." }, { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } });
+    }
+
     const result = await unlockContent(userId, params.scope as ContentScope, params.id);
     return NextResponse.json(result);
   } catch (error) {

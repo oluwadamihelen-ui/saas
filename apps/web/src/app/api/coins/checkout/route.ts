@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createCoinPurchaseCheckout, PaymentsNotConfiguredError, CoinPackageUnavailableError } from "@/lib/coinPurchases";
 import { requireUserId } from "@/lib/session";
 import { toApiErrorResponse } from "@/lib/apiError";
+import { checkCoinPurchaseRateLimit } from "@/lib/rateLimit";
 
 const bodySchema = z.object({
   coinPackageId: z.string(),
@@ -12,6 +13,12 @@ const bodySchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const userId = await requireUserId();
+
+    const { allowed, retryAfterSeconds } = await checkCoinPurchaseRateLimit(userId);
+    if (!allowed) {
+      return NextResponse.json({ error: "Too many checkout attempts. Please try again later." }, { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } });
+    }
+
     const { coinPackageId, provider } = bodySchema.parse(await request.json());
     const { url } = await createCoinPurchaseCheckout({ userId, coinPackageId, provider });
     return NextResponse.json({ url });

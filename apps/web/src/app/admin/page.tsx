@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { providerRegistry } from "@/lib/ai";
 import { Header } from "@/components/Header";
 import { ModerationQueue } from "@/components/ModerationQueue";
+import { PlatformSettingsForm } from "@/components/admin/PlatformSettingsForm";
 
 const CAPABILITIES = ["TEXT", "IMAGE", "VIDEO", "VOICE", "MUSIC", "SOUND_EFFECT"] as const;
 
@@ -13,7 +14,7 @@ export default async function AdminPage() {
   if (!user?.id) redirect("/login");
   if (user.role !== "ADMIN") redirect("/");
 
-  const [userCount, activeSubscriptions, jobStats, plans, recentJobs, pendingPublications] = await Promise.all([
+  const [userCount, activeSubscriptions, jobStats, plans, recentJobs, pendingPublications, platformSettings] = await Promise.all([
     prisma.user.count(),
     prisma.subscription.findMany({ where: { status: "ACTIVE" }, include: { plan: true } }),
     prisma.generationJob.groupBy({ by: ["status"], _count: true }),
@@ -24,6 +25,7 @@ export default async function AdminPage() {
       orderBy: { publishedAt: "asc" },
       include: { project: { select: { title: true } }, publishedBy: { select: { name: true, email: true } } },
     }),
+    prisma.platformSettings.findUniqueOrThrow({ where: { id: "singleton" } }),
   ]);
 
   const moderationQueueItems = pendingPublications.map((p) => ({
@@ -118,6 +120,28 @@ export default async function AdminPage() {
               ))}
             </tbody>
           </table>
+        </section>
+
+        <section className="card mt-6">
+          <h2 className="text-lg font-semibold">Coin economy settings</h2>
+          <p className="mt-1 text-sm text-cinerra-muted">
+            Revenue share, price ranges, and payout economics — previously only editable via direct database access.
+          </p>
+          <PlatformSettingsForm
+            initial={{
+              publisherRevenueShareBps: platformSettings.publisherRevenueShareBps,
+              settlementPeriodDays: platformSettings.settlementPeriodDays,
+              payoutMinimumCoins: platformSettings.payoutMinimumCoins,
+              payoutCoinValueCents: platformSettings.payoutCoinValueCents,
+              payoutCurrency: platformSettings.payoutCurrency,
+              minMovieCoinPrice: platformSettings.minMovieCoinPrice,
+              maxMovieCoinPrice: platformSettings.maxMovieCoinPrice,
+              minEpisodeCoinPrice: platformSettings.minEpisodeCoinPrice,
+              maxEpisodeCoinPrice: platformSettings.maxEpisodeCoinPrice,
+              minSceneCoinPrice: platformSettings.minSceneCoinPrice,
+              maxSceneCoinPrice: platformSettings.maxSceneCoinPrice,
+            }}
+          />
         </section>
 
         <section className="card mt-6">

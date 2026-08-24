@@ -73,3 +73,31 @@ export async function checkLoginRateLimit(email: string): Promise<RateLimitResul
 export async function checkPasswordResetRateLimit(ip: string): Promise<RateLimitResult> {
   return checkRateLimit(`password-reset:${ip}`, 5, 60 * 60);
 }
+
+// ---------------------------------------------------------------------------
+// Financial endpoints — these move real coins/money in both directions
+// (purchases, payouts), so unlike the pre-auth limits above these are
+// keyed by userId, not IP: the caller is already authenticated by the time
+// any of these run, and the thing worth bounding is what one account can
+// do, not what one network address can do.
+// ---------------------------------------------------------------------------
+
+/** A compromised or scripted account draining a wallet via rapid-fire unlocks — generous enough for legitimate binge-watching. */
+export async function checkContentUnlockRateLimit(userId: string): Promise<RateLimitResult> {
+  return checkRateLimit(`unlock:${userId}`, 30, 10 * 60);
+}
+
+/** Repeated checkout-session creation (not completions — the provider gates those) — bounds retry/probe loops against Paystack/Korapay. */
+export async function checkCoinPurchaseRateLimit(userId: string): Promise<RateLimitResult> {
+  return checkRateLimit(`coin-purchase:${userId}`, 10, 60 * 60);
+}
+
+/** Withdrawals are infrequent by nature — a tight limit catches retry-storming a flaky provider or probing the claim race. */
+export async function checkPayoutRequestRateLimit(userId: string): Promise<RateLimitResult> {
+  return checkRateLimit(`payout-request:${userId}`, 3, 24 * 60 * 60);
+}
+
+/** Repeatedly changing payout bank details is rare for a legitimate creator and a common account-takeover pattern (redirect future payouts to an attacker's account). */
+export async function checkPayoutAccountRateLimit(userId: string): Promise<RateLimitResult> {
+  return checkRateLimit(`payout-account:${userId}`, 5, 60 * 60);
+}
