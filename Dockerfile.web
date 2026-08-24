@@ -6,33 +6,18 @@ RUN apt-get update \
 RUN corepack enable
 WORKDIR /repo
 
-FROM web-base AS web-deps
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
-COPY apps/web/package.json apps/web/package.json
-COPY apps/worker/package.json apps/worker/package.json
-COPY packages/ai/package.json packages/ai/package.json
-COPY packages/billing/package.json packages/billing/package.json
-COPY packages/config/package.json packages/config/package.json
-COPY packages/database/package.json packages/database/package.json
-COPY packages/domain/package.json packages/domain/package.json
-COPY packages/email/package.json packages/email/package.json
-COPY packages/media/package.json packages/media/package.json
-COPY packages/queue/package.json packages/queue/package.json
-COPY packages/storage/package.json packages/storage/package.json
-# The root postinstall script (`prisma generate`) fires during the install
-# below, so the schema it needs has to be here already — package.json
-# manifests alone (copied above, for Docker layer caching) aren't enough.
-COPY packages/database/prisma packages/database/prisma
-RUN pnpm install --frozen-lockfile
-
+# Install and build happen in one continuous stage — deliberately not split
+# into a separate deps stage with a cross-stage `COPY --from=deps` of
+# node_modules. Two different packages (prisma, then next) intermittently
+# failed to resolve their own just-installed files immediately after that
+# kind of cross-stage copy on at least one real Docker Desktop/Windows/WSL2
+# setup, and in one case the copied node_modules didn't even match the
+# locally-verified peer-dependency resolution. Sacrifices some layer-caching
+# (any source change now reinstalls, not just a package.json change) for
+# reliability — a slower build beats an intermittently broken one.
 FROM web-base AS web-build
-COPY --from=web-deps /repo /repo
 COPY . .
-# No explicit `prisma generate` here — web-deps's own `pnpm install` already
-# ran it (via the root postinstall script, now that web-deps also has the
-# schema it needs) and the generated client came along in the COPY above.
-# Running it again was redundant and, on some Docker Desktop/WSL2 setups,
-# intermittently failed to find its own just-installed prisma package.
+RUN pnpm install --frozen-lockfile
 # `next build` statically analyzes every route, which imports packages/config's
 # env schema at module load time — it needs *some* value for each required
 # var to pass validation, even though nothing actually connects to Postgres/
