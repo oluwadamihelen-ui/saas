@@ -28,7 +28,11 @@ RUN pnpm install --frozen-lockfile
 FROM worker-base AS worker-build
 COPY --from=worker-deps /repo /repo
 COPY . .
-RUN pnpm --filter @cinerra/database generate
+# No explicit `prisma generate` here — worker-deps's own `pnpm install`
+# already ran it (via the root postinstall script, now that worker-deps also
+# has the schema it needs) and the generated client came along in the COPY
+# above. Running it again was redundant and, on some Docker Desktop/WSL2
+# setups, intermittently failed to find its own just-installed prisma package.
 RUN pnpm --filter @cinerra/worker build
 
 FROM worker-base AS worker-runner

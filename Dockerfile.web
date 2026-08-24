@@ -28,7 +28,11 @@ RUN pnpm install --frozen-lockfile
 FROM web-base AS web-build
 COPY --from=web-deps /repo /repo
 COPY . .
-RUN pnpm --filter @cinerra/database generate
+# No explicit `prisma generate` here — web-deps's own `pnpm install` already
+# ran it (via the root postinstall script, now that web-deps also has the
+# schema it needs) and the generated client came along in the COPY above.
+# Running it again was redundant and, on some Docker Desktop/WSL2 setups,
+# intermittently failed to find its own just-installed prisma package.
 # `next build` statically analyzes every route, which imports packages/config's
 # env schema at module load time — it needs *some* value for each required
 # var to pass validation, even though nothing actually connects to Postgres/
