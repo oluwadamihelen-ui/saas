@@ -28,6 +28,11 @@ export default async function ProfilePage({ searchParams }: { searchParams: { er
     include: { subscription: { include: { plan: true } } },
   });
 
+  async function signOutAction() {
+    "use server";
+    await signOut({ redirectTo: "/" });
+  }
+
   async function deleteAccountAction(formData: FormData) {
     "use server";
     const currentSession = await auth();
@@ -71,6 +76,9 @@ export default async function ProfilePage({ searchParams }: { searchParams: { er
                 Accepted the Terms of Service and Privacy Policy on {user.termsAcceptedAt.toLocaleDateString()}.
               </p>
             )}
+            <form action={signOutAction} className="mt-4">
+              <button className="btn-secondary-sm">Sign out</button>
+            </form>
           </section>
 
           {user.passwordHash && (

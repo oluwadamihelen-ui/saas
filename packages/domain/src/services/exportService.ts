@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { prisma } from "@cinerra/database";
+import { prisma, createNotification } from "@cinerra/database";
 import type { StorageClient } from "@cinerra/storage";
 import { buildAssetKey } from "@cinerra/storage";
 import { concatVideos, FfmpegExecutionError, FfmpegNotAvailableError } from "@cinerra/media";
@@ -26,13 +26,13 @@ async function notifyExportOutcome(
   projectId: string,
   outcome: { status: "SUCCEEDED" } | { status: "FAILED"; errorMessage: string },
 ): Promise<void> {
-  try {
-    const [episode, project] = await Promise.all([
-      prisma.episode.findUnique({ where: { id: episodeId }, select: { title: true } }),
-      prisma.project.findUnique({ where: { id: projectId }, select: { title: true, owner: { select: { email: true } } } }),
-    ]);
-    if (!episode || !project) return;
+  const [episode, project] = await Promise.all([
+    prisma.episode.findUnique({ where: { id: episodeId }, select: { title: true } }),
+    prisma.project.findUnique({ where: { id: projectId }, select: { title: true, ownerId: true, owner: { select: { email: true } } } }),
+  ]);
+  if (!episode || !project) return;
 
+  try {
     const projectUrl = `${appBaseUrl}/projects/${projectId}`;
     const content =
       outcome.status === "SUCCEEDED"
@@ -42,6 +42,21 @@ async function notifyExportOutcome(
     await email.send({ to: project.owner.email, ...content });
   } catch (error) {
     console.error("[email] Failed to send export outcome notification:", error);
+  }
+
+  // A separate concern from the email above, in its own try/catch so a
+  // failure here (or the email failing above) never affects the other,
+  // and neither ever affects the export's own SUCCEEDED/FAILED outcome.
+  try {
+    await createNotification({
+      userId: project.ownerId,
+      type: outcome.status === "SUCCEEDED" ? "EXPORT_COMPLETE" : "GENERATION_FAILED",
+      title: outcome.status === "SUCCEEDED" ? `"${episode.title}" is ready` : `"${episode.title}" export failed`,
+      body: outcome.status === "SUCCEEDED" ? `${project.title} finished exporting.` : outcome.errorMessage,
+      linkUrl: `/projects/${projectId}`,
+    });
+  } catch (error) {
+    console.error("[notifications] Failed to create export outcome notification:", error);
   }
 }
 

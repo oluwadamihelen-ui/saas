@@ -1,13 +1,16 @@
 import Link from "next/link";
-import { auth, signOut } from "@/lib/auth";
+import { auth } from "@/lib/auth";
 import { getWalletBalance } from "@/lib/wallet";
+import { getRecentNotifications } from "@/lib/notifications";
 import { Logo } from "./Logo";
+import { NotificationBell } from "./NotificationBell";
 
 /** Header (spec §8): logo, search, notifications, create button, profile. */
 export async function Header() {
   const session = await auth();
   const user = session?.user as { id?: string; name?: string | null; email?: string | null } | undefined;
   const balance = user?.id ? await getWalletBalance(user.id) : null;
+  const { notifications, unreadCount } = user?.id ? await getRecentNotifications(user.id) : { notifications: [], unreadCount: 0 };
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-cinerra-border/70 bg-cinerra-bg/80 px-4 shadow-[0_1px_0_0_rgba(255,255,255,0.03)] backdrop-blur-md md:px-8">
@@ -38,22 +41,24 @@ export async function Header() {
             >
               🪙 {(balance ?? 0).toLocaleString()}
             </Link>
-            <button className="hidden h-9 w-9 items-center justify-center rounded-full border border-cinerra-border text-cinerra-muted transition hover:border-cinerra-accent/40 hover:text-cinerra-text md:flex" aria-label="Notifications">
-              <BellIcon />
-            </button>
-            <form
-              action={async () => {
-                "use server";
-                await signOut({ redirectTo: "/login" });
-              }}
+            <NotificationBell
+              initialNotifications={notifications.map((n) => ({
+                id: n.id,
+                title: n.title,
+                body: n.body,
+                linkUrl: n.linkUrl,
+                readAt: n.readAt ? n.readAt.toISOString() : null,
+                createdAt: n.createdAt.toISOString(),
+              }))}
+              initialUnreadCount={unreadCount}
+            />
+            <Link
+              href="/profile"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-cinerra-accent text-sm font-semibold uppercase text-white ring-2 ring-cinerra-bg transition hover:brightness-110"
+              title="Your profile"
             >
-              <button
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-cinerra-accent text-sm font-semibold uppercase text-white ring-2 ring-cinerra-bg transition hover:brightness-110"
-                title="Sign out"
-              >
-                {user.name?.[0] ?? user.email?.[0] ?? "U"}
-              </button>
-            </form>
+              {user.name?.[0] ?? user.email?.[0] ?? "U"}
+            </Link>
           </>
         ) : (
           <Link href="/login" className="btn-secondary px-4 py-2 text-sm">
@@ -70,15 +75,6 @@ function SearchIcon() {
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mr-2 shrink-0">
       <circle cx="11" cy="11" r="7" />
       <path d="m21 21-4.3-4.3" />
-    </svg>
-  );
-}
-
-function BellIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-      <path d="M13.7 21a2 2 0 0 1-3.4 0" />
     </svg>
   );
 }

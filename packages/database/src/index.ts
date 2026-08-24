@@ -20,3 +20,4 @@ if (process.env.NODE_ENV !== "production") {
 export * from "@prisma/client";
 export * from "./wallet.js";
 export * from "./promotionalGrants.js";
+export * from "./notifications.js";
