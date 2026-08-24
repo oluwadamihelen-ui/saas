@@ -74,3 +74,44 @@ export const CREDIT_COSTS = {
 } as const;
 
 export const SIGNUP_GRANT_CREDITS = 50;
+
+// Every paid plan needs a Stripe Price ID configured via env before it can
+// be purchased — FREE never has one, since it isn't a Stripe subscription.
+const PLAN_PRICE_ENV: Partial<Record<PlanId, string | undefined>> = {
+  STARTER: process.env.STRIPE_PRICE_STARTER,
+  CREATOR: process.env.STRIPE_PRICE_CREATOR,
+  PRO: process.env.STRIPE_PRICE_PRO,
+};
+
+export function getStripePriceIdForPlan(plan: PlanId): string | null {
+  return PLAN_PRICE_ENV[plan] || null;
+}
+
+/** Reverse lookup used by the Stripe webhook to map a subscription's price back to our PlanId. */
+export function getPlanForStripePriceId(priceId: string | undefined | null): PlanId | null {
+  if (!priceId) return null;
+  const entry = (Object.entries(PLAN_PRICE_ENV) as [PlanId, string | undefined][]).find(
+    ([, envPriceId]) => envPriceId === priceId
+  );
+  return entry?.[0] ?? null;
+}
+
+export type CreditPack = {
+  id: "small" | "large";
+  name: string;
+  credits: number;
+};
+
+export const CREDIT_PACKS: CreditPack[] = [
+  { id: "small", name: "Small top-up", credits: 200 },
+  { id: "large", name: "Large top-up", credits: 1000 },
+];
+
+const CREDIT_PACK_PRICE_ENV: Record<CreditPack["id"], string | undefined> = {
+  small: process.env.STRIPE_PRICE_CREDIT_PACK_SMALL,
+  large: process.env.STRIPE_PRICE_CREDIT_PACK_LARGE,
+};
+
+export function getStripePriceIdForCreditPack(packId: CreditPack["id"]): string | null {
+  return CREDIT_PACK_PRICE_ENV[packId] || null;
+}

@@ -101,6 +101,7 @@ src/
     jobs/                       # BullMQ queues (queue.ts) + worker process (worker.ts)
     storage/                     # StorageProvider (local dev impl; swap in S3/R2 for prod)
     render/                       # auth-scoped RenderJob repository
+    billing/                      # Stripe client, checkout/portal session creation
   components/
     ui/                # base design system (Button, Card, Input, Badge...)
     marketing/           # public site sections/forms
@@ -131,9 +132,47 @@ docker-compose.yml     # Postgres + Redis for local/dev parity with prod
 
 `src/lib/plans.ts` defines plan tiers and per-operation credit costs.
 Prices are intentionally left undecided (`TBD` on the pricing page) until
-business decisions are made. All balance changes go through
-`applyCreditDelta` in `src/server/credits/ledger.ts`, which writes an
-auditable `CreditLedgerEntry` for every grant and charge.
+business decisions are made — the dollar amount lives entirely in your own
+Stripe Price objects, never in this codebase. All balance changes go
+through `applyCreditDelta` in `src/server/credits/ledger.ts`, which writes
+an auditable `CreditLedgerEntry` for every grant and charge.
+
+## Billing (Stripe, preview-mode-first)
+
+Like the AI providers, billing runs in a clearly-labeled preview mode
+until configured: `isStripeConfigured()` (`src/server/billing/stripe.ts`)
+just checks whether `STRIPE_SECRET_KEY` is set. Without it, `/billing`
+shows a "Billing preview mode" notice and every upgrade/purchase button is
+replaced with a "Preview mode" label instead of attempting a real
+checkout — the plan grid, credit balance, and credit history are all still
+fully real and functional.
+
+To go live: create Products/Prices for Starter/Creator/Pro and the two
+credit packs in your Stripe dashboard, paste the resulting `price_...` IDs
+into `STRIPE_PRICE_*` in `.env`, and set `STRIPE_SECRET_KEY` +
+`STRIPE_WEBHOOK_SECRET` (point a Stripe webhook at
+`/api/webhooks/stripe`, subscribed to `checkout.session.completed`,
+`customer.subscription.updated`, `customer.subscription.deleted`,
+`invoice.payment_succeeded`, and `invoice.payment_failed`).
+`src/server/billing/checkout.ts` creates subscription checkout sessions,
+one-time credit-pack checkout sessions, and Stripe Billing Portal sessions
+(lazily creating a Stripe Customer on first use, stored on `Subscription`).
+The webhook handler grants the plan's `monthlyCredits` both on initial
+subscribe and on every `subscription_cycle` renewal invoice, records
+one-time purchases with the `PURCHASE` ledger reason, and keeps
+`Subscription.status`/`plan` in sync with Stripe (including mapping a
+canceled subscription back down to `FREE`).
+
+Verified without needing a real Stripe account: used the `stripe` SDK's own
+`webhooks.generateTestHeaderString` (a local HMAC operation, no network
+call) to send correctly-signed test events for the full subscription
+lifecycle — checkout → credit-pack purchase → renewal → payment failure →
+recovery → cancellation — against the real running webhook route, and
+confirmed both the `Subscription` row and every `CreditLedgerEntry` ended
+up in exactly the expected state at each step. Also confirmed a
+tampered/invalid signature is rejected with 400. Real end-to-end checkout
+(the parts that need Stripe's own servers — hosted Checkout pages, the
+Billing Portal UI) needs your own Stripe test API keys to exercise.
 
 ## AI providers (mock-first)
 
@@ -217,14 +256,18 @@ seeded system voice library (14 voices across 7 styles) and music library
 auto-generated + manually editable captions, project-level background music
 with volume/fade/loop/duck settings, and the timeline editor.
 
-**Phase D (this phase) — Rendering**: real Remotion-based video composition
-and MP4 export, described above.
+**Phase D — Rendering**: real Remotion-based video composition and MP4
+export, described above.
 
-**Not yet built**: Stripe billing (Phase E — the credit *ledger* already
-works end-to-end and gates every paid operation including render; this
-phase adds actual payment processing and plan upgrades) and production
-hardening (Phase F — broader automated test coverage, structured logging,
-rate-limit tuning, a security pass). Nothing in this codebase fakes AI
-output or a fake render — every generated asset (images, storyboards,
-narration audio, music, and now the final composited video) is real
-mock-provider/Remotion output produced end-to-end, not hardcoded fixtures.
+**Phase E (this phase) — Monetization**: real Stripe subscription checkout,
+one-time credit-pack purchases, the Billing Portal, and webhook-driven
+credit grants/renewals — all running in an honest preview mode until Stripe
+keys are configured, described above.
+
+**Not yet built**: production hardening (Phase F — broader automated test
+coverage, structured logging, rate-limit tuning beyond the current
+in-memory per-route limiter, a security pass). Nothing in this codebase
+fakes AI output, a fake render, or a fake payment — every generated asset
+(images, storyboards, narration audio, music, the final composited video)
+is real mock-provider/Remotion output produced end-to-end, and billing
+either talks to the real Stripe API or plainly says it's in preview mode.
