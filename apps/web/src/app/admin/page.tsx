@@ -5,6 +5,8 @@ import { providerRegistry } from "@/lib/ai";
 import { Header } from "@/components/Header";
 import { ModerationQueue } from "@/components/ModerationQueue";
 import { PlatformSettingsForm } from "@/components/admin/PlatformSettingsForm";
+import { DailyRevenueChart } from "@/components/admin/DailyRevenueChart";
+import { getRevenueAnalytics } from "@/lib/analytics";
 
 const CAPABILITIES = ["TEXT", "IMAGE", "VIDEO", "VOICE", "MUSIC", "SOUND_EFFECT"] as const;
 
@@ -14,7 +16,7 @@ export default async function AdminPage() {
   if (!user?.id) redirect("/login");
   if (user.role !== "ADMIN") redirect("/");
 
-  const [userCount, activeSubscriptions, jobStats, plans, recentJobs, pendingPublications, platformSettings] = await Promise.all([
+  const [userCount, activeSubscriptions, jobStats, plans, recentJobs, pendingPublications, platformSettings, revenueAnalytics] = await Promise.all([
     prisma.user.count(),
     prisma.subscription.findMany({ where: { status: "ACTIVE" }, include: { plan: true } }),
     prisma.generationJob.groupBy({ by: ["status"], _count: true }),
@@ -26,6 +28,7 @@ export default async function AdminPage() {
       include: { project: { select: { title: true } }, publishedBy: { select: { name: true, email: true } } },
     }),
     prisma.platformSettings.findUniqueOrThrow({ where: { id: "singleton" } }),
+    getRevenueAnalytics(),
   ]);
 
   const moderationQueueItems = pendingPublications.map((p) => ({
@@ -120,6 +123,62 @@ export default async function AdminPage() {
               ))}
             </tbody>
           </table>
+        </section>
+
+        <section className="card mt-6">
+          <h2 className="text-lg font-semibold">Revenue analytics</h2>
+          <p className="mt-1 text-sm text-cinerra-muted">
+            Computed from settled unlock transactions only. Conversion rate (viewers who watched vs. who paid) isn&rsquo;t shown here — nothing
+            in the app writes view/impression events yet, so that number would be fabricated rather than real.
+          </p>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Stat label="Total coin revenue" value={`🪙 ${revenueAnalytics.totals.coinRevenue.toLocaleString()}`} />
+            <Stat label="Publisher share" value={`🪙 ${revenueAnalytics.totals.publisherShare.toLocaleString()}`} />
+            <Stat label="Platform share" value={`🪙 ${revenueAnalytics.totals.platformShare.toLocaleString()}`} />
+            <Stat label="Avg revenue / viewer" value={`🪙 ${revenueAnalytics.totals.avgRevenuePerViewer.toFixed(1)}`} />
+          </div>
+
+          <div className="mt-6">
+            <p className="mb-2 text-xs uppercase tracking-wide text-cinerra-muted">Daily coin revenue (last 30 days)</p>
+            <DailyRevenueChart data={revenueAnalytics.dailyRevenue} />
+          </div>
+
+          <div className="mt-6 grid gap-6 sm:grid-cols-2">
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-cinerra-muted">Top movies/episodes by revenue</p>
+              <div className="flex flex-col divide-y divide-cinerra-border">
+                {revenueAnalytics.topProjects.length === 0 ? (
+                  <p className="py-2 text-sm text-cinerra-muted">No unlocks yet.</p>
+                ) : (
+                  revenueAnalytics.topProjects.map((p) => (
+                    <div key={p.projectTitle} className="flex items-center justify-between py-2 text-sm">
+                      <div>
+                        <p className="text-cinerra-text">{p.projectTitle}</p>
+                        <p className="text-xs text-cinerra-muted">{p.unlockCount.toLocaleString()} unlocks</p>
+                      </div>
+                      <span className="font-medium">🪙 {p.coins.toLocaleString()}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-cinerra-muted">Top creators by earnings</p>
+              <div className="flex flex-col divide-y divide-cinerra-border">
+                {revenueAnalytics.topPublishers.length === 0 ? (
+                  <p className="py-2 text-sm text-cinerra-muted">No earnings yet.</p>
+                ) : (
+                  revenueAnalytics.topPublishers.map((p) => (
+                    <div key={p.publisherId ?? p.name} className="flex items-center justify-between py-2 text-sm">
+                      <span className="text-cinerra-text">{p.name}</span>
+                      <span className="font-medium">🪙 {p.coins.toLocaleString()}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
         </section>
 
         <section className="card mt-6">
