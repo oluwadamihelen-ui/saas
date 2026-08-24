@@ -179,6 +179,17 @@ enum BillingInterval {
   YEAR
 }
 
+// Which real-world payment processor a Subscription/CoinPurchase/Payout runs
+// through. Paystack is the only one of the two with a native recurring-billing
+// product (Plans + subscription webhooks) — Korapay is a payins/payouts
+// platform with no subscription concept, so it's only ever used here for
+// one-time charges and payouts, never subscriptions. Documented rather than
+// silently assumed, since it's a real constraint of the provider, not a gap.
+enum PaymentProvider {
+  PAYSTACK
+  KORAPAY
+}
+
 // Admin-editable plan catalog. Prices and fair-use limits are never hard-coded
 // into application logic (spec §42, §80).
 model Plan {
@@ -188,8 +199,8 @@ model Plan {
   description               String?
   priceMonthlyCents         Int
   priceYearlyCents          Int
-  stripePriceIdMonthly      String?
-  stripePriceIdYearly       String?
+  paystackPlanCodeMonthly   String?
+  paystackPlanCodeYearly    String?
   maxConcurrentGenerations  Int      @default(1)
   queuePriority             QueuePriority @default(NORMAL)
   maxExportResolution       String   @default("720p")
@@ -213,21 +224,27 @@ enum SubscriptionStatus {
   INCOMPLETE
 }
 
-// Synced exclusively from Stripe webhooks — never trust the frontend for state (spec §44).
+// Synced exclusively from Paystack webhooks — never trust the frontend for
+// state (spec §44). paystackEmailToken is the token Paystack requires
+// alongside the subscription code to disable a subscription via the API
+// (POST /subscription/disable) — captured from the subscription.create
+// webhook payload, since there's no other way to fetch it later.
 model Subscription {
-  id                   String             @id @default(cuid())
-  userId               String             @unique
-  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  planId               String
-  plan                 Plan               @relation(fields: [planId], references: [id])
-  status               SubscriptionStatus @default(TRIALING)
-  interval             BillingInterval    @default(MONTH)
-  stripeCustomerId     String?
-  stripeSubscriptionId String?            @unique
-  currentPeriodEnd     DateTime?
-  cancelAtPeriodEnd    Boolean            @default(false)
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
+  id                       String             @id @default(cuid())
+  userId                   String             @unique
+  user                     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId                   String
+  plan                     Plan               @relation(fields: [planId], references: [id])
+  status                   SubscriptionStatus @default(TRIALING)
+  interval                 BillingInterval    @default(MONTH)
+  provider                 PaymentProvider    @default(PAYSTACK)
+  paystackCustomerCode     String?
+  paystackSubscriptionCode String?            @unique
+  paystackEmailToken       String?
+  currentPeriodEnd         DateTime?
+  cancelAtPeriodEnd        Boolean            @default(false)
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
 }
 
 // ---------------------------------------------------------------------------

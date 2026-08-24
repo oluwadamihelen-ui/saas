@@ -38,9 +38,12 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
 
-  // --- Billing (Stripe) ---
+  // --- Billing: coin purchases still run on Stripe pending its own
+  // migration; subscriptions run on Paystack (Korapay has no subscription
+  // product — see the PaymentProvider enum's comment in schema.prisma) ---
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  PAYSTACK_SECRET_KEY: z.string().optional(),
 
   // --- AI providers (all optional — router degrades honestly if unset) ---
   ANTHROPIC_API_KEY: z.string().optional(),
@@ -86,6 +89,7 @@ export const isProviderConfigured = {
   runway: (env: Env) => Boolean(env.RUNWAYML_API_SECRET),
   elevenlabs: (env: Env) => Boolean(env.ELEVENLABS_API_KEY),
   stripe: (env: Env) => Boolean(env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET),
+  paystack: (env: Env) => Boolean(env.PAYSTACK_SECRET_KEY),
   googleOAuth: (env: Env) => Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
   sentry: (env: Env) => Boolean(env.SENTRY_DSN),
   email: (env: Env) => Boolean(env.RESEND_API_KEY),

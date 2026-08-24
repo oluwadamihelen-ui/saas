@@ -1,33 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type Stripe from "stripe";
 import { constructWebhookEvent, createStripeClient, HANDLED_WEBHOOK_EVENTS } from "@cinerra/billing";
-import { prisma } from "@/lib/db";
 import { env } from "@/lib/env";
 import { handleCoinPurchaseCompleted, handleCoinPurchaseRefunded } from "@/lib/coinPurchases";
 
 export const dynamic = "force-dynamic";
 
-function mapStatus(status: Stripe.Subscription.Status): "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED" | "UNPAID" | "INCOMPLETE" {
-  switch (status) {
-    case "trialing":
-      return "TRIALING";
-    case "active":
-      return "ACTIVE";
-    case "past_due":
-      return "PAST_DUE";
-    case "canceled":
-      return "CANCELED";
-    case "unpaid":
-      return "UNPAID";
-    default:
-      return "INCOMPLETE";
-  }
-}
-
 /**
- * Stripe webhooks are the ONLY source of subscription truth (spec §44).
- * Signature-verified, and every handler is idempotent — replays of the
- * same event (Stripe retries on any non-2xx) just upsert the same state.
+ * Coin-purchase webhook only — subscription billing moved to Paystack
+ * (see /api/webhooks/paystack). Signature-verified, and every handler is
+ * idempotent — replays of the same event (Stripe retries on any non-2xx)
+ * just upsert the same state.
  */
 export async function POST(request: NextRequest) {
   if (!env.STRIPE_SECRET_KEY || !env.STRIPE_WEBHOOK_SECRET) {
@@ -54,40 +37,6 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    if (event.type.startsWith("customer.subscription.")) {
-      const subscription = event.data.object as Stripe.Subscription;
-      const userId = subscription.metadata.userId;
-      if (!userId) return NextResponse.json({ received: true, warning: "subscription had no userId metadata" });
-
-      const priceId = subscription.items.data[0]?.price.id;
-      const plan = priceId
-        ? await prisma.plan.findFirst({ where: { OR: [{ stripePriceIdMonthly: priceId }, { stripePriceIdYearly: priceId }] } })
-        : null;
-
-      await prisma.subscription.upsert({
-        where: { userId },
-        create: {
-          userId,
-          planId: plan?.id ?? (await prisma.plan.findUniqueOrThrow({ where: { key: "free" } })).id,
-          status: mapStatus(subscription.status),
-          interval: plan && priceId === plan.stripePriceIdYearly ? "YEAR" : "MONTH",
-          stripeCustomerId: typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id,
-          stripeSubscriptionId: subscription.id,
-          currentPeriodEnd: new Date(subscription.current_period_end * 1000),
-          cancelAtPeriodEnd: subscription.cancel_at_period_end,
-        },
-        update: {
-          ...(plan ? { planId: plan.id } : {}),
-          status: mapStatus(subscription.status),
-          interval: plan && priceId === plan.stripePriceIdYearly ? "YEAR" : "MONTH",
-          stripeCustomerId: typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id,
-          stripeSubscriptionId: subscription.id,
-          currentPeriodEnd: new Date(subscription.current_period_end * 1000),
-          cancelAtPeriodEnd: subscription.cancel_at_period_end,
-        },
-      });
-    }
-
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
       if (session.mode === "payment" && session.metadata?.type === "coin_purchase") {

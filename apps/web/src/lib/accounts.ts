@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { hashPassword, verifyPassword } from "@cinerra/config";
-import { createStripeClient } from "@cinerra/billing";
+import { createPaystackClient } from "@cinerra/billing";
 import { welcomeEmail, passwordResetEmail } from "@cinerra/email";
 import { prisma } from "./db";
 import { emailClient } from "./email";
@@ -113,8 +113,8 @@ export async function resetPassword(token: string, newPassword: string): Promise
 }
 
 /**
- * Full self-serve account deletion. Cancels any live Stripe subscription
- * first — subscription status only ever changes via a verified Stripe
+ * Full self-serve account deletion. Cancels any live Paystack subscription
+ * first — subscription status only ever changes via a verified Paystack
  * webhook (spec §44), and once the User row is gone there's no local
  * record left for a webhook that arrives afterward to update, so an
  * un-cancelled subscription would keep billing the customer indefinitely
@@ -146,17 +146,17 @@ export async function resetPassword(token: string, newPassword: string): Promise
  */
 export async function deleteUserAccount(userId: string): Promise<void> {
   const subscription = await prisma.subscription.findUnique({ where: { userId } });
-  if (subscription?.stripeSubscriptionId && subscription.status !== "CANCELED") {
-    if (!env.STRIPE_SECRET_KEY) {
+  if (subscription?.paystackSubscriptionCode && subscription.status !== "CANCELED") {
+    if (!env.PAYSTACK_SECRET_KEY || !subscription.paystackEmailToken) {
       console.error(
-        `[accounts] Deleting user ${userId} with a live Stripe subscription (${subscription.stripeSubscriptionId}) but STRIPE_SECRET_KEY isn't configured — it can't be cancelled here and will keep billing. Proceeding with deletion anyway; this subscription needs manual cancellation in Stripe.`,
+        `[accounts] Deleting user ${userId} with a live Paystack subscription (${subscription.paystackSubscriptionCode}) but it can't be cancelled here (missing PAYSTACK_SECRET_KEY or email_token) — will keep billing. Proceeding with deletion anyway; this subscription needs manual cancellation in Paystack.`,
       );
     } else {
       try {
-        const stripe = createStripeClient(env.STRIPE_SECRET_KEY);
-        await stripe.subscriptions.cancel(subscription.stripeSubscriptionId);
+        const paystack = createPaystackClient(env.PAYSTACK_SECRET_KEY);
+        await paystack.disableSubscription({ code: subscription.paystackSubscriptionCode, token: subscription.paystackEmailToken });
       } catch (error) {
-        console.error("[accounts] Failed to cancel Stripe subscription during account deletion:", error);
+        console.error("[accounts] Failed to cancel Paystack subscription during account deletion:", error);
         throw new SubscriptionCancellationError();
       }
     }

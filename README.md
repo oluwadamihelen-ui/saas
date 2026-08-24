@@ -29,7 +29,7 @@ This build follows the phased plan in the product spec and keeps the project run
 - **Sound effect generation** (spec §29): synthesizes an action/ambient sound cue for a shot from its action description via `SoundEffectProvider` (ElevenLabs Sound Effects API) — independent of dialogue, so a shot can carry both a spoken line and an action cue. Plays inline on the shot card next to the dialogue player.
 - **Episode score generation** (spec §29): synthesizes one instrumental background score per episode via `MusicProvider` (ElevenLabs Music API), prompted from the story bible's genre/tone and the episode's synopsis — explicitly instructed to produce score-only audio, no vocals. Placed on the timeline against the episode as a whole (`TimelineItem.episodeId`, distinct from the per-shot dialogue/SFX placement) and playable inline on the episode card.
 - All of the above run asynchronously through real BullMQ queues + a worker, with state-based progress in the UI (never a fake percentage)
-- Stripe subscription checkout, customer portal, and webhook-driven subscription sync
+- Paystack subscription checkout, in-app cancellation, and webhook-driven subscription sync (no hosted portal — neither Paystack nor Korapay has one)
 - Admin dashboard (users, MRR, provider configuration status, plan table, recent jobs)
 
 **Real, typed, wired interfaces — ready for the next phase without an architecture change:**
@@ -87,17 +87,17 @@ Verified directly against a real Postgres instance, not just typechecked: two co
 **UI, built as a first pass**: a Coin balance chip in the header linking to `/wallet` (balance, buy-Coins grid, recent activity); an unlock paywall on `/watch/[id]` with the spec's confirm-before-charging flow (cost, current balance, balance after) and an honest "not enough Coins" state with a link to buy more; monetization controls on the project page (Free/Paid, Movie/Episode charge level, price inputs with a live "viewer pays / you earn / Cinerra earns" preview); and `/earnings` — a real earnings summary (available/pending/lifetime/this-month, paid unlocks, coin revenue, a per-unlock transaction history table) for creators.
 
 **Explicitly out of scope for this phase** (per the plan's own 14-phase ordering — built the ledger/wallet/purchase/pricing/entitlement/unlock/split foundation solidly first rather than rushing everything at once):
-- **Stripe Connect payouts** — `PayoutAccount`/`Payout` tables exist in the schema, but there's no onboarding flow, no actual transfer to a creator's bank account, and `CreatorEarning.status` is never automatically transitioned from `PENDING` to `AVAILABLE` once its settlement hold elapses (the earnings page computes that for display instead of trusting the stored status) — that transition needs a scheduled job, a natural fit for the existing worker but not built here.
+- **Creator payouts** (Paystack Transfer API + Korapay Payout API, creator's choice of provider) — `PayoutAccount`/`Payout` tables exist in the schema, but there's no onboarding flow, no actual transfer to a creator's bank account, and `CreatorEarning.status` is never automatically transitioned from `PENDING` to `AVAILABLE` once its settlement hold elapses (the earnings page computes that for display instead of trusting the stored status) — that transition needs a scheduled job, a natural fit for the existing worker but not built here.
 - **Fraud/risk controls** (self-purchase detection, device/IP collusion signals, refund-abuse detection, rate limiting on purchases/unlocks) — none of this exists yet. A creator watching their own paid content for free is allowed (no money moves, nothing to detect), which is different from and does not address the fraud pattern the spec describes.
 - **Rich analytics** (daily/weekly charts, top movies/episodes, conversion rate, average revenue per viewer) and the admin-facing platform revenue dashboard.
 - **Promotional coins**, coin expiration, and the admin UI for editing `PlatformSettings` itself (the settings row exists and is read everywhere pricing/splits are calculated, but there's no admin screen to change it yet — only direct DB access).
 - Client-side (in-app) viewing-milestone tracking — `ViewingEvent` is scaffolded in the schema but not wired into the player.
 
-**Remaining before launch** (not part of the original phased roadmap, but needed for a real public launch): closing the Google-OAuth terms-acceptance gap noted above, real ESLint setup (`next lint` has never been configured, per the CI note above), client-side error capture (noted above), and the coin-economy gaps listed just above (Stripe Connect payouts, fraud controls, the account-deletion cascade interaction, and the settlement-period state-machine transition).
+**Remaining before launch** (not part of the original phased roadmap, but needed for a real public launch): closing the Google-OAuth terms-acceptance gap noted above, real ESLint setup (`next lint` has never been configured, per the CI note above), client-side error capture (noted above), and the coin-economy gaps listed just above (creator payouts, fraud controls, and the settlement-period state-machine transition — the account-deletion cascade interaction has since been fixed, see the coin-economy notes above), and migrating coin purchases off Stripe onto Paystack/Korapay to match subscriptions and payouts.
 
 ## Tech stack
 
-Next.js 14 (App Router) · TypeScript · Tailwind · PostgreSQL + Prisma · Redis + BullMQ · S3-compatible storage · Stripe · Auth.js (NextAuth v5) · Vitest
+Next.js 14 (App Router) · TypeScript · Tailwind · PostgreSQL + Prisma · Redis + BullMQ · S3-compatible storage · Paystack + Stripe · Auth.js (NextAuth v5) · Vitest
 
 ## Prerequisites
 
@@ -118,7 +118,7 @@ pnpm install
 cp .env.example .env
 ```
 
-Fill in `.env`. See the comments in `.env.example` for what each variable does. Required to boot: `DATABASE_URL`, `REDIS_URL`, `STORAGE_*`, `AUTH_SECRET`. Everything else (Stripe, AI provider keys, Google OAuth) is optional — the app runs without them, and the relevant features honestly report "not configured" instead of faking output.
+Fill in `.env`. See the comments in `.env.example` for what each variable does. Required to boot: `DATABASE_URL`, `REDIS_URL`, `STORAGE_*`, `AUTH_SECRET`. Everything else (Paystack, Stripe, AI provider keys, Google OAuth) is optional — the app runs without them, and the relevant features honestly report "not configured" instead of faking output.
 
 Generate `AUTH_SECRET`:
 
@@ -162,12 +162,18 @@ Add whichever provider keys you have to `.env`:
 
 The `AiModel` table (seeded by `pnpm db:seed`) is the admin-editable routing table for which provider/model serves each capability under each optimization mode (`BEST_QUALITY` / `FASTEST` / `BALANCED`) — see `packages/ai`.
 
-## 6. Stripe setup (optional)
+## 6. Billing setup (optional)
 
-1. Create four recurring Prices in your Stripe dashboard (monthly + yearly for each paid plan), then set `stripePriceIdMonthly` / `stripePriceIdYearly` on the corresponding `Plan` rows (via Prisma Studio: `pnpm db:studio`, or an admin UI once built).
-2. Set `STRIPE_SECRET_KEY` in `.env`.
-3. For local webhook testing: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`, then set `STRIPE_WEBHOOK_SECRET` to the value it prints.
-4. In production, add a webhook endpoint pointed at `https://yourapp.com/api/webhooks/stripe` subscribed to `checkout.session.completed`, `customer.subscription.*`, and `invoice.*` events.
+**Subscriptions (Paystack)** — Korapay has no subscription/recurring-billing product, so subscriptions run on Paystack only:
+1. Create four recurring Plans in your Paystack dashboard (monthly + yearly for each paid tier), then set `paystackPlanCodeMonthly` / `paystackPlanCodeYearly` on the corresponding `Plan` rows (via Prisma Studio: `pnpm db:studio`, or an admin UI once built).
+2. Set `PAYSTACK_SECRET_KEY` in `.env`. Paystack has no separate webhook-signing secret — the secret key itself signs webhook payloads (`x-paystack-signature`, HMAC-SHA512).
+3. In your Paystack dashboard, add a webhook endpoint pointed at `https://yourapp.com/api/webhooks/paystack`.
+4. There's no hosted customer portal on Paystack (or Korapay) the way Stripe has — subscription cancellation is a direct in-app action (`/profile` → "Cancel subscription") that calls Paystack's `/subscription/disable` API instead.
+
+**Coin purchases (Stripe, for now)** — still run on Stripe pending their own migration to Paystack/Korapay:
+1. Set `STRIPE_SECRET_KEY` in `.env`.
+2. For local webhook testing: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`, then set `STRIPE_WEBHOOK_SECRET` to the value it prints.
+3. In production, add a webhook endpoint pointed at `https://yourapp.com/api/webhooks/stripe` subscribed to `checkout.session.completed` and `charge.refunded`.
 
 ## 7. Local development
 
@@ -197,7 +203,7 @@ pnpm typecheck      # TypeScript project-wide
 
 ## 10. Webhook configuration
 
-Only one inbound webhook exists today: `POST /api/webhooks/stripe`, signature-verified against `STRIPE_WEBHOOK_SECRET`. AI provider webhooks (e.g. Runway task completion) are not yet wired — the current video provider adapter polls instead; switching to a webhook-driven flow is a worker-side change only, the provider interface in `packages/ai` doesn't need to change.
+Two inbound webhooks exist today: `POST /api/webhooks/paystack` (subscription lifecycle, signature-verified against `PAYSTACK_SECRET_KEY` itself — Paystack has no separate webhook-signing secret) and `POST /api/webhooks/stripe` (coin purchases, signature-verified against `STRIPE_WEBHOOK_SECRET`). AI provider webhooks (e.g. Runway task completion) are not yet wired — the current video provider adapter polls instead; switching to a webhook-driven flow is a worker-side change only, the provider interface in `packages/ai` doesn't need to change.
 
 ## Repository layout
 
@@ -207,7 +213,7 @@ apps/
   worker/    BullMQ worker — generation job processing
 packages/
   ai/        Provider abstraction: interfaces, registry, router, adapters
-  billing/   Stripe wrapper + fair-use policy (no customer-facing credits)
+  billing/   Paystack (subscriptions) + Stripe (coin purchases) wrappers + fair-use policy
   config/    Env validation (Zod) + password hashing, shared everywhere
   database/  Prisma schema, client, seed script
   domain/    Agents (Story Architect, Screenwriter, Character/Location/Prop
