@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { auth } from "@/lib/auth";
 
 const MOBILE_ITEMS = [
   { href: "/", label: "Home", icon: HomeIcon },
@@ -20,11 +21,20 @@ const DESKTOP_ITEMS = [
   { href: "/profile", label: "Profile", icon: UserIcon },
 ];
 
+const ADMIN_ITEM = { href: "/admin", label: "Admin", icon: ShieldIcon, accent: false };
+
+async function isAdmin(): Promise<boolean> {
+  const session = await auth();
+  return (session?.user as { role?: string } | undefined)?.role === "ADMIN";
+}
+
 /** Mobile bottom nav (spec §52). */
-export function MobileNav() {
+export async function MobileNav() {
+  const admin = await isAdmin();
+  const items = admin ? [...MOBILE_ITEMS, ADMIN_ITEM] : MOBILE_ITEMS;
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-cinerra-border/70 bg-cinerra-bg/95 py-2 backdrop-blur-md md:hidden">
-      {MOBILE_ITEMS.map((item) => (
+      {items.map((item) => (
         <Link
           key={item.href}
           href={item.href}
@@ -43,7 +53,8 @@ export function MobileNav() {
 }
 
 /** Desktop sidebar (spec §52). */
-export function DesktopSidebar() {
+export async function DesktopSidebar() {
+  const admin = await isAdmin();
   return (
     <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-56 shrink-0 flex-col gap-1 border-r border-cinerra-border/70 p-4 md:flex">
       {DESKTOP_ITEMS.map((item) => (
@@ -58,6 +69,20 @@ export function DesktopSidebar() {
           {item.label}
         </Link>
       ))}
+      {admin && (
+        <>
+          <div className="my-2 border-t border-cinerra-border/70" />
+          <Link
+            href={ADMIN_ITEM.href}
+            className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-cinerra-muted transition hover:bg-cinerra-surface2/70 hover:text-cinerra-text"
+          >
+            <span className="text-cinerra-muted transition group-hover:text-cinerra-accent">
+              <ADMIN_ITEM.icon />
+            </span>
+            {ADMIN_ITEM.label}
+          </Link>
+        </>
+      )}
     </aside>
   );
 }
@@ -140,6 +165,13 @@ function ClapperIcon() {
     <svg {...iconProps()}>
       <path d="M3 8h18v12H3z" />
       <path d="M3 8l3-5h3l-3 5zM9 8l3-5h3l-3 5zM15 8l3-5h3l-3 5z" />
+    </svg>
+  );
+}
+function ShieldIcon() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M12 3l7 3v6c0 4.5-3 8-7 9-4-1-7-4.5-7-9V6z" />
     </svg>
   );
 }
