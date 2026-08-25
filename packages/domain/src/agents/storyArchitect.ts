@@ -37,7 +37,7 @@ export interface StoryArchitectOutput {
   episodeStructure: StoryArchitectEpisodeBeat[];
 }
 
-const SYSTEM_PROMPT = `You are the Story Architect for Cinerra, a professional AI filmmaking platform. You develop the canonical Story Bible for a cinematic production. You write like a working television/film story editor: specific, visual, emotionally grounded — never generic or vague.
+const SYSTEM_PROMPT = `You are the Story Architect for FilmDoe, a professional AI filmmaking platform. You develop the canonical Story Bible for a cinematic production. You write like a working television/film story editor: specific, visual, emotionally grounded — never generic or vague.
 
 Rules you must always follow:
 - If source material is provided, it is the authoritative source of truth. Never invent characters, relationships, or events that contradict it.

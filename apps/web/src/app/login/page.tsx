@@ -49,7 +49,7 @@ export default function LoginPage({ searchParams }: { searchParams: { error?: st
         </form>
 
         <p className="mt-6 text-center text-sm text-cinerra-muted">
-          New to Cinerra?{" "}
+          New to FilmDoe?{" "}
           <Link href="/signup" className="text-cinerra-text underline">
             Create an account
           </Link>

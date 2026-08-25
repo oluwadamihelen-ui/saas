@@ -21,7 +21,7 @@ function layout(preheader: string, bodyHtml: string): string {
           <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background-color:#131318;border-radius:16px;overflow:hidden;">
             <tr>
               <td style="padding:32px 32px 8px 32px;">
-                <span style="font-size:20px;font-weight:700;color:#f4f4f6;">Cine<span style="color:#ec4899;">rra</span></span>
+                <span style="font-size:20px;font-weight:700;color:#f4f4f6;">Film<span style="color:#f97316;">Doe</span></span>
               </td>
             </tr>
             <tr>
@@ -30,7 +30,7 @@ function layout(preheader: string, bodyHtml: string): string {
               </td>
             </tr>
           </table>
-          <p style="max-width:480px;margin:16px auto 0;color:#9a9aa8;font-size:12px;">Cinerra — AI-powered filmmaking.</p>
+          <p style="max-width:480px;margin:16px auto 0;color:#9a9aa8;font-size:12px;">FilmDoe — AI-powered filmmaking.</p>
         </td>
       </tr>
     </table>
@@ -39,31 +39,31 @@ function layout(preheader: string, bodyHtml: string): string {
 }
 
 function button(url: string, label: string): string {
-  return `<a href="${url}" style="display:inline-block;margin-top:20px;padding:12px 24px;background-color:#8b5cf6;color:#ffffff;text-decoration:none;border-radius:999px;font-weight:600;font-size:14px;">${label}</a>`;
+  return `<a href="${url}" style="display:inline-block;margin-top:20px;padding:12px 24px;background-color:#f97316;color:#ffffff;text-decoration:none;border-radius:999px;font-weight:600;font-size:14px;">${label}</a>`;
 }
 
 export function welcomeEmail(name: string, createProjectUrl: string): EmailContent {
-  const preheader = "Your Cinerra account is ready — start creating.";
+  const preheader = "Your FilmDoe account is ready — start creating.";
   const html = layout(
     preheader,
     `<p>Hi ${name || "there"},</p>
-     <p>Welcome to Cinerra. Your account is set up and ready — turn an idea or a screenplay into a finished movie, start to finish.</p>
+     <p>Welcome to FilmDoe. Your account is set up and ready — turn an idea or a screenplay into a finished movie, start to finish.</p>
      ${button(createProjectUrl, "Create your first movie")}`,
   );
-  const text = `Hi ${name || "there"},\n\nWelcome to Cinerra. Your account is set up and ready — turn an idea or a screenplay into a finished movie, start to finish.\n\nCreate your first movie: ${createProjectUrl}`;
-  return { subject: "Welcome to Cinerra", html, text };
+  const text = `Hi ${name || "there"},\n\nWelcome to FilmDoe. Your account is set up and ready — turn an idea or a screenplay into a finished movie, start to finish.\n\nCreate your first movie: ${createProjectUrl}`;
+  return { subject: "Welcome to FilmDoe", html, text };
 }
 
 export function passwordResetEmail(resetUrl: string): EmailContent {
-  const preheader = "Reset your Cinerra password.";
+  const preheader = "Reset your FilmDoe password.";
   const html = layout(
     preheader,
-    `<p>We got a request to reset your Cinerra password.</p>
+    `<p>We got a request to reset your FilmDoe password.</p>
      ${button(resetUrl, "Reset password")}
      <p style="margin-top:20px;color:#9a9aa8;font-size:13px;">This link expires in 1 hour. If you didn&rsquo;t request this, you can safely ignore this email — your password won&rsquo;t change.</p>`,
   );
-  const text = `We got a request to reset your Cinerra password.\n\nReset it here (expires in 1 hour): ${resetUrl}\n\nIf you didn't request this, you can safely ignore this email.`;
-  return { subject: "Reset your Cinerra password", html, text };
+  const text = `We got a request to reset your FilmDoe password.\n\nReset it here (expires in 1 hour): ${resetUrl}\n\nIf you didn't request this, you can safely ignore this email.`;
+  return { subject: "Reset your FilmDoe password", html, text };
 }
 
 export function exportReadyEmail(params: { projectTitle: string; episodeTitle: string; projectUrl: string }): EmailContent {
@@ -90,13 +90,13 @@ export function exportFailedEmail(params: { projectTitle: string; episodeTitle: 
 }
 
 export function organizationInviteEmail(params: { organizationName: string; inviterName: string; acceptUrl: string }): EmailContent {
-  const preheader = `${params.inviterName} invited you to join ${params.organizationName} on Cinerra.`;
+  const preheader = `${params.inviterName} invited you to join ${params.organizationName} on FilmDoe.`;
   const html = layout(
     preheader,
-    `<p><strong>${params.inviterName}</strong> invited you to join <strong>${params.organizationName}</strong>&rsquo;s studio team on Cinerra.</p>
+    `<p><strong>${params.inviterName}</strong> invited you to join <strong>${params.organizationName}</strong>&rsquo;s studio team on FilmDoe.</p>
      ${button(params.acceptUrl, "Accept invite")}
      <p style="margin-top:20px;color:#9a9aa8;font-size:13px;">This invite expires in 7 days. If you weren&rsquo;t expecting this, you can safely ignore this email.</p>`,
   );
-  const text = `${params.inviterName} invited you to join ${params.organizationName}'s studio team on Cinerra.\n\nAccept the invite (expires in 7 days): ${params.acceptUrl}\n\nIf you weren't expecting this, you can safely ignore this email.`;
-  return { subject: `${params.inviterName} invited you to join ${params.organizationName} on Cinerra`, html, text };
+  const text = `${params.inviterName} invited you to join ${params.organizationName}'s studio team on FilmDoe.\n\nAccept the invite (expires in 7 days): ${params.acceptUrl}\n\nIf you weren't expecting this, you can safely ignore this email.`;
+  return { subject: `${params.inviterName} invited you to join ${params.organizationName} on FilmDoe`, html, text };
 }

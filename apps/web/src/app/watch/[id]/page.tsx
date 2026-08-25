@@ -150,7 +150,7 @@ export default async function WatchPage({ params }: { params: { id: string } }) 
           <div>
             <h1 className="font-display text-2xl font-bold text-cinerra-text md:text-3xl">{publication.project.title}</h1>
             <p className="mt-1 text-sm text-cinerra-muted">
-              By {publication.publishedBy.name ?? "A Cinerra creator"} · {publication.views.toLocaleString()} views · {publication.saves.toLocaleString()} saves
+              By {publication.publishedBy.name ?? "A FilmDoe creator"} · {publication.views.toLocaleString()} views · {publication.saves.toLocaleString()} saves
             </p>
             {publication.project.storyBible?.genres?.length ? (
               <p className="mt-2 text-xs uppercase tracking-wide text-cinerra-accent2">{publication.project.storyBible.genres.join(" · ")}</p>

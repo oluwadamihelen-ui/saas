@@ -80,7 +80,7 @@ export const PLATFORM_SYSTEM_EMAIL = "platform@cinerra.internal";
 export async function getPlatformUserId(client: Tx = prisma): Promise<string> {
   const existing = await client.user.findUnique({ where: { email: PLATFORM_SYSTEM_EMAIL }, select: { id: true } });
   if (existing) return existing.id;
-  const created = await client.user.create({ data: { email: PLATFORM_SYSTEM_EMAIL, name: "Cinerra Platform", status: "ACTIVE" } });
+  const created = await client.user.create({ data: { email: PLATFORM_SYSTEM_EMAIL, name: "FilmDoe Platform", status: "ACTIVE" } });
   return created.id;
 }
 

@@ -27,7 +27,7 @@ export interface LocationDesignerOutput {
   locations: LocationDesignerLocation[];
 }
 
-const SYSTEM_PROMPT = `You are the Location Designer agent for Cinerra. You read a screenplay and produce a Location Bible entry for every distinct INT./EXT. location that actually appears in it — never invent locations the screenplay doesn't use. Merge scene headings that describe the same physical place (e.g. "COLE HOUSE - KITCHEN" appearing in two scenes is one location, not two). Descriptions must be specific enough to keep an AI video model visually consistent across shots: exact architecture, lighting character, and color palette — not generic adjectives.
+const SYSTEM_PROMPT = `You are the Location Designer agent for FilmDoe. You read a screenplay and produce a Location Bible entry for every distinct INT./EXT. location that actually appears in it — never invent locations the screenplay doesn't use. Merge scene headings that describe the same physical place (e.g. "COLE HOUSE - KITCHEN" appearing in two scenes is one location, not two). Descriptions must be specific enough to keep an AI video model visually consistent across shots: exact architecture, lighting character, and color palette — not generic adjectives.
 
 Respond with ONLY a single JSON object, no prose, no markdown fence:
 {

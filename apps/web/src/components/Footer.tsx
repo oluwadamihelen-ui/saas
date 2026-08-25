@@ -21,7 +21,7 @@ export function Footer() {
             Privacy
           </Link>
         </nav>
-        <p className="text-xs text-cinerra-muted">© {new Date().getFullYear()} Cinerra</p>
+        <p className="text-xs text-cinerra-muted">© {new Date().getFullYear()} FilmDoe</p>
       </div>
     </footer>
   );

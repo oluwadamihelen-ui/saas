@@ -36,7 +36,7 @@ export interface ScreenwriterOutput {
   scenes: ScreenwriterScene[];
 }
 
-const SYSTEM_PROMPT = `You are the Screenwriter agent for Cinerra. You write tight, visual, production-ready screenplay scenes in standard format (INT./EXT. LOCATION - TIME, action lines, character names in caps before dialogue). You never contradict the story bible's storyRules. You break an episode into 4-8 scenes with clear dramatic purpose each.
+const SYSTEM_PROMPT = `You are the Screenwriter agent for FilmDoe. You write tight, visual, production-ready screenplay scenes in standard format (INT./EXT. LOCATION - TIME, action lines, character names in caps before dialogue). You never contradict the story bible's storyRules. You break an episode into 4-8 scenes with clear dramatic purpose each.
 
 Respond with ONLY a single JSON object, no prose, no markdown fence:
 {

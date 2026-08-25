@@ -3,7 +3,7 @@ import { MobileNav } from "@/components/Nav";
 import { Footer } from "@/components/Footer";
 import { LegalDisclaimer, LegalSection } from "@/components/LegalContent";
 
-export const metadata = { title: "Terms of Service — Cinerra" };
+export const metadata = { title: "Terms of Service — FilmDoe" };
 
 const LAST_UPDATED = "August 23, 2026";
 
@@ -21,9 +21,9 @@ export default function TermsPage() {
         <div className="mt-8 flex flex-col gap-8">
           <LegalSection title="1. Agreement to these terms">
             <p>
-              These Terms of Service (&ldquo;Terms&rdquo;) govern your access to and use of Cinerra (&ldquo;Cinerra,&rdquo;
+              These Terms of Service (&ldquo;Terms&rdquo;) govern your access to and use of FilmDoe (&ldquo;FilmDoe,&rdquo;
               &ldquo;we,&rdquo; &ldquo;us&rdquo;), an AI-assisted movie and episodic-drama generation platform. By creating an
-              account or using Cinerra, you agree to these Terms and to our{" "}
+              account or using FilmDoe, you agree to these Terms and to our{" "}
               <a href="/privacy" className="text-cinerra-accent underline">
                 Privacy Policy
               </a>
@@ -38,9 +38,9 @@ export default function TermsPage() {
             </p>
           </LegalSection>
 
-          <LegalSection title="3. What Cinerra does">
+          <LegalSection title="3. What FilmDoe does">
             <p>
-              Cinerra lets you generate story, character, location, storyboard, video, dialogue, sound effect, and music
+              FilmDoe lets you generate story, character, location, storyboard, video, dialogue, sound effect, and music
               content using third-party AI providers (currently including Anthropic, OpenAI, Runway, and ElevenLabs,
               depending on what your workspace has configured). Prompts, story text, and reference material you submit for
               generation are sent to those providers solely to produce your requested output — see our{" "}
@@ -55,8 +55,8 @@ export default function TermsPage() {
           <LegalSection title="4. Your content">
             <p>
               You keep ownership of the story ideas, prompts, and source material you submit, and of the movies and assets
-              Cinerra generates for you (&ldquo;Your Content&rdquo;), subject to any rights third parties may have in
-              material you upload or reference. You grant Cinerra a limited license to host, store, process, and — only
+              FilmDoe generates for you (&ldquo;Your Content&rdquo;), subject to any rights third parties may have in
+              material you upload or reference. You grant FilmDoe a limited license to host, store, process, and — only
               where you choose to publish it — publicly display Your Content in order to operate the service, including
               features like the Discover feed and public watch pages.
             </p>
@@ -77,7 +77,7 @@ export default function TermsPage() {
           </LegalSection>
 
           <LegalSection title="6. Prohibited use">
-            <p>You agree not to use Cinerra to generate, publish, or upload content that:</p>
+            <p>You agree not to use FilmDoe to generate, publish, or upload content that:</p>
             <ul className="list-disc pl-5">
               <li>Is illegal, or depicts or facilitates illegal acts;</li>
               <li>Sexualizes minors in any form, real or fictional;</li>
@@ -100,7 +100,7 @@ export default function TermsPage() {
 
           <LegalSection title="8. Disclaimers">
             <p>
-              Cinerra is provided &ldquo;as is&rdquo; and &ldquo;as available,&rdquo; without warranties of any kind,
+              FilmDoe is provided &ldquo;as is&rdquo; and &ldquo;as available,&rdquo; without warranties of any kind,
               express or implied, including merchantability, fitness for a particular purpose, and non-infringement.
               AI-generated output can be inaccurate, unexpected, or unsuitable for your intended use — review it before
               relying on or distributing it.
@@ -109,7 +109,7 @@ export default function TermsPage() {
 
           <LegalSection title="9. Limitation of liability">
             <p>
-              To the maximum extent permitted by law, Cinerra and its affiliates won&rsquo;t be liable for any indirect,
+              To the maximum extent permitted by law, FilmDoe and its affiliates won&rsquo;t be liable for any indirect,
               incidental, special, consequential, or punitive damages, or any loss of data, revenue, or profits, arising
               from your use of the service.
             </p>
@@ -117,7 +117,7 @@ export default function TermsPage() {
 
           <LegalSection title="10. Termination">
             <p>
-              You may stop using Cinerra and delete your account at any time by contacting us. We may suspend or terminate
+              You may stop using FilmDoe and delete your account at any time by contacting us. We may suspend or terminate
               your access if you violate these Terms. Sections that by their nature should survive termination (ownership,
               disclaimers, limitation of liability) will survive.
             </p>
@@ -126,15 +126,15 @@ export default function TermsPage() {
           <LegalSection title="11. Changes to these terms">
             <p>
               We may update these Terms from time to time. If we make material changes, we&rsquo;ll update the &ldquo;Last
-              updated&rdquo; date above. Continued use of Cinerra after a change means you accept the updated Terms.
+              updated&rdquo; date above. Continued use of FilmDoe after a change means you accept the updated Terms.
             </p>
           </LegalSection>
 
           <LegalSection title="12. Contact">
             <p>
               Questions about these Terms? Reach us at{" "}
-              <a href="mailto:legal@cinerra.app" className="text-cinerra-accent underline">
-                legal@cinerra.app
+              <a href="mailto:legal@filmdoe.app" className="text-cinerra-accent underline">
+                legal@filmdoe.app
               </a>
               .
             </p>

@@ -55,5 +55,5 @@ class NoopEmailClient implements EmailClient {
 
 export function createEmailClient(env: Env): EmailClient {
   if (!env.RESEND_API_KEY) return new NoopEmailClient();
-  return new ResendEmailClient(env.RESEND_API_KEY, env.EMAIL_FROM ?? "Cinerra <onboarding@resend.dev>");
+  return new ResendEmailClient(env.RESEND_API_KEY, env.EMAIL_FROM ?? "FilmDoe <onboarding@resend.dev>");
 }

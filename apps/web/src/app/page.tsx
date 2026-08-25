@@ -82,7 +82,7 @@ export default async function HomePage() {
 
           <Section title="Popular">
             {popular.length === 0 ? (
-              <EmptyState title="Nothing published yet." description="Public movies from the Cinerra community will appear here once creators start publishing." ctaLabel="Browse Discover" ctaHref="/discover" />
+              <EmptyState title="Nothing published yet." description="Public movies from the FilmDoe community will appear here once creators start publishing." ctaLabel="Browse Discover" ctaHref="/discover" />
             ) : (
               <DiscoverGrid items={popular} />
             )}

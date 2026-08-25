@@ -33,7 +33,7 @@ async function toCardData(publication: {
     projectId: publication.project.id,
     title: publication.project.title,
     visualStyle: publication.project.visualStyle,
-    ownerName: publication.publishedBy.name ?? "A Cinerra creator",
+    ownerName: publication.publishedBy.name ?? "A FilmDoe creator",
     views: publication.views,
     saves: publication.saves,
     posterUrl: publication.project.posterAsset ? await getAssetDisplayUrl(publication.project.posterAsset.storageKey) : null,

@@ -50,7 +50,7 @@ export interface CharacterDesignerOutput {
   characters: CharacterDesignerCharacter[];
 }
 
-const SYSTEM_PROMPT = `You are the Character Designer agent for Cinerra. You read a screenplay and produce a Character Bible entry for every named character who actually appears in it — never invent characters the screenplay doesn't already have. Descriptions must be specific and reproducible enough to keep a photorealistic AI video model visually consistent across shots (exact hair, eyes, skin, build — not generic adjectives). continuityRules must state the hard identity constraint downstream generation must never violate.
+const SYSTEM_PROMPT = `You are the Character Designer agent for FilmDoe. You read a screenplay and produce a Character Bible entry for every named character who actually appears in it — never invent characters the screenplay doesn't already have. Descriptions must be specific and reproducible enough to keep a photorealistic AI video model visually consistent across shots (exact hair, eyes, skin, build — not generic adjectives). continuityRules must state the hard identity constraint downstream generation must never violate.
 
 Respond with ONLY a single JSON object, no prose, no markdown fence:
 {

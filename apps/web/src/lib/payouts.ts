@@ -163,7 +163,7 @@ export async function initiatePayoutTransfer(payoutId: string): Promise<void> {
         amount: payout.amountCents,
         recipientCode: account.paystackRecipientCode,
         reference: payout.providerReference,
-        reason: "Cinerra creator payout",
+        reason: "FilmDoe creator payout",
       });
       await prisma.payout.update({ where: { id: payout.id }, data: { providerTransferId: result.transfer_code } });
     } else {
@@ -180,7 +180,7 @@ export async function initiatePayoutTransfer(payoutId: string): Promise<void> {
         accountNumber: account.accountNumber,
         customerName: user.name ?? account.accountName,
         customerEmail: user.email,
-        narration: "Cinerra creator payout",
+        narration: "FilmDoe creator payout",
       });
       await prisma.payout.update({ where: { id: payout.id }, data: { providerTransferId: result.reference } });
     }

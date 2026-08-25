@@ -145,7 +145,7 @@ export function MonetizationSettings({
               />
               {preview && (
                 <p className="mt-2 text-xs text-cinerra-muted">
-                  Viewer pays 🪙 {moviePrice.toLocaleString()} · You earn 🪙 {preview.publisherShare.toLocaleString()} · Cinerra earns 🪙{" "}
+                  Viewer pays 🪙 {moviePrice.toLocaleString()} · You earn 🪙 {preview.publisherShare.toLocaleString()} · FilmDoe earns 🪙{" "}
                   {preview.platformShare.toLocaleString()}
                 </p>
               )}

@@ -3,7 +3,7 @@ import { MobileNav } from "@/components/Nav";
 import { Footer } from "@/components/Footer";
 import { LegalDisclaimer, LegalSection } from "@/components/LegalContent";
 
-export const metadata = { title: "Privacy Policy — Cinerra" };
+export const metadata = { title: "Privacy Policy — FilmDoe" };
 
 const LAST_UPDATED = "August 23, 2026";
 
@@ -21,7 +21,7 @@ export default function PrivacyPage() {
         <div className="mt-8 flex flex-col gap-8">
           <LegalSection title="1. What this covers">
             <p>
-              This Privacy Policy explains what information Cinerra collects, how we use it, and the choices you have. It
+              This Privacy Policy explains what information FilmDoe collects, how we use it, and the choices you have. It
               applies to your account, the content you generate, and your use of the site.
             </p>
           </LegalSection>
@@ -35,7 +35,7 @@ export default function PrivacyPage() {
               </li>
               <li>
                 <span className="text-cinerra-text">Content you create:</span> prompts, story text, uploaded source
-                documents, and the characters, images, video, audio, and exports Cinerra generates for you.
+                documents, and the characters, images, video, audio, and exports FilmDoe generates for you.
               </li>
               <li>
                 <span className="text-cinerra-text">Billing information:</span> if you subscribe to a paid plan or buy
@@ -88,8 +88,8 @@ export default function PrivacyPage() {
             <p>
               We keep your account and content for as long as your account is active. To request deletion of your
               account and associated data, contact us at{" "}
-              <a href="mailto:privacy@cinerra.app" className="text-cinerra-accent underline">
-                privacy@cinerra.app
+              <a href="mailto:privacy@filmdoe.app" className="text-cinerra-accent underline">
+                privacy@filmdoe.app
               </a>
               . We may retain limited information where required for legal, billing, or security purposes.
             </p>
@@ -104,7 +104,7 @@ export default function PrivacyPage() {
           </LegalSection>
 
           <LegalSection title="9. Children's privacy">
-            <p>Cinerra is not directed at children under 18, and we don&rsquo;t knowingly collect data from them.</p>
+            <p>FilmDoe is not directed at children under 18, and we don&rsquo;t knowingly collect data from them.</p>
           </LegalSection>
 
           <LegalSection title="10. Security">
@@ -125,8 +125,8 @@ export default function PrivacyPage() {
           <LegalSection title="12. Contact">
             <p>
               Questions about this policy? Reach us at{" "}
-              <a href="mailto:privacy@cinerra.app" className="text-cinerra-accent underline">
-                privacy@cinerra.app
+              <a href="mailto:privacy@filmdoe.app" className="text-cinerra-accent underline">
+                privacy@filmdoe.app
               </a>
               .
             </p>

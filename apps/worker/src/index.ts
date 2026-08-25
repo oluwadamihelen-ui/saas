@@ -200,7 +200,7 @@ promotionalExpirationQueue
 
 isFfmpegAvailable().then((available) => {
   console.log(
-    `[worker] Cinerra worker started. Concurrency=${WORKER_CONCURRENCY}. Providers configured: TEXT=${registry.isConfigured("TEXT")} IMAGE=${registry.isConfigured("IMAGE")} VIDEO=${registry.isConfigured("VIDEO")} VOICE=${registry.isConfigured("VOICE")} MUSIC=${registry.isConfigured("MUSIC")} SOUND_EFFECT=${registry.isConfigured("SOUND_EFFECT")}. FFmpeg available=${available}. Error monitoring: ${env.SENTRY_DSN ? "configured" : "not configured"}. Email: ${emailClient.configured ? "configured" : "not configured"}.`,
+    `[worker] FilmDoe worker started. Concurrency=${WORKER_CONCURRENCY}. Providers configured: TEXT=${registry.isConfigured("TEXT")} IMAGE=${registry.isConfigured("IMAGE")} VIDEO=${registry.isConfigured("VIDEO")} VOICE=${registry.isConfigured("VOICE")} MUSIC=${registry.isConfigured("MUSIC")} SOUND_EFFECT=${registry.isConfigured("SOUND_EFFECT")}. FFmpeg available=${available}. Error monitoring: ${env.SENTRY_DSN ? "configured" : "not configured"}. Email: ${emailClient.configured ? "configured" : "not configured"}.`,
   );
 });
 

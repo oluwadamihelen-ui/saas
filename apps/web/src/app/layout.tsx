@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Cinerra — Create your next movie with AI",
+  title: "FilmDoe — Create your next movie with AI",
   description: "Turn an idea or screenplay into a cinematic AI movie.",
 };
 

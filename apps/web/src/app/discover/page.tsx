@@ -38,7 +38,7 @@ function Rail({ title, items }: { title: string; items: DiscoverCardData[] }) {
     <section className="mt-10">
       <h2 className="mb-4 font-display text-xl font-semibold text-cinerra-text">{title}</h2>
       {items.length === 0 ? (
-        <EmptyState title="Nothing published yet." description="Public movies from the Cinerra community will appear here once creators start publishing." />
+        <EmptyState title="Nothing published yet." description="Public movies from the FilmDoe community will appear here once creators start publishing." />
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
           {items.map((item) => (
