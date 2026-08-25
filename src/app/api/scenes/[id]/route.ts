@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUserId, UnauthorizedError } from "@/server/auth/session";
 import { getSceneForUser, updateSceneForUser, deleteSceneForUser, SceneNotFoundError } from "@/server/scenes/repository";
 import { updateSceneSchema } from "@/lib/validation/scene";
+import { rateLimit, requestKey } from "@/lib/rate-limit";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -21,6 +22,11 @@ export async function GET(_req: Request, { params }: RouteParams) {
 export async function PATCH(req: Request, { params }: RouteParams) {
   try {
     const userId = await requireUserId();
+
+    if (!rateLimit(requestKey(req, `update-scene:${userId}`), 60, 60_000)) {
+      return NextResponse.json({ error: "Too many requests. Please try again shortly." }, { status: 429 });
+    }
+
     const { id } = await params;
 
     const body = await req.json().catch(() => null);
@@ -36,9 +42,14 @@ export async function PATCH(req: Request, { params }: RouteParams) {
   }
 }
 
-export async function DELETE(_req: Request, { params }: RouteParams) {
+export async function DELETE(req: Request, { params }: RouteParams) {
   try {
     const userId = await requireUserId();
+
+    if (!rateLimit(requestKey(req, `delete-scene:${userId}`), 30, 60_000)) {
+      return NextResponse.json({ error: "Too many requests. Please try again shortly." }, { status: 429 });
+    }
+
     const { id } = await params;
     await deleteSceneForUser(userId, id);
     return NextResponse.json({ ok: true });

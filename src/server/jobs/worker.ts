@@ -13,7 +13,9 @@ import { runGenerateSceneImage } from "@/server/pipeline/generate-scene-image";
 import { runGenerateSceneVoice } from "@/server/pipeline/generate-scene-voice";
 import { runRenderProject } from "@/server/pipeline/render-project";
 import { prisma } from "@/server/db/client";
+import { createLogger } from "@/lib/logger";
 
+const log = createLogger("worker");
 const connection = getRedisConnection();
 
 const projectGenerateWorker = new Worker<ProjectGenerateJobData>(
@@ -65,14 +67,14 @@ const workers = [projectGenerateWorker, sceneImageWorker, sceneVoiceWorker, proj
 
 for (const worker of workers) {
   worker.on("failed", (job, err) => {
-    console.error(`[worker] job ${job?.id} (${job?.queueName}) failed:`, err.message);
+    log.error("job failed", { jobId: job?.id, queue: job?.queueName, error: err });
   });
   worker.on("completed", (job) => {
-    console.log(`[worker] job ${job.id} (${job.queueName}) completed`);
+    log.info("job completed", { jobId: job.id, queue: job.queueName });
   });
 }
 
-console.log("Generation worker started — listening on queues: project-generate, scene-image, scene-voice, project-render");
+log.info("worker started", { queues: ["project-generate", "scene-image", "scene-voice", "project-render"] });
 
 process.on("SIGTERM", async () => {
   await Promise.all(workers.map((w) => w.close()));

@@ -2,10 +2,16 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/server/db/client";
 import { requireUserId, UnauthorizedError } from "@/server/auth/session";
 import { updateAccountSchema } from "@/lib/validation/account";
+import { rateLimit, requestKey } from "@/lib/rate-limit";
 
 export async function PATCH(req: Request) {
   try {
     const userId = await requireUserId();
+
+    if (!rateLimit(requestKey(req, `update-account:${userId}`), 20, 60_000)) {
+      return NextResponse.json({ error: "Too many requests. Please try again shortly." }, { status: 429 });
+    }
+
     const body = await req.json().catch(() => null);
     const parsed = updateAccountSchema.safeParse(body);
     if (!parsed.success) {

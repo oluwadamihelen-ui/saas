@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/server/db/client";
 import { loginSchema } from "@/lib/validation/auth";
 import { edgeAuthConfig } from "./edge-config";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const authConfig: NextAuthConfig = {
   ...edgeAuthConfig,
@@ -18,6 +19,8 @@ export const authConfig: NextAuthConfig = {
         const parsed = loginSchema.safeParse(raw);
         if (!parsed.success) return null;
         const { email, password } = parsed.data;
+
+        if (!rateLimit(`login:${email}`, 10, 5 * 60_000)) return null;
 
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user?.passwordHash) return null;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUserId, UnauthorizedError } from "@/server/auth/session";
 import { getProjectForUser, deleteProjectForUser, ProjectNotFoundError } from "@/server/projects/repository";
+import { rateLimit, requestKey } from "@/lib/rate-limit";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -17,9 +18,14 @@ export async function GET(_req: Request, { params }: RouteParams) {
   }
 }
 
-export async function DELETE(_req: Request, { params }: RouteParams) {
+export async function DELETE(req: Request, { params }: RouteParams) {
   try {
     const userId = await requireUserId();
+
+    if (!rateLimit(requestKey(req, `delete-project:${userId}`), 20, 60_000)) {
+      return NextResponse.json({ error: "Too many requests. Please try again shortly." }, { status: 429 });
+    }
+
     const { id } = await params;
     await deleteProjectForUser(userId, id);
     return NextResponse.json({ ok: true });

@@ -2,12 +2,18 @@ import { NextResponse } from "next/server";
 import { requireUserId, UnauthorizedError } from "@/server/auth/session";
 import { reorderScenesForUser, SceneNotFoundError } from "@/server/scenes/repository";
 import { reorderScenesSchema } from "@/lib/validation/scene";
+import { rateLimit, requestKey } from "@/lib/rate-limit";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: Request, { params }: RouteParams) {
   try {
     const userId = await requireUserId();
+
+    if (!rateLimit(requestKey(req, `reorder-scenes:${userId}`), 60, 60_000)) {
+      return NextResponse.json({ error: "Too many requests. Please try again shortly." }, { status: 429 });
+    }
+
     const { id } = await params;
 
     const body = await req.json().catch(() => null);

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUserId, UnauthorizedError } from "@/server/auth/session";
 import { listCaptionsForUser, addCaptionForUser, SceneNotFoundError } from "@/server/captions/repository";
 import { captionSchema } from "@/lib/validation/voice";
+import { rateLimit, requestKey } from "@/lib/rate-limit";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -21,6 +22,11 @@ export async function GET(_req: Request, { params }: RouteParams) {
 export async function POST(req: Request, { params }: RouteParams) {
   try {
     const userId = await requireUserId();
+
+    if (!rateLimit(requestKey(req, `add-caption:${userId}`), 60, 60_000)) {
+      return NextResponse.json({ error: "Too many requests. Please try again shortly." }, { status: 429 });
+    }
+
     const { id } = await params;
 
     const body = await req.json().catch(() => null);
