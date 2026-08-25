@@ -7,6 +7,7 @@ import { PaystackNotConfiguredError, PlanNotAvailableError, InvalidWebhookSignat
 import { PayoutsNotConfiguredError, NoPayoutAccountError, BelowPayoutMinimumError, PayoutClaimConflictError, AccountResolutionFailedError } from "./payouts";
 import { UserNotFoundError, InvalidGrantAmountError } from "./promotionalCoins";
 import { UserNotFoundError as UserNotFoundForModerationError, CannotSuspendSelfError } from "./trustSafety";
+import { CannotRemoveOwnAdminRoleError, InvalidBalanceAdjustmentError, EmailAlreadyInUseError } from "./userAdmin";
 
 /**
  * Central error-to-response mapping. Every error surfaced to the browser
@@ -52,6 +53,12 @@ export function toApiErrorResponse(error: unknown): NextResponse {
   }
   if (error instanceof CannotSuspendSelfError) {
     return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+  if (error instanceof CannotRemoveOwnAdminRoleError || error instanceof InvalidBalanceAdjustmentError) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+  if (error instanceof EmailAlreadyInUseError) {
+    return NextResponse.json({ error: error.message }, { status: 409 });
   }
   if (error instanceof Error && error.message === "UNAUTHORIZED") {
     return NextResponse.json({ error: "Please sign in to continue." }, { status: 401 });

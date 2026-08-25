@@ -11,9 +11,11 @@ import { DailyRevenueChart } from "@/components/admin/DailyRevenueChart";
 import { RiskUserActions } from "@/components/admin/RiskUserActions";
 import { SuspendUserForm } from "@/components/admin/SuspendUserForm";
 import { AdminTabs } from "@/components/admin/AdminTabs";
+import { UserManagementTable } from "@/components/admin/UserManagementTable";
 import { getRevenueAnalytics } from "@/lib/analytics";
 import { getEngagementAnalytics } from "@/lib/viewingEvents";
 import { getFraudSignals } from "@/lib/trustSafety";
+import { listUsers } from "@/lib/userAdmin";
 
 const CAPABILITIES = ["TEXT", "IMAGE", "VIDEO", "VOICE", "MUSIC", "SOUND_EFFECT"] as const;
 
@@ -23,7 +25,7 @@ export default async function AdminPage() {
   if (!user?.id) redirect("/login");
   if (user.role !== "ADMIN") redirect("/");
 
-  const [userCount, activeSubscriptions, jobStats, plans, recentJobs, pendingPublications, platformSettings, revenueAnalytics, engagementAnalytics, fraudSignals] = await Promise.all([
+  const [userCount, activeSubscriptions, jobStats, plans, recentJobs, pendingPublications, platformSettings, revenueAnalytics, engagementAnalytics, fraudSignals, users] = await Promise.all([
     prisma.user.count(),
     prisma.subscription.findMany({ where: { status: "ACTIVE" }, include: { plan: true } }),
     prisma.generationJob.groupBy({ by: ["status"], _count: true }),
@@ -38,6 +40,7 @@ export default async function AdminPage() {
     getRevenueAnalytics(),
     getEngagementAnalytics(),
     getFraudSignals(),
+    listUsers(),
   ]);
 
   const moderationQueueItems = pendingPublications.map((p) => ({
@@ -274,6 +277,28 @@ export default async function AdminPage() {
     </div>
   );
 
+  const usersTab = (
+    <section className="card">
+      <h2 className="text-lg font-semibold">Users</h2>
+      <p className="mt-1 text-sm text-cinerra-muted">
+        Click a user to edit their profile, credit or debit their coin balance, or suspend/unsuspend their account.
+      </p>
+      <div className="mt-4">
+        <UserManagementTable
+          users={users.map((u) => ({
+            id: u.id,
+            email: u.email,
+            name: u.name,
+            role: u.role,
+            status: u.status,
+            walletBalance: u.walletBalance,
+            createdAt: u.createdAt.toISOString(),
+          }))}
+        />
+      </div>
+    </section>
+  );
+
   const riskTab = (
     <section className="card">
       <div className="flex items-center justify-between">
@@ -356,6 +381,7 @@ export default async function AdminPage() {
           <AdminTabs
             tabs={[
               { key: "overview", label: "Overview", content: overviewTab },
+              { key: "users", label: "Users", content: usersTab },
               { key: "moderation", label: "Moderation", badge: moderationQueueItems.length || undefined, content: moderationTab },
               { key: "revenue", label: "Revenue", content: revenueTab },
               { key: "coins", label: "Coin Economy", content: coinEconomyTab },
