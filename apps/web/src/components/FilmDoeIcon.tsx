@@ -1,5 +1,39 @@
-/** The FilmDoe brand mark — the exact provided icon artwork, not a recreation. */
+/**
+ * The FilmDoe brand mark — a filmstrip spine (with sprocket-hole cutouts)
+ * folding into a play triangle, in the master violet→magenta brand gradient
+ * (see --brand-primary-* in globals.css). Same silhouette/concept as the
+ * icon's original artwork; recolored so the logo and primary brand
+ * moments (Create Movie CTA, active nav, selected tabs) read as one
+ * identity instead of two.
+ */
 export function FilmDoeIcon({ className = "" }: { className?: string }) {
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src="/filmdoe-icon.png" alt="" className={`object-contain ${className}`} />;
+  return (
+    <svg viewBox="0 0 48 48" className={className} xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="filmdoe-back" x1="6" y1="6" x2="42" y2="42" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="color-mix(in srgb, var(--brand-primary-start) 55%, black)" />
+          <stop offset="1" stopColor="color-mix(in srgb, var(--brand-primary-end) 55%, black)" />
+        </linearGradient>
+        <linearGradient id="filmdoe-front" x1="8" y1="8" x2="36" y2="34" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="var(--brand-primary-start)" />
+          <stop offset="1" stopColor="var(--brand-primary-end)" />
+        </linearGradient>
+        <mask id="filmdoe-holes">
+          <rect x="0" y="0" width="48" height="48" fill="white" />
+          <rect x="11.7" y="12.5" width="3" height="3" rx="0.8" fill="black" />
+          <rect x="11.7" y="18.5" width="3" height="3" rx="0.8" fill="black" />
+          <rect x="11.7" y="24.5" width="3" height="3" rx="0.8" fill="black" />
+          <rect x="11.7" y="30.5" width="3" height="3" rx="0.8" fill="black" />
+        </mask>
+      </defs>
+      <path
+        d="M15 7 C10.5 7 8 9.5 8 14 L8 34 C8 38.5 10.5 41 15 41 L19 41 C23.5 41 26.5 38 26.5 34 C26.5 30 22.5 28.5 18.5 26.5 C13.5 24 13.5 21 18.5 18.5 C22.5 16.5 26.5 15 26.5 11 C26.5 8 23.5 7 19 7 Z"
+        fill="url(#filmdoe-back)"
+      />
+      <g mask="url(#filmdoe-holes)">
+        <rect x="8" y="8" width="9.5" height="32" rx="4.5" fill="url(#filmdoe-front)" />
+      </g>
+      <path d="M17.5 14 L35 24 L17.5 34 Z" fill="url(#filmdoe-front)" />
+    </svg>
+  );
 }

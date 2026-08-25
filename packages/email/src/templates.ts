@@ -21,7 +21,8 @@ function layout(preheader: string, bodyHtml: string): string {
           <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background-color:#131318;border-radius:16px;overflow:hidden;">
             <tr>
               <td style="padding:32px 32px 8px 32px;">
-                <span style="font-size:20px;font-weight:700;color:#f4f4f6;">Film<span style="color:#f97316;">Doe</span></span>
+                <!-- #8b5cf6/#ec4899 mirror --brand-primary-start/--brand-primary-end in apps/web globals.css; email clients can't read CSS custom properties, so keep these in sync by hand. -->
+                <span style="font-size:20px;font-weight:700;color:#f4f4f6;">Film<span style="color:#ec4899;">Doe</span></span>
               </td>
             </tr>
             <tr>
@@ -39,7 +40,7 @@ function layout(preheader: string, bodyHtml: string): string {
 }
 
 function button(url: string, label: string): string {
-  return `<a href="${url}" style="display:inline-block;margin-top:20px;padding:12px 24px;background-color:#f97316;color:#ffffff;text-decoration:none;border-radius:999px;font-weight:600;font-size:14px;">${label}</a>`;
+  return `<a href="${url}" style="display:inline-block;margin-top:20px;padding:12px 24px;background-color:#8b5cf6;color:#ffffff;text-decoration:none;border-radius:999px;font-weight:600;font-size:14px;">${label}</a>`;
 }
 
 export function welcomeEmail(name: string, createProjectUrl: string): EmailContent {

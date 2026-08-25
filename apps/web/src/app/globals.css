@@ -6,6 +6,41 @@
 
 :root {
   color-scheme: dark;
+
+  /*
+   * FilmDoe brand tokens — single source of truth for brand color.
+   * Tailwind's cinerra.* palette (tailwind.config.ts) reads these same
+   * values, so a component can reach the brand system either via a
+   * Tailwind utility (bg-cinerra-accent) or, where a raw CSS value is
+   * needed (inline SVG gradients, box-shadow), via var(--brand-*)
+   * directly. Change the brand here and both stay in sync.
+   */
+  --brand-primary: #8b5cf6; /* violet — brand at a glance */
+  --brand-primary-start: #8b5cf6; /* gradient start (violet) */
+  --brand-primary-end: #ec4899; /* gradient end (magenta) */
+  --brand-primary-hover: #a78bfa; /* lightened violet for hover states */
+  --brand-primary-muted: rgba(139, 92, 246, 0.16); /* subtle tints/backgrounds */
+  --brand-glow: rgba(139, 92, 246, 0.45); /* ambient glow, violet side of the gradient */
+  --brand-glow-secondary: rgba(236, 72, 153, 0.4); /* ambient glow, magenta side of the gradient */
+
+  /* Secondary/functional accents — never compete with brand for identity. */
+  --accent-coin: #eec888; /* FilmDoe Coins, premium/reward indicators only */
+  --accent-success: #34d399; /* financial-positive / success states (Tailwind emerald-400) */
+  --accent-danger: #f87171; /* error / destructive states (Tailwind red-400) */
+
+  /*
+   * Same five colors, as "r g b" triplets — Tailwind's opacity modifiers
+   * (bg-cinerra-accent/40, border-cinerra-gold/20, ...) need a raw RGB
+   * triplet to combine with an alpha value; see tailwind.config.ts's
+   * withOpacity(). Keep each pair above in sync by hand — CSS can't
+   * derive one form from the other.
+   */
+  --brand-primary-start-rgb: 139 92 246;
+  --brand-primary-end-rgb: 236 72 153;
+  --brand-primary-hover-rgb: 167 139 250;
+  --accent-coin-rgb: 238 200 136;
+  --accent-success-rgb: 52 211 153;
+  --accent-danger-rgb: 248 113 113;
 }
 
 body {
@@ -20,7 +55,7 @@ body {
 }
 
 ::selection {
-  background-color: #8b5cf6;
+  background-color: var(--brand-primary);
   color: white;
 }
 
