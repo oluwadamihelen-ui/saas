@@ -25,7 +25,7 @@ export default async function AdminPage() {
   if (!user?.id) redirect("/login");
   if (user.role !== "ADMIN") redirect("/");
 
-  const [userCount, activeSubscriptions, jobStats, plans, recentJobs, pendingPublications, platformSettings, revenueAnalytics, engagementAnalytics, fraudSignals, users] = await Promise.all([
+  const [userCount, activeSubscriptions, jobStats, plans, recentJobs, pendingPublications, platformSettings, revenueAnalytics, engagementAnalytics, fraudSignals, usersPage] = await Promise.all([
     prisma.user.count(),
     prisma.subscription.findMany({ where: { status: "ACTIVE" }, include: { plan: true } }),
     prisma.generationJob.groupBy({ by: ["status"], _count: true }),
@@ -285,7 +285,7 @@ export default async function AdminPage() {
       </p>
       <div className="mt-4">
         <UserManagementTable
-          users={users.map((u) => ({
+          initialUsers={usersPage.users.map((u) => ({
             id: u.id,
             email: u.email,
             name: u.name,
@@ -294,6 +294,8 @@ export default async function AdminPage() {
             walletBalance: u.walletBalance,
             createdAt: u.createdAt.toISOString(),
           }))}
+          initialTotalCount={usersPage.totalCount}
+          pageSize={usersPage.pageSize}
         />
       </div>
     </section>

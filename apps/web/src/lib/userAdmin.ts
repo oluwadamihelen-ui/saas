@@ -32,33 +32,52 @@ export interface UserAdminRow {
   walletBalance: number;
 }
 
-const LIST_LIMIT = 200;
+export const USERS_PAGE_SIZE = 20;
+
+export interface UserAdminPage {
+  users: UserAdminRow[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
 
 /**
- * Recent users for the admin Users tab, optionally filtered by a
- * case-insensitive email/name search. Capped at LIST_LIMIT — an honest
- * "most recent N" list, not a claim of showing every user, since the
- * table renders and filters this client-side.
+ * Paginated, optionally-searched users for the admin Users tab — real
+ * server-side paging and search rather than a client-filtered dump, so
+ * this scales to a large user base instead of only ever showing the
+ * most recent N.
  */
-export async function listUsers(search?: string): Promise<UserAdminRow[]> {
-  const users = await prisma.user.findMany({
-    where: search
-      ? { OR: [{ email: { contains: search, mode: "insensitive" } }, { name: { contains: search, mode: "insensitive" } }] }
-      : undefined,
-    orderBy: { createdAt: "desc" },
-    take: LIST_LIMIT,
-    include: { wallet: { select: { balance: true } } },
-  });
+export async function listUsers(params: { search?: string; page?: number } = {}): Promise<UserAdminPage> {
+  const page = Math.max(1, params.page ?? 1);
+  const where = params.search
+    ? { OR: [{ email: { contains: params.search, mode: "insensitive" as const } }, { name: { contains: params.search, mode: "insensitive" as const } }] }
+    : undefined;
 
-  return users.map((u) => ({
-    id: u.id,
-    email: u.email,
-    name: u.name,
-    role: u.role,
-    status: u.status,
-    createdAt: u.createdAt,
-    walletBalance: u.wallet?.balance ?? 0,
-  }));
+  const [users, totalCount] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * USERS_PAGE_SIZE,
+      take: USERS_PAGE_SIZE,
+      include: { wallet: { select: { balance: true } } },
+    }),
+    prisma.user.count({ where }),
+  ]);
+
+  return {
+    users: users.map((u) => ({
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      role: u.role,
+      status: u.status,
+      createdAt: u.createdAt,
+      walletBalance: u.wallet?.balance ?? 0,
+    })),
+    totalCount,
+    page,
+    pageSize: USERS_PAGE_SIZE,
+  };
 }
 
 /**
