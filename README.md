@@ -77,6 +77,18 @@ voice generation to complete — without it, generation jobs sit queued in
 Redis. The seed step is optional but the Voice/Music library pages and the
 per-scene voice picker are empty without it.
 
+### Tests
+
+```bash
+npm test              # run the suite once
+npm run test:watch    # watch mode
+npm run test:coverage # with coverage
+```
+
+The suite needs a running Postgres reachable via `DATABASE_URL` (the
+ownership/ledger tests exercise real Prisma queries against throwaway users
+that are cascade-deleted on teardown) but no Redis or worker process.
+
 ## Project structure
 
 ```
@@ -259,15 +271,41 @@ with volume/fade/loop/duck settings, and the timeline editor.
 **Phase D — Rendering**: real Remotion-based video composition and MP4
 export, described above.
 
-**Phase E (this phase) — Monetization**: real Stripe subscription checkout,
-one-time credit-pack purchases, the Billing Portal, and webhook-driven
-credit grants/renewals — all running in an honest preview mode until Stripe
-keys are configured, described above.
+**Phase E — Monetization**: real Stripe subscription checkout, one-time
+credit-pack purchases, the Billing Portal, and webhook-driven credit
+grants/renewals — all running in an honest preview mode until Stripe keys
+are configured, described above.
 
-**Not yet built**: production hardening (Phase F — broader automated test
-coverage, structured logging, rate-limit tuning beyond the current
-in-memory per-route limiter, a security pass). Nothing in this codebase
-fakes AI output, a fake render, or a fake payment — every generated asset
-(images, storyboards, narration audio, music, the final composited video)
-is real mock-provider/Remotion output produced end-to-end, and billing
-either talks to the real Stripe API or plainly says it's in preview mode.
+**Phase F (this phase) — Production hardening**: every mutating API route
+now enforces a per-user, in-memory rate limit (already true of most routes
+from earlier phases; this phase closed the remaining gaps and added
+brute-force protection to the credentials login itself — failed attempts
+are throttled per email address and return the same generic "invalid
+credentials" response as any other failure, so the limiter never leaks
+account existence or lockout state to an attacker). Added Next.js error
+boundaries (`not-found.tsx`, `error.tsx`, `global-error.tsx`) so a thrown
+error or bad route never shows a raw stack trace. Added a structured
+JSON-line logger (`src/lib/logger.ts`) and switched the background worker's
+job-lifecycle logging over to it. Added security response headers (CSP,
+`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+`Referrer-Policy`, a locked-down `Permissions-Policy`) via `next.config.ts`.
+Added a Vitest suite (`npm test`) covering the areas that matter most for a
+multi-tenant SaaS: cross-user ownership on every repository (projects,
+characters, scenes, captions — verified that a second account gets a clean
+"not found" rather than another user's data, on every read/update/delete
+path), the credit ledger's debit/credit math and its refusal to go
+negative, plan/price config, caption timing math, and the mock providers'
+output validity (WAV header correctness, XML escaping in generated SVGs,
+duration scaling with speed/length). A manual, targeted security pass also
+checked file-upload validation (content-type allowlist, size limit, no
+path traversal from user-supplied filenames), password-reset token
+handling (hashed at rest, single-use, time-limited, account-existence-safe
+responses), and mass-assignment safety on account/profile updates — no
+issues found.
+
+Nothing in this codebase fakes AI output, a fake render, or a fake
+payment — every generated asset (images, storyboards, narration audio,
+music, the final composited video) is real mock-provider/Remotion output
+produced end-to-end, and billing either talks to the real Stripe API or
+plainly says it's in preview mode. This completes the six-phase build
+(A–F) from the original architecture proposal.
