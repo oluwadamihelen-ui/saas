@@ -9,8 +9,9 @@ import { NotificationBell } from "./NotificationBell";
 export async function Header() {
   const session = await auth();
   const user = session?.user as { id?: string; name?: string | null; email?: string | null } | undefined;
-  const balance = user?.id ? await getWalletBalance(user.id) : null;
-  const { notifications, unreadCount } = user?.id ? await getRecentNotifications(user.id) : { notifications: [], unreadCount: 0 };
+  const [balance, { notifications, unreadCount }] = user?.id
+    ? await Promise.all([getWalletBalance(user.id), getRecentNotifications(user.id)])
+    : [null, { notifications: [], unreadCount: 0 }];
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-cinerra-border/70 bg-cinerra-bg/80 px-4 shadow-[0_1px_0_0_rgba(255,255,255,0.03)] backdrop-blur-md md:px-8">

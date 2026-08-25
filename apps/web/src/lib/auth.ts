@@ -1,3 +1,4 @@
+import { cache } from "react";
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
@@ -43,7 +44,7 @@ if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
   );
 }
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+const { handlers, auth: uncachedAuth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
@@ -69,3 +70,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 });
+
+// The session callback above does a Prisma lookup on every call, and
+// Header/Nav/most pages each call auth() independently in the same
+// render — without this, a single page load re-runs that lookup 3-4
+// times. React's cache() dedupes those into one per request.
+export const auth = cache(uncachedAuth);
+export { handlers, signIn, signOut };
