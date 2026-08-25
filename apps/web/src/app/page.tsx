@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { Header } from "@/components/Header";
@@ -8,12 +7,16 @@ import { ProjectCard } from "@/components/ProjectCard";
 import { DiscoverCard } from "@/components/DiscoverCard";
 import { EmptyState } from "@/components/EmptyState";
 import { Footer } from "@/components/Footer";
+import { MarketingHome } from "@/components/marketing/MarketingHome";
 import { listPopularPublications, listNewReleasePublications, type DiscoverCardData } from "@/lib/discover";
 
 export default async function HomePage() {
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
-  if (!userId) redirect("/login");
+  if (!userId) {
+    const popular = await listPopularPublications(6);
+    return <MarketingHome popular={popular} />;
+  }
 
   const [projects, popular, newReleases] = await Promise.all([
     prisma.project.findMany({ where: { ownerId: userId }, orderBy: { updatedAt: "desc" }, take: 24 }),

@@ -75,4 +75,25 @@ body {
   .btn-gold {
     @apply inline-flex items-center justify-center gap-2 rounded-full bg-cinerra-gold px-6 py-2.5 text-sm font-semibold text-[#26180a] shadow-glow-gold transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50;
   }
+
+  /* Marketing landing page (logged-out "/") — light warm-orange theme, scoped
+     to its own classes so the rest of the dark app is untouched. */
+  .rewards-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-rewards-orange px-7 py-3 text-sm font-semibold text-white shadow-rewards-glow transition hover:brightness-105;
+  }
+  .rewards-btn-dark {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-rewards-ink px-6 py-3 text-sm font-semibold text-white transition hover:brightness-125;
+  }
+  .rewards-btn-outline {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-rewards-border bg-white px-7 py-3 text-sm font-semibold text-rewards-ink shadow-sm transition hover:border-rewards-ink/30;
+  }
+  .rewards-badge {
+    @apply inline-flex items-center gap-2 rounded-full bg-rewards-ink px-4 py-1.5 text-xs font-medium text-white/90;
+  }
+  .rewards-card {
+    @apply rounded-2xl border border-rewards-border bg-white shadow-rewards-card;
+  }
+  .rewards-tag {
+    @apply rounded-full bg-rewards-purple/15 px-2.5 py-1 text-[11px] font-semibold text-rewards-purple;
+  }
 }
