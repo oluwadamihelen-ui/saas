@@ -210,6 +210,11 @@ The `AiModel` table (seeded by `pnpm db:seed`) is the admin-editable routing tab
 2. If OTP is enabled on your Paystack dashboard for transfers, automated payouts will stall waiting for an OTP this code never supplies — disable OTP for API-initiated transfers in the dashboard settings, or payouts will need manual completion every time.
 3. Both providers require their own account balance to be funded before a transfer/disbursement succeeds — a payout call against an empty balance fails at the provider, which this code surfaces as a `FAILED` `Payout` with the earnings released back for retry, not a crash.
 
+**Generation metering (Doe cost recovery)** — reference-image and shot-video generation (the two dominant real provider costs) charge the creator Doe, not just viewers unlocking content:
+1. `PlatformSettings.doeCostPerReferenceImage` / `doeCostPerVideoSecond` (admin → Doe Economy tab) set what generation costs in Doe; defaults assume ~$0.06/image and ~$0.05/video-second (OpenAI image gen, Runway Gen-4 Turbo) at the platform's own $0.01/Doe rate, with margin built in — re-check against your actual provider pricing before going live, since these move.
+2. `Plan.includedGenerationDoe` (seed-only right now, no admin UI) is each plan's monthly allowance, granted as an expiring PromotionalGrant — paid subscribers get it on the Paystack webhook when a new billing period starts; a user with no active subscription gets the Free plan's allowance lazily, once per rolling 30-day window, on their first generation attempt.
+3. Known gap: text generation (story/screenplay/character/location), dialogue/SFX/music audio, QC vision passes, export, and clip generation are NOT metered yet — those still draw real provider spend with no Doe charge. Extending `chargeForGeneration` (`packages/database/src/generationBilling.ts`) to those call sites is the natural next phase.
+
 ```bash
 pnpm dev          # Next.js app on http://localhost:3000
 pnpm dev:worker   # BullMQ worker (in a second terminal) — required for generation jobs to actually run
