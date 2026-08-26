@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { Header } from "@/components/Header";
@@ -13,7 +12,10 @@ import { listPopularPublications, listNewReleasePublications, type DiscoverCardD
 export default async function HomePage() {
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
-  if (!userId) redirect("/login");
+  if (!userId) {
+    const popular = await listPopularPublications(6);
+    return <LandingPage popular={popular} />;
+  }
 
   const [projects, popular, newReleases] = await Promise.all([
     prisma.project.findMany({ where: { ownerId: userId }, orderBy: { updatedAt: "desc" }, take: 24 }),
@@ -99,6 +101,92 @@ export default async function HomePage() {
       </div>
       <Footer />
       <MobileNav />
+    </div>
+  );
+}
+
+/** Public marketing home for signed-out visitors — the previous behavior was an immediate redirect to /login. */
+function LandingPage({ popular }: { popular: DiscoverCardData[] }) {
+  return (
+    <div className="min-h-screen">
+      <Header />
+      <main className="mx-auto w-full max-w-6xl px-4 pb-24 pt-6 md:px-8">
+        <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-cinerra-hero px-6 py-16 shadow-glow-lg md:px-14 md:py-24">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-cinerra-accent2/30 blur-3xl"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -bottom-32 -left-16 h-80 w-80 rounded-full bg-cinerra-accent/25 blur-3xl"
+          />
+          <div className="relative z-10 flex items-center justify-between gap-10">
+            <div className="max-w-xl">
+              <span className="eyebrow">Cinematic AI Studio</span>
+              <h1 className="mt-3 font-display text-4xl font-bold leading-[1.05] text-white md:text-6xl">
+                Create your next movie with AI.
+              </h1>
+              <p className="mt-5 max-w-md text-base text-white/70 md:text-lg">
+                From idea to finished film — story, cast, cinematography, and score, generated end to end.
+              </p>
+              <div className="mt-9 flex flex-wrap gap-3">
+                <Link href="/signup" className="btn-primary px-7 py-3.5 text-base">
+                  Get Started
+                </Link>
+                <Link href="/pricing" className="btn-outline-light">
+                  See Pricing
+                </Link>
+              </div>
+            </div>
+            <FeaturedFilmCard />
+          </div>
+        </section>
+
+        <Section title="How it works">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <HowItWorksStep
+              step="1"
+              title="Start with a story"
+              description="Write a premise or upload a screenplay/manuscript — FilmDoe adapts it into a structured story."
+            />
+            <HowItWorksStep
+              step="2"
+              title="AI directs it"
+              description="Characters, locations, shots, dialogue, and score are generated and composed into a finished episode."
+            />
+            <HowItWorksStep
+              step="3"
+              title="Publish and earn"
+              description="Share your movie on Discover, price it in Doe, and earn a share of every unlock."
+            />
+          </div>
+        </Section>
+
+        <Section title="Popular">
+          {popular.length === 0 ? (
+            <EmptyState
+              title="Nothing published yet."
+              description="Public movies from the FilmDoe community will appear here once creators start publishing."
+              ctaLabel="Get Started"
+              ctaHref="/signup"
+            />
+          ) : (
+            <DiscoverGrid items={popular} />
+          )}
+        </Section>
+      </main>
+      <Footer />
+      <MobileNav />
+    </div>
+  );
+}
+
+function HowItWorksStep({ step, title, description }: { step: string; title: string; description: string }) {
+  return (
+    <div className="card">
+      <span className="eyebrow">Step {step}</span>
+      <h3 className="mt-2 font-display text-lg font-semibold text-cinerra-text">{title}</h3>
+      <p className="mt-2 text-sm text-cinerra-muted">{description}</p>
     </div>
   );
 }
