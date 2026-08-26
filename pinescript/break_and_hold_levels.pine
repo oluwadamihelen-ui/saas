@@ -1,0 +1,199 @@
+//@version=6
+indicator("Break & Hold Levels [C0tt0nC4ndyTA Method]", shorttitle="B&H Levels", overlay=true, max_lines_count=300, max_labels_count=300)
+
+// =============================================================================
+// BREAK & HOLD LEVELS
+//
+// Reverse-engineered from: "Profit Levels: L4 BREAK & HOLD LEVELS 1
+// (Future Of Trading Course)" - c0tt0nc4ndyta
+// https://www.youtube.com/watch?v=f7xO_YSr__8
+//
+// Video rule (paraphrased from the transcript):
+//   - A LEVEL is a confirmed swing high ("peak") or swing low ("valley").
+//   - Every level is eventually "attacked" (retested) by price. There are
+//     only two possible outcomes, per the video:
+//       HOLD  - price attacks the level and a candle CLOSES back on the
+//               protective side -> the prevailing ladder (trend) CONTINUES.
+//               Drawn as a DOTTED line (video's own convention).
+//       BREAK - a candle CLOSES through the level -> the prevailing ladder
+//               is INVALIDATED. Drawn as a SOLID line (video's own
+//               convention).
+//   - "You have to hold these hold levels in order to move up ... these
+//      break levels, when touched, they break the move." (uptrend mirror
+//      explanation, ~13:00-13:40 in the video)
+//
+// The video does NOT specify: wick vs. close for a break, how many candles
+// confirm a hold, an exact swing-pivot bar count, or a further invalidation
+// rule for a level that already held once. Those gaps are called out in the
+// accompanying write-up and, where reasonable, exposed as inputs instead of
+// silently assumed. A secondary "nested / fractal pseudo-level" idea the
+// narrator gestures at is NOT implemented - he does not give a precise,
+// repeatable rule for it (he says so himself on camera).
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// 1. INPUTS
+// -----------------------------------------------------------------------------
+grpLevel = "Level Detection"
+pivotLeft  = input.int(5, "Pivot Left Bars",  minval=1, maxval=50, group=grpLevel,
+     tooltip="A swing high/low ('peak'/'valley') is confirmed when it is the extreme point among this many bars on each side. The video never names an exact bar count, so this is configurable.")
+pivotRight = input.int(5, "Pivot Right Bars", minval=1, maxval=50, group=grpLevel,
+     tooltip="Unavoidable confirmation delay: a pivot can only be known this many bars after it forms. Required to keep the script non-repainting.")
+
+grpBreak = "Break Rule"
+useWickForBreak = input.bool(false, "Confirm Break On Wick (video does not specify)", group=grpBreak,
+     tooltip="The video never states whether a wick or a close is required to 'break' a level. Default = close-through (safer, non-repainting). Enable to treat any wick beyond the level as a break instead.")
+
+grpVis = "Visuals"
+showLevels          = input.bool(true, "Show Break & Hold Levels", group=grpVis)
+showLabels          = input.bool(true, "Show Labels", group=grpVis)
+extendLevels        = input.bool(true, "Extend Active Levels Right", group=grpVis)
+maxHistoricalLevels = input.int(20, "Maximum Historical Levels", minval=1, maxval=100, group=grpVis)
+lineWidthInp        = input.int(1, "Line Width", minval=1, maxval=4, group=grpVis)
+labelSizeInp        = input.string("small", "Label Size", options=["tiny", "small", "normal", "large"], group=grpVis)
+bullColor           = input.color(color.new(#089981, 0), "Bullish Color", group=grpVis)
+bearColor           = input.color(color.new(#f23645, 0), "Bearish Color", group=grpVis)
+showPendingLevels   = input.bool(false, "Show Unconfirmed Levels (debug)", group=grpVis,
+     tooltip="Shows a swing pivot before it has resolved into a HOLD or a BREAK. Not part of the video's labeled output - provided only for debugging.")
+pendingColor        = input.color(color.new(color.gray, 40), "Unconfirmed Level Color", group=grpVis)
+
+f_labelSize() =>
+    switch labelSizeInp
+        "tiny"   => size.tiny
+        "normal" => size.normal
+        "large"  => size.large
+        => size.small
+
+// -----------------------------------------------------------------------------
+// 2. LEVEL DETECTION - swing pivots ("peaks" / "valleys")
+// -----------------------------------------------------------------------------
+type BHLevel
+    float  price
+    int    pivotBar
+    string kind        // "support" (valley) or "resistance" (peak)
+    string state       // "pending", "held", "broken"
+    line   lvl
+    label  holdLabel
+    label  breakLabel
+
+var array<BHLevel> levels = array.new<BHLevel>()
+
+ph = ta.pivothigh(pivotLeft, pivotRight)
+pl = ta.pivotlow(pivotLeft, pivotRight)
+
+// per-bar event flags, used for alerts only (reset every confirmed bar)
+var bool bullishHoldEvent  = false
+var bool bearishHoldEvent  = false
+var bool bullishBreakEvent = false
+var bool bearishBreakEvent = false
+
+if barstate.isconfirmed
+    bullishHoldEvent  := false
+    bearishHoldEvent  := false
+    bullishBreakEvent := false
+    bearishBreakEvent := false
+
+    // register newly confirmed pivots as candidate levels
+    if not na(ph)
+        array.push(levels, BHLevel.new(price=ph, pivotBar=bar_index - pivotRight, kind="resistance", state="pending"))
+    if not na(pl)
+        array.push(levels, BHLevel.new(price=pl, pivotBar=bar_index - pivotRight, kind="support", state="pending"))
+
+    // -------------------------------------------------------------------
+    // 3-6. BREAK DETECTION / HOLD DETECTION / CONFIRMATION / LEVEL MANAGEMENT
+    // (kept as a single pass per level: each level is a small state
+    // machine and break/hold/confirm/draw are all part of the same
+    // per-bar transition, so splitting them into separate loops would
+    // only add redundant array scans without changing behavior.)
+    // -------------------------------------------------------------------
+    for i = 0 to array.size(levels) - 1
+        lvl = array.get(levels, i)
+
+        if lvl.state != "broken"
+            bool touched = false
+            bool brokeNow = false
+
+            if lvl.kind == "support"
+                touched  := low <= lvl.price
+                brokeNow := useWickForBreak ? low < lvl.price : close < lvl.price
+            else
+                touched  := high >= lvl.price
+                brokeNow := useWickForBreak ? high > lvl.price : close > lvl.price
+
+            bool heldNow = not brokeNow and touched and lvl.state == "pending"
+
+            if brokeNow
+                bool bullish = lvl.kind == "resistance"
+                color col = bullish ? bullColor : bearColor
+                lvl.state := "broken"
+                // ---- 7. DRAWING ----
+                if showLevels
+                    if na(lvl.lvl)
+                        lvl.lvl := line.new(lvl.pivotBar, lvl.price, bar_index, lvl.price, color=col, width=lineWidthInp, style=line.style_solid)
+                    else
+                        line.set_x2(lvl.lvl, bar_index)
+                        line.set_color(lvl.lvl, col)
+                        line.set_style(lvl.lvl, line.style_solid)
+                // ---- 8. LABELS ----
+                if showLabels
+                    lvl.breakLabel := label.new(bar_index, lvl.price, bullish ? "BULLISH BREAK" : "BEARISH BREAK",
+                         style=bullish ? label.style_label_up : label.style_label_down,
+                         color=col, textcolor=color.white, size=f_labelSize())
+                if bullish
+                    bullishBreakEvent := true
+                else
+                    bearishBreakEvent := true
+
+            else if heldNow
+                bool bullish = lvl.kind == "support"
+                color col = bullish ? bullColor : bearColor
+                lvl.state := "held"
+                // ---- 7. DRAWING ----
+                if showLevels
+                    if na(lvl.lvl)
+                        lvl.lvl := line.new(lvl.pivotBar, lvl.price, bar_index, lvl.price, color=col, width=lineWidthInp, style=line.style_dotted)
+                    else
+                        line.set_x2(lvl.lvl, bar_index)
+                        line.set_color(lvl.lvl, col)
+                        line.set_style(lvl.lvl, line.style_dotted)
+                // ---- 8. LABELS ----
+                if showLabels
+                    lvl.holdLabel := label.new(bar_index, lvl.price, bullish ? "BULLISH HOLD" : "BEARISH HOLD",
+                         style=bullish ? label.style_label_up : label.style_label_down,
+                         color=col, textcolor=color.white, size=f_labelSize())
+                if bullish
+                    bullishHoldEvent := true
+                else
+                    bearishHoldEvent := true
+
+            else
+                // no new event this bar - only extend existing lines
+                if lvl.state == "pending"
+                    if showPendingLevels and showLevels
+                        if na(lvl.lvl)
+                            lvl.lvl := line.new(lvl.pivotBar, lvl.price, bar_index, lvl.price, color=pendingColor, width=1, style=line.style_dotted)
+                        else if extendLevels
+                            line.set_x2(lvl.lvl, bar_index)
+                else if lvl.state == "held"
+                    if extendLevels and not na(lvl.lvl)
+                        line.set_x2(lvl.lvl, bar_index)
+
+    // prune oldest tracked levels beyond the configured cap
+    if array.size(levels) > maxHistoricalLevels
+        pruned = array.shift(levels)
+        if not na(pruned.lvl)
+            line.delete(pruned.lvl)
+        if not na(pruned.holdLabel)
+            label.delete(pruned.holdLabel)
+        if not na(pruned.breakLabel)
+            label.delete(pruned.breakLabel)
+
+// -----------------------------------------------------------------------------
+// 9. ALERTS
+// -----------------------------------------------------------------------------
+alertcondition(bullishHoldEvent,  title="Bullish Hold Confirmed",  message="Break & Hold: BULLISH HOLD confirmed - a support (valley) level held, uptrend laddering continues.")
+alertcondition(bearishHoldEvent,  title="Bearish Hold Confirmed",  message="Break & Hold: BEARISH HOLD confirmed - a resistance (peak) level held, downtrend laddering continues.")
+alertcondition(bullishBreakEvent, title="Bullish Break Confirmed", message="Break & Hold: BULLISH BREAK confirmed - a resistance (peak) level broke, downtrend invalidated.")
+alertcondition(bearishBreakEvent, title="Bearish Break Confirmed", message="Break & Hold: BEARISH BREAK confirmed - a support (valley) level broke, uptrend invalidated.")
+alertcondition(bullishHoldEvent or bullishBreakEvent, title="Bullish Break & Hold (any)", message="Break & Hold: bullish event confirmed.")
+alertcondition(bearishHoldEvent or bearishBreakEvent, title="Bearish Break & Hold (any)", message="Break & Hold: bearish event confirmed.")
