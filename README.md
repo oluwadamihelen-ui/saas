@@ -142,13 +142,43 @@ docker run --rm --network host minio/mc mc mb local/cinerra-media
 
 `pnpm install` already ran the Prisma client generator automatically (a root `postinstall` hook), so you shouldn't need `pnpm db:generate` yourself unless you change `schema.prisma` later and want to regenerate without a full reinstall.
 
+**First time only** (a brand new, empty database):
+
 ```bash
 pnpm db:generate   # regenerate the Prisma client after a schema change (optional right after install)
-pnpm db:migrate    # create the schema (prompts for a migration name on first run)
-pnpm db:seed       # seed plans, AI model routing table, and (non-production) a demo project
+pnpm db:migrate    # applies the committed migrations, creating the schema
+pnpm db:seed       # seed plans, AI model routing table, an optional admin account, and (non-production) a demo project
 ```
 
-The seed creates a demo account: `demo@cinerra.app` / `demo-password-1234`, subscribed to the Creator plan, with a fully-populated example project ("The Secret Between Us") showing the character/location/wardrobe/prop/scene/shot data model in practice.
+The seed creates a demo account: `demo@cinerra.app` / `demo-password-1234`, subscribed to the Creator plan, with a fully-populated example project ("The Secret Between Us") showing the character/location/wardrobe/prop/scene/shot data model in practice. If `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD` are set in `.env`, it also creates (or promotes) your admin account — see below.
+
+### Redeploying without losing data
+
+**Every time after the first**, whether that's re-extracting a new zip, pulling a fresh update, or restarting the container stack — do **not** run `pnpm db:migrate` again. Run this instead:
+
+```bash
+pnpm db:migrate:deploy   # applies only new pending migrations — never resets, never touches existing rows
+pnpm db:seed             # safe to re-run every time — every step is an idempotent upsert, nothing is deleted
+```
+
+Why this matters: `pnpm db:migrate` runs Prisma's `migrate dev`, which is an **interactive, development-only** command — if it ever detects the database's schema doesn't match its migration history exactly, it resets the database (drops everything) to reconcile them. That's fine the first time against an empty database, but running it again on a redeploy against a database that already has real user data in it is what was wiping your accounts and forcing you to recreate an admin every time. `pnpm db:migrate:deploy` runs `migrate deploy`, which only ever applies new migrations forward — it has no reset behavior at all.
+
+To stay admin without ever touching the database by hand again, set these once in `.env` and leave them there:
+
+```bash
+SEED_ADMIN_EMAIL=you@example.com
+SEED_ADMIN_PASSWORD=a-real-password
+```
+
+`pnpm db:seed` then guarantees that account exists with the ADMIN role on every run — first deploy creates it, every later run just confirms the role (it never overwrites the password of an account that already exists, so changing your password in-app afterward is safe).
+
+**If you already have a database from before this fix** (schema applied via `db push` rather than committed migrations, which is what every earlier redeploy of this app did), you need one one-time step before the commands above will work — otherwise `db:migrate:deploy` will try to create tables that already exist and fail:
+
+```bash
+pnpm --filter @cinerra/database exec dotenv -e ../../.env -- pnpm --filter @cinerra/database exec prisma migrate resolve --applied 00000000000000_baseline
+```
+
+This just tells Prisma "the baseline migration's changes are already present, don't re-run them" — it doesn't touch any data. Run it once, then use `db:migrate:deploy` / `db:seed` from then on.
 
 ## 5. AI provider setup (optional but required for actual generation)
 

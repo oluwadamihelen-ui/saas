@@ -407,10 +407,58 @@ async function seedDemoProject() {
   console.log(`Locked continuity: ${maren.name}, ${nate.name}, ${coleHouseExterior.name}, ${coleHouseKitchen.name}, ${marenKitchenWardrobe.name}, ${marenPhone.name}.`);
 }
 
+/**
+ * Guarantees a real admin account exists after every deploy, without ever
+ * needing to sign up and manually promote a fresh account again. Purely
+ * additive/idempotent: creates the account on first run, and on every
+ * later run only ensures role=ADMIN — it never touches an existing
+ * account's password or email, so a redeploy can't clobber credentials
+ * you've since changed through the app.
+ *
+ * Opt-in via env vars because a default admin login baked into the seed
+ * script would be a real security hole on any deploy that forgot to
+ * change it.
+ */
+async function seedAdmin() {
+  const email = process.env.SEED_ADMIN_EMAIL;
+  if (!email) {
+    console.log("SEED_ADMIN_EMAIL not set — skipping admin provisioning.");
+    return;
+  }
+
+  const password = process.env.SEED_ADMIN_PASSWORD;
+  const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+
+  if (!existing) {
+    if (!password) {
+      throw new Error("SEED_ADMIN_EMAIL is set but SEED_ADMIN_PASSWORD is missing — required to create the account.");
+    }
+    await prisma.user.create({
+      data: {
+        email: email.toLowerCase(),
+        name: process.env.SEED_ADMIN_NAME || "Admin",
+        passwordHash: hashPassword(password),
+        role: "ADMIN",
+        emailVerifiedAt: new Date(),
+      },
+    });
+    console.log(`Created admin account ${email}.`);
+    return;
+  }
+
+  if (existing.role !== "ADMIN") {
+    await prisma.user.update({ where: { id: existing.id }, data: { role: "ADMIN" } });
+    console.log(`Promoted existing account ${email} to ADMIN.`);
+  } else {
+    console.log(`Admin account ${email} already present.`);
+  }
+}
+
 async function main() {
   await seedPlans();
   await seedMonetization();
   await seedAiModels();
+  await seedAdmin();
   await seedDemoProject();
 }
 

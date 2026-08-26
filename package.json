@@ -16,6 +16,7 @@
     "test": "pnpm -r test",
     "db:generate": "pnpm --filter @cinerra/database generate",
     "db:migrate": "pnpm --filter @cinerra/database migrate",
+    "db:migrate:deploy": "pnpm --filter @cinerra/database migrate:deploy",
     "db:seed": "pnpm --filter @cinerra/database seed",
     "db:studio": "pnpm --filter @cinerra/database studio"
   },
