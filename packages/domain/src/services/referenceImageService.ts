@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { prisma } from "@cinerra/database";
+import { prisma, chargeForGeneration, refundGenerationCharge, InsufficientGenerationDoeError, AlreadyChargedError } from "@cinerra/database";
 import type { ModelRouter } from "@cinerra/ai";
 import { ProviderGenerationError, ProviderNotConfiguredError } from "@cinerra/ai";
 import type { StorageClient } from "@cinerra/storage";
@@ -135,8 +135,31 @@ export async function runReferenceImageGenerationJob(router: ModelRouter, storag
   }
 
   const { entityType, entityId } = job.input as { entityType: ReferenceEntityType; entityId: string };
+  let charged = false;
+  let doeAmount = 0;
 
   try {
+    const platformSettings = await prisma.platformSettings.findUniqueOrThrow({ where: { id: "singleton" } });
+    doeAmount = platformSettings.doeCostPerReferenceImage;
+    try {
+      await prisma.$transaction((tx) =>
+        chargeForGeneration(tx, {
+          userId: job.userId,
+          doeAmount,
+          referenceType: "GenerationJob",
+          referenceId: job.id,
+          idempotencyKey: `generation-spend:${job.id}`,
+        }),
+      );
+      charged = true;
+    } catch (chargeError) {
+      if (chargeError instanceof AlreadyChargedError) {
+        charged = true; // a concurrent/retried attempt already charged — proceed, don't charge again
+      } else {
+        throw chargeError;
+      }
+    }
+
     const project = await prisma.project.findUniqueOrThrow({ where: { id: job.projectId } });
     const visualStyle = formatVisualStyle(project.visualStyle, project.customStyle);
     const aspectRatio = formatAspectRatio(project.aspectRatio);
@@ -213,12 +236,21 @@ export async function runReferenceImageGenerationJob(router: ModelRouter, storag
 
     await transitionGenerationJob(job.id, "SUCCEEDED");
   } catch (error) {
+    if (charged) {
+      await prisma
+        .$transaction((tx) =>
+          refundGenerationCharge(tx, { userId: job.userId, doeAmount, referenceType: "GenerationJob", referenceId: job.id }),
+        )
+        .catch((refundError) => console.error(`[referenceImageService] failed to refund generation charge for job ${job.id}:`, refundError));
+    }
     const message =
-      error instanceof ProviderNotConfiguredError
-        ? "Reference image generation isn't available yet — no image provider is configured."
-        : error instanceof ProviderGenerationError
-          ? "We couldn't generate this reference image right now. Try again shortly."
-          : `We couldn't generate this reference image: ${error instanceof Error ? error.message : "unexpected error"}`;
+      error instanceof InsufficientGenerationDoeError
+        ? error.message
+        : error instanceof ProviderNotConfiguredError
+          ? "Reference image generation isn't available yet — no image provider is configured."
+          : error instanceof ProviderGenerationError
+            ? "We couldn't generate this reference image right now. Try again shortly."
+            : `We couldn't generate this reference image: ${error instanceof Error ? error.message : "unexpected error"}`;
     await transitionGenerationJob(job.id, "FAILED", { errorMessage: message, attempts: { increment: 1 } });
     throw error;
   }

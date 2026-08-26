@@ -208,6 +208,12 @@ model Plan {
   maxStorageGB              Int      @default(10)
   maxProjectDurationMinutes Int      @default(20)
   seats                     Int      @default(1)
+  // Doe credited to the subscriber's wallet as a spend-first, expiring
+  // PromotionalGrant at the start of each billing period — this is what
+  // actually caps real provider spend per subscriber now that generation
+  // itself costs Doe (see PlatformSettings.doeCostPer*). 0 = no included
+  // generation allowance (e.g. Free).
+  includedGenerationDoe     Int      @default(0)
   isPubliclyVisible         Boolean  @default(true)
   sortOrder                 Int      @default(0)
   createdAt                 DateTime @default(now())
@@ -1205,6 +1211,8 @@ enum WalletTransactionType {
   PAYOUT
   ADJUSTMENT
   PROMOTIONAL_CREDIT
+  GENERATION_SPEND
+  GENERATION_REFUND
 }
 
 enum CoinPurchaseStatus {
@@ -1579,6 +1587,13 @@ model PlatformSettings {
   maxEpisodeCoinPrice      Int      @default(100)
   minSceneCoinPrice        Int      @default(1)
   maxSceneCoinPrice        Int      @default(25)
+  // What generation itself costs the *creator* in Doe — this is what
+  // actually recovers real provider spend, separate from the
+  // viewer-facing unlock prices above. Doe, not cents, so it moves with
+  // the rest of the in-app economy; see README for how these map back to
+  // real per-unit provider pricing and the assumptions behind them.
+  doeCostPerReferenceImage Int      @default(10)
+  doeCostPerVideoSecond    Int      @default(7)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 }

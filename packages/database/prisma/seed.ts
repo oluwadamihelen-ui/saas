@@ -14,7 +14,7 @@ async function seedPlans() {
     {
       key: "free",
       name: "Free",
-      description: "Try Cinerra with limited access.",
+      description: "Try FilmDoe — a small taste of AI generation included.",
       priceMonthlyCents: 0,
       priceYearlyCents: 0,
       maxConcurrentGenerations: 1,
@@ -24,11 +24,17 @@ async function seedPlans() {
       maxProjectDurationMinutes: 5,
       seats: 1,
       sortOrder: 0,
+      // Real generation costs real provider money (Doe now meters it — see
+      // PlatformSettings.doeCostPer*), so Free's allowance is intentionally
+      // small: enough to try the product, not enough to be a standing free
+      // API-cost exposure. ~300 Doe ≈ a couple of reference images plus a
+      // few seconds of video at current default per-unit Doe costs.
+      includedGenerationDoe: 300,
     },
     {
       key: "creator",
       name: "Creator",
-      description: "Unlimited AI movie creation, subject to fair use.",
+      description: "A generous monthly generation allowance — buy more Doe anytime you run out.",
       priceMonthlyCents: 2900,
       priceYearlyCents: 29000,
       maxConcurrentGenerations: 1,
@@ -38,11 +44,15 @@ async function seedPlans() {
       maxProjectDurationMinutes: 30,
       seats: 1,
       sortOrder: 1,
+      // ≈ half of $29/mo at the default 1-Doe-per-cent generation rate,
+      // leaving margin for the parts of the pipeline this phase doesn't
+      // meter yet (text, dialogue/SFX/music) plus payment-processing fees.
+      includedGenerationDoe: 1500,
     },
     {
       key: "pro",
       name: "Pro",
-      description: "Higher priority queue, higher resolution, more concurrent jobs.",
+      description: "Higher priority queue, higher resolution, more concurrent jobs, a bigger Doe allowance.",
       priceMonthlyCents: 7900,
       priceYearlyCents: 79000,
       maxConcurrentGenerations: 3,
@@ -52,11 +62,12 @@ async function seedPlans() {
       maxProjectDurationMinutes: 60,
       seats: 1,
       sortOrder: 2,
+      includedGenerationDoe: 4500,
     },
     {
       key: "studio",
       name: "Studio",
-      description: "Unlimited creation, highest priority, team collaboration.",
+      description: "Highest priority, team collaboration, the largest Doe allowance.",
       priceMonthlyCents: 19900,
       priceYearlyCents: 199000,
       maxConcurrentGenerations: 10,
@@ -66,6 +77,7 @@ async function seedPlans() {
       maxProjectDurationMinutes: 240,
       seats: 5,
       sortOrder: 3,
+      includedGenerationDoe: 12000,
     },
   ];
 

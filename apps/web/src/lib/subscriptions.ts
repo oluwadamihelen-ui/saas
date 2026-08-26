@@ -10,6 +10,7 @@ import {
 } from "@cinerra/billing";
 import { prisma } from "./db";
 import { env } from "./env";
+import { recordWalletTransaction } from "./wallet";
 import { handleCoinPurchaseCompleted, handleCoinPurchaseRefunded } from "./coinPurchases";
 import { handlePayoutCompleted, handlePayoutFailed } from "./payouts";
 
@@ -162,6 +163,7 @@ export async function handlePaystackWebhookEvent(rawBody: string, signature: str
     return;
   }
   const interval: "MONTH" | "YEAR" = data.plan.plan_code === plan.paystackPlanCodeYearly ? "YEAR" : "MONTH";
+  const newPeriodEnd = data.next_payment_date ? new Date(data.next_payment_date) : null;
   const shared = {
     planId: plan.id,
     status: "ACTIVE" as const,
@@ -169,14 +171,46 @@ export async function handlePaystackWebhookEvent(rawBody: string, signature: str
     paystackCustomerCode: data.customer.customer_code,
     paystackSubscriptionCode: data.subscription_code,
     paystackEmailToken: data.email_token,
-    currentPeriodEnd: data.next_payment_date ? new Date(data.next_payment_date) : null,
+    currentPeriodEnd: newPeriodEnd,
     cancelAtPeriodEnd: false,
   };
+
+  const existing = await prisma.subscription.findUnique({ where: { userId: user.id }, select: { currentPeriodEnd: true } });
   await prisma.subscription.upsert({
     where: { userId: user.id },
     create: { userId: user.id, provider: "PAYSTACK", ...shared },
     update: shared,
   });
+
+  // A new subscription, or an existing one whose period just advanced
+  // (renewal) — either way, this is a new billing period starting, so
+  // grant its included generation-Doe allowance. Expires with the period
+  // itself (spend-first, FIFO-by-expiry, same as any other promotional
+  // grant) so an unused allowance never silently rolls over and masks a
+  // plan that's actually underpriced for what it's letting through.
+  const isNewPeriod = !existing || existing.currentPeriodEnd?.getTime() !== newPeriodEnd?.getTime();
+  if (isNewPeriod && plan.includedGenerationDoe > 0) {
+    const expiresAt = newPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await prisma.$transaction(async (tx) => {
+      const grant = await tx.promotionalGrant.create({
+        data: {
+          userId: user.id,
+          coins: plan.includedGenerationDoe,
+          remainingCoins: plan.includedGenerationDoe,
+          reason: `Included with your ${plan.name} plan`,
+          expiresAt,
+        },
+      });
+      await recordWalletTransaction(tx, {
+        userId: user.id,
+        type: "PROMOTIONAL_CREDIT",
+        amount: plan.includedGenerationDoe,
+        referenceType: "PromotionalGrant",
+        referenceId: grant.id,
+        idempotencyKey: `plan-doe-grant:${user.id}:${data.subscription_code}:${expiresAt.toISOString()}`,
+      });
+    });
+  }
 }
 
 /**

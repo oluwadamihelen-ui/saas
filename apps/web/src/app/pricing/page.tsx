@@ -22,10 +22,10 @@ export default async function PricingPage() {
       <main className="mx-auto max-w-6xl px-4 pb-24 pt-12 md:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <span className="eyebrow">Pricing</span>
-          <h1 className="mt-3 font-display text-3xl font-bold md:text-4xl">Unlimited AI Movie Creation</h1>
+          <h1 className="mt-3 font-display text-3xl font-bold md:text-4xl">AI Movie Creation, Priced Fairly</h1>
           <p className="mt-3 text-cinerra-muted">
-            No credits. No generation counters. Every plan gives you unlimited movie creation, subject to a fair-use
-            concurrency limit — how many generations can run for you at once.
+            Every plan includes a monthly Doe allowance for generation — enough for real projects, not a token
+            trial. Run out before your next billing date? Buy more Doe anytime and keep creating.
           </p>
         </div>
 
@@ -58,7 +58,7 @@ export default async function PricingPage() {
                   )}
                 </div>
                 <ul className="mt-6 flex flex-1 flex-col gap-2 text-sm text-cinerra-muted">
-                  <li>Unlimited AI movie creation</li>
+                  <li>🪙 {plan.includedGenerationDoe.toLocaleString()} Doe of generation included / month</li>
                   <li>{plan.maxConcurrentGenerations} simultaneous generation{plan.maxConcurrentGenerations > 1 ? "s" : ""}</li>
                   <li>{plan.queuePriority.toLowerCase()} queue priority</li>
                   <li>Up to {plan.maxExportResolution} export</li>

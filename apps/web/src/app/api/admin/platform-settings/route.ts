@@ -17,6 +17,8 @@ const bodySchema = z.object({
   maxEpisodeCoinPrice: z.number().int().min(1),
   minSceneCoinPrice: z.number().int().min(1),
   maxSceneCoinPrice: z.number().int().min(1),
+  doeCostPerReferenceImage: z.number().int().min(0),
+  doeCostPerVideoSecond: z.number().int().min(0),
 });
 
 /**

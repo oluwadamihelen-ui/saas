@@ -261,6 +261,8 @@ export default async function AdminPage() {
             maxEpisodeCoinPrice: platformSettings.maxEpisodeCoinPrice,
             minSceneCoinPrice: platformSettings.minSceneCoinPrice,
             maxSceneCoinPrice: platformSettings.maxSceneCoinPrice,
+            doeCostPerReferenceImage: platformSettings.doeCostPerReferenceImage,
+            doeCostPerVideoSecond: platformSettings.doeCostPerVideoSecond,
           }}
         />
       </section>

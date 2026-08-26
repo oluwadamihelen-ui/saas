@@ -15,6 +15,8 @@ interface Settings {
   maxEpisodeCoinPrice: number;
   minSceneCoinPrice: number;
   maxSceneCoinPrice: number;
+  doeCostPerReferenceImage: number;
+  doeCostPerVideoSecond: number;
 }
 
 const FIELDS: { key: keyof Settings; label: string; type: "number" | "text" }[] = [
@@ -29,6 +31,8 @@ const FIELDS: { key: keyof Settings; label: string; type: "number" | "text" }[] 
   { key: "maxEpisodeCoinPrice", label: "Episode price — max (Doe)", type: "number" },
   { key: "minSceneCoinPrice", label: "Scene price — min (Doe)", type: "number" },
   { key: "maxSceneCoinPrice", label: "Scene price — max (Doe)", type: "number" },
+  { key: "doeCostPerReferenceImage", label: "Generation cost — reference image (Doe)", type: "number" },
+  { key: "doeCostPerVideoSecond", label: "Generation cost — video, per second (Doe)", type: "number" },
 ];
 
 export function PlatformSettingsForm({ initial }: { initial: Settings }) {

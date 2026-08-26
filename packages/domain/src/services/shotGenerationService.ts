@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { prisma } from "@cinerra/database";
+import { prisma, chargeForGeneration, refundGenerationCharge, InsufficientGenerationDoeError, AlreadyChargedError } from "@cinerra/database";
 import type { GenerateVideoResult, ModelRouter } from "@cinerra/ai";
 import { ProviderCancelledError, ProviderGenerationError, ProviderNotConfiguredError } from "@cinerra/ai";
 import type { StorageClient } from "@cinerra/storage";
@@ -73,10 +73,34 @@ export async function runShotGenerationJob(router: ModelRouter, storage: Storage
   }
   await prisma.shot.update({ where: { id: job.shotId }, data: { status: "GENERATING" } });
 
+  let charged = false;
+  let doeAmount = 0;
+
   try {
     const context = await resolveShotPromptContext(job.shotId);
     const referenceImages = await resolveShotReferenceImages(job.shotId, (key) => storage.getSignedDownloadUrl(key, 3600));
     const compiled = compileShotPrompt(context);
+
+    const platformSettings = await prisma.platformSettings.findUniqueOrThrow({ where: { id: "singleton" } });
+    doeAmount = platformSettings.doeCostPerVideoSecond * context.shot.durationSeconds;
+    try {
+      await prisma.$transaction((tx) =>
+        chargeForGeneration(tx, {
+          userId: job.userId,
+          doeAmount,
+          referenceType: "GenerationJob",
+          referenceId: job.id,
+          idempotencyKey: `generation-spend:${job.id}`,
+        }),
+      );
+      charged = true;
+    } catch (chargeError) {
+      if (chargeError instanceof AlreadyChargedError) {
+        charged = true;
+      } else {
+        throw chargeError;
+      }
+    }
 
     await transitionGenerationJob(job.id, "PROVIDER_GENERATING");
 
@@ -163,6 +187,13 @@ export async function runShotGenerationJob(router: ModelRouter, storage: Storage
 
     await transitionGenerationJob(job.id, "SUCCEEDED");
   } catch (error) {
+    if (charged) {
+      await prisma
+        .$transaction((tx) =>
+          refundGenerationCharge(tx, { userId: job.userId, doeAmount, referenceType: "GenerationJob", referenceId: job.id }),
+        )
+        .catch((refundError) => console.error(`[shotGenerationService] failed to refund generation charge for job ${job.id}:`, refundError));
+    }
     if (error instanceof ProviderCancelledError) {
       // The cancel API route already flipped the job to CANCELLED and
       // reset the shot back to PENDING before this ever fired — nothing
@@ -172,11 +203,13 @@ export async function runShotGenerationJob(router: ModelRouter, storage: Storage
       return;
     }
     const message =
-      error instanceof ProviderNotConfiguredError
-        ? "Video generation isn't available yet — no video provider is configured. Add an AI provider API key in Settings."
-        : error instanceof ProviderGenerationError
-          ? "We couldn't generate this shot. The video provider had trouble responding — your project is safe, and you can retry."
-          : `We couldn't generate this shot: ${error instanceof Error ? error.message : "unexpected error"}`;
+      error instanceof InsufficientGenerationDoeError
+        ? error.message
+        : error instanceof ProviderNotConfiguredError
+          ? "Video generation isn't available yet — no video provider is configured. Add an AI provider API key in Settings."
+          : error instanceof ProviderGenerationError
+            ? "We couldn't generate this shot. The video provider had trouble responding — your project is safe, and you can retry."
+            : `We couldn't generate this shot: ${error instanceof Error ? error.message : "unexpected error"}`;
 
     await prisma.shot.update({ where: { id: job.shotId }, data: { status: "FAILED" } }).catch(() => undefined);
     await transitionGenerationJob(job.id, "FAILED", { errorMessage: message, attempts: { increment: 1 } });

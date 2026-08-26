@@ -14,6 +14,8 @@ export interface PlatformSettingsInput {
   maxEpisodeCoinPrice: number;
   minSceneCoinPrice: number;
   maxSceneCoinPrice: number;
+  doeCostPerReferenceImage: number;
+  doeCostPerVideoSecond: number;
 }
 
 /**
