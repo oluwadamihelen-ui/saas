@@ -1,39 +1,7 @@
 //@version=6
-indicator("Break & Hold Levels [C0tt0nC4ndyTA Method]", shorttitle="B&H Levels", overlay=true, max_lines_count=300, max_labels_count=300)
+indicator("Break & Hold Levels", shorttitle="B&H Levels", overlay=true, max_lines_count=300, max_labels_count=300)
 
-// =============================================================================
-// BREAK & HOLD LEVELS
-//
-// Reverse-engineered from: "Profit Levels: L4 BREAK & HOLD LEVELS 1
-// (Future Of Trading Course)" - c0tt0nc4ndyta
-// https://www.youtube.com/watch?v=f7xO_YSr__8
-//
-// Video rule (paraphrased from the transcript):
-//   - A LEVEL is a confirmed swing high ("peak") or swing low ("valley").
-//   - Every level is eventually "attacked" (retested) by price. There are
-//     only two possible outcomes, per the video:
-//       HOLD  - price attacks the level and a candle CLOSES back on the
-//               protective side -> the prevailing ladder (trend) CONTINUES.
-//               Drawn as a DOTTED line (video's own convention).
-//       BREAK - a candle CLOSES through the level -> the prevailing ladder
-//               is INVALIDATED. Drawn as a SOLID line (video's own
-//               convention).
-//   - "You have to hold these hold levels in order to move up ... these
-//      break levels, when touched, they break the move." (uptrend mirror
-//      explanation, ~13:00-13:40 in the video)
-//
-// The video does NOT specify: wick vs. close for a break, how many candles
-// confirm a hold, an exact swing-pivot bar count, or a further invalidation
-// rule for a level that already held once. Those gaps are called out in the
-// accompanying write-up and, where reasonable, exposed as inputs instead of
-// silently assumed. A secondary "nested / fractal pseudo-level" idea the
-// narrator gestures at is NOT implemented - he does not give a precise,
-// repeatable rule for it (he says so himself on camera).
-// =============================================================================
-
-// -----------------------------------------------------------------------------
 // 1. INPUTS
-// -----------------------------------------------------------------------------
 grpLevel = "Level Detection"
 pivotLeft = input.int(5, "Pivot Left Bars", minval=1, maxval=50, group=grpLevel, tooltip="A swing high/low ('peak'/'valley') is confirmed when it is the extreme point among this many bars on each side. The video never names an exact bar count, so this is configurable.")
 pivotRight = input.int(5, "Pivot Right Bars", minval=1, maxval=50, group=grpLevel, tooltip="Unavoidable confirmation delay: a pivot can only be known this many bars after it forms. Required to keep the script non-repainting.")
@@ -90,12 +58,7 @@ if barstate.isconfirmed
         newSup = BHLevel.new(pl, bar_index - pivotRight, "support", "pending", na, na, na)
         array.push(levels, newSup)
 
-    // -------------------------------------------------------------------
-    // 3-6. BREAK DETECTION / HOLD DETECTION / CONFIRMATION / LEVEL MANAGEMENT
-    // (single pass per level: each level is a small state machine and
-    // break/hold/confirm/draw are all part of the same per-bar
-    // transition, so separate loops would only rescan the array.)
-    // -------------------------------------------------------------------
+    // 3-6. BREAK / HOLD / CONFIRMATION / LEVEL MANAGEMENT
     for i = 0 to array.size(levels) - 1
         curLevel = array.get(levels, i)
 
@@ -165,9 +128,7 @@ if barstate.isconfirmed
         if not na(pruned.breakLabel)
             label.delete(pruned.breakLabel)
 
-// -----------------------------------------------------------------------------
 // 9. ALERTS
-// -----------------------------------------------------------------------------
 alertcondition(bullishHoldEvent, title="Bullish Hold Confirmed", message="Break & Hold: BULLISH HOLD confirmed - a support (valley) level held, uptrend laddering continues.")
 alertcondition(bearishHoldEvent, title="Bearish Hold Confirmed", message="Break & Hold: BEARISH HOLD confirmed - a resistance (peak) level held, downtrend laddering continues.")
 alertcondition(bullishBreakEvent, title="Bullish Break Confirmed", message="Break & Hold: BULLISH BREAK confirmed - a resistance (peak) level broke, downtrend invalidated.")
