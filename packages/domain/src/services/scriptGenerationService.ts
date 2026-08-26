@@ -1,4 +1,4 @@
-import { prisma } from "@cinerra/database";
+import { prisma, chargeForGeneration, refundGenerationCharge, InsufficientGenerationDoeError, AlreadyChargedError } from "@cinerra/database";
 import type { ModelRouter } from "@cinerra/ai";
 import { ProviderGenerationError, ProviderNotConfiguredError } from "@cinerra/ai";
 import { runScreenwriter } from "../agents/screenwriter.js";
@@ -43,8 +43,31 @@ export async function runScriptGenerationJob(router: ModelRouter, generationJobI
   }
 
   const { episodeId } = job.input as { episodeId: string };
+  let charged = false;
+  let doeAmount = 0;
 
   try {
+    const platformSettings = await prisma.platformSettings.findUniqueOrThrow({ where: { id: "singleton" } });
+    doeAmount = platformSettings.doeCostPerTextGeneration;
+    try {
+      await prisma.$transaction((tx) =>
+        chargeForGeneration(tx, {
+          userId: job.userId,
+          doeAmount,
+          referenceType: "GenerationJob",
+          referenceId: job.id,
+          idempotencyKey: `generation-spend:${job.id}`,
+        }),
+      );
+      charged = true;
+    } catch (chargeError) {
+      if (chargeError instanceof AlreadyChargedError) {
+        charged = true;
+      } else {
+        throw chargeError;
+      }
+    }
+
     const episode = await prisma.episode.findUniqueOrThrow({
       where: { id: episodeId },
       include: { project: { include: { storyBible: true } } },
@@ -98,13 +121,22 @@ export async function runScriptGenerationJob(router: ModelRouter, generationJobI
 
     await transitionGenerationJob(job.id, "SUCCEEDED");
   } catch (error) {
+    if (charged) {
+      await prisma
+        .$transaction((tx) =>
+          refundGenerationCharge(tx, { userId: job.userId, doeAmount, referenceType: "GenerationJob", referenceId: job.id }),
+        )
+        .catch((refundError) => console.error(`[scriptGenerationService] failed to refund generation charge for job ${job.id}:`, refundError));
+    }
     await prisma.episode.update({ where: { id: episodeId }, data: { status: "DRAFT" } }).catch(() => undefined);
     const message =
-      error instanceof ProviderNotConfiguredError
-        ? "Screenplay generation isn't available yet — no language model provider is configured."
-        : error instanceof ProviderGenerationError
-          ? "We couldn't generate this screenplay right now. Your project is safe — try again shortly."
-          : `We couldn't generate this screenplay: ${error instanceof Error ? error.message : "unexpected error"}`;
+      error instanceof InsufficientGenerationDoeError
+        ? error.message
+        : error instanceof ProviderNotConfiguredError
+          ? "Screenplay generation isn't available yet — no language model provider is configured."
+          : error instanceof ProviderGenerationError
+            ? "We couldn't generate this screenplay right now. Your project is safe — try again shortly."
+            : `We couldn't generate this screenplay: ${error instanceof Error ? error.message : "unexpected error"}`;
     await transitionGenerationJob(job.id, "FAILED", { errorMessage: message, attempts: { increment: 1 } });
     throw error;
   }

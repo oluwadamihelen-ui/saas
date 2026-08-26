@@ -16,6 +16,9 @@ export interface PlatformSettingsInput {
   maxSceneCoinPrice: number;
   doeCostPerReferenceImage: number;
   doeCostPerVideoSecond: number;
+  doeCostPerTextGeneration: number;
+  doeCostPerVoice100Chars: number;
+  doeCostPerAudioSecond: number;
 }
 
 /**

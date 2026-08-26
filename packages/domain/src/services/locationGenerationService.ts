@@ -1,4 +1,4 @@
-import { prisma } from "@cinerra/database";
+import { prisma, chargeForGeneration, refundGenerationCharge, InsufficientGenerationDoeError, AlreadyChargedError } from "@cinerra/database";
 import type { ModelRouter } from "@cinerra/ai";
 import { ProviderGenerationError, ProviderNotConfiguredError } from "@cinerra/ai";
 import { runLocationDesigner } from "../agents/locationDesigner.js";
@@ -38,7 +38,31 @@ export async function runLocationGenerationJob(router: ModelRouter, generationJo
     throw error;
   }
 
+  let charged = false;
+  let doeAmount = 0;
+
   try {
+    const platformSettings = await prisma.platformSettings.findUniqueOrThrow({ where: { id: "singleton" } });
+    doeAmount = platformSettings.doeCostPerTextGeneration;
+    try {
+      await prisma.$transaction((tx) =>
+        chargeForGeneration(tx, {
+          userId: job.userId,
+          doeAmount,
+          referenceType: "GenerationJob",
+          referenceId: job.id,
+          idempotencyKey: `generation-spend:${job.id}`,
+        }),
+      );
+      charged = true;
+    } catch (chargeError) {
+      if (chargeError instanceof AlreadyChargedError) {
+        charged = true;
+      } else {
+        throw chargeError;
+      }
+    }
+
     const project = await prisma.project.findUniqueOrThrow({ where: { id: job.projectId }, include: { storyBible: true } });
     const bible = project.storyBible;
     if (!bible) throw new Error("This project has no Story Bible yet.");
@@ -86,12 +110,21 @@ export async function runLocationGenerationJob(router: ModelRouter, generationJo
     await linkSceneLocations(project.id);
     await transitionGenerationJob(job.id, "SUCCEEDED");
   } catch (error) {
+    if (charged) {
+      await prisma
+        .$transaction((tx) =>
+          refundGenerationCharge(tx, { userId: job.userId, doeAmount, referenceType: "GenerationJob", referenceId: job.id }),
+        )
+        .catch((refundError) => console.error(`[locationGenerationService] failed to refund generation charge for job ${job.id}:`, refundError));
+    }
     const message =
-      error instanceof ProviderNotConfiguredError
-        ? "Location generation isn't available yet — no language model provider is configured."
-        : error instanceof ProviderGenerationError
-          ? "We couldn't generate locations right now. Your project is safe — try again shortly."
-          : `We couldn't generate locations: ${error instanceof Error ? error.message : "unexpected error"}`;
+      error instanceof InsufficientGenerationDoeError
+        ? error.message
+        : error instanceof ProviderNotConfiguredError
+          ? "Location generation isn't available yet — no language model provider is configured."
+          : error instanceof ProviderGenerationError
+            ? "We couldn't generate locations right now. Your project is safe — try again shortly."
+            : `We couldn't generate locations: ${error instanceof Error ? error.message : "unexpected error"}`;
     await transitionGenerationJob(job.id, "FAILED", { errorMessage: message, attempts: { increment: 1 } });
     throw error;
   }

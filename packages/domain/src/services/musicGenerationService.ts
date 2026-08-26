@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { prisma } from "@cinerra/database";
+import { prisma, chargeForGeneration, refundGenerationCharge, InsufficientGenerationDoeError, AlreadyChargedError } from "@cinerra/database";
 import type { ModelRouter } from "@cinerra/ai";
 import { ProviderGenerationError, ProviderNotConfiguredError } from "@cinerra/ai";
 import type { StorageClient } from "@cinerra/storage";
@@ -49,6 +49,9 @@ export async function runMusicGenerationJob(router: ModelRouter, storage: Storag
     throw error;
   }
 
+  let charged = false;
+  let doeAmount = 0;
+
   try {
     const episode = await prisma.episode.findUniqueOrThrow({
       where: { id: episodeId },
@@ -57,6 +60,27 @@ export async function runMusicGenerationJob(router: ModelRouter, storage: Storag
     const durationSeconds = episode.runtimeSeconds ?? DEFAULT_SCORE_LENGTH_SECONDS;
     const prompt = buildMusicPrompt(episode, episode.project.storyBible);
     const mood = episode.project.storyBible?.tones.join(", ");
+
+    const platformSettings = await prisma.platformSettings.findUniqueOrThrow({ where: { id: "singleton" } });
+    doeAmount = platformSettings.doeCostPerAudioSecond * durationSeconds;
+    try {
+      await prisma.$transaction((tx) =>
+        chargeForGeneration(tx, {
+          userId: job.userId,
+          doeAmount,
+          referenceType: "GenerationJob",
+          referenceId: job.id,
+          idempotencyKey: `generation-spend:${job.id}`,
+        }),
+      );
+      charged = true;
+    } catch (chargeError) {
+      if (chargeError instanceof AlreadyChargedError) {
+        charged = true;
+      } else {
+        throw chargeError;
+      }
+    }
 
     await transitionGenerationJob(job.id, "PROVIDER_GENERATING");
     const result = await router.execute("MUSIC", "BEST_QUALITY", (provider) => provider.generateMusic({ prompt, durationSeconds, mood }));
@@ -100,12 +124,21 @@ export async function runMusicGenerationJob(router: ModelRouter, storage: Storag
 
     await transitionGenerationJob(job.id, "SUCCEEDED");
   } catch (error) {
+    if (charged) {
+      await prisma
+        .$transaction((tx) =>
+          refundGenerationCharge(tx, { userId: job.userId, doeAmount, referenceType: "GenerationJob", referenceId: job.id }),
+        )
+        .catch((refundError) => console.error(`[musicGenerationService] failed to refund generation charge for job ${job.id}:`, refundError));
+    }
     const message =
-      error instanceof ProviderNotConfiguredError
-        ? "Music generation isn't available yet — no music provider is configured. Add an AI provider API key in Settings."
-        : error instanceof ProviderGenerationError
-          ? "We couldn't generate this score right now. Your project is safe — try again shortly."
-          : `We couldn't generate this episode's score: ${error instanceof Error ? error.message : "unexpected error"}`;
+      error instanceof InsufficientGenerationDoeError
+        ? error.message
+        : error instanceof ProviderNotConfiguredError
+          ? "Music generation isn't available yet — no music provider is configured. Add an AI provider API key in Settings."
+          : error instanceof ProviderGenerationError
+            ? "We couldn't generate this score right now. Your project is safe — try again shortly."
+            : `We couldn't generate this episode's score: ${error instanceof Error ? error.message : "unexpected error"}`;
     await transitionGenerationJob(job.id, "FAILED", { errorMessage: message, attempts: { increment: 1 } });
     throw error;
   }

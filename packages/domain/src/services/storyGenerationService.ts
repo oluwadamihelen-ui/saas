@@ -1,4 +1,4 @@
-import { prisma } from "@cinerra/database";
+import { prisma, chargeForGeneration, refundGenerationCharge, InsufficientGenerationDoeError, AlreadyChargedError } from "@cinerra/database";
 import type { ModelRouter } from "@cinerra/ai";
 import { ProviderNotConfiguredError, ProviderGenerationError } from "@cinerra/ai";
 import { runStoryArchitect, type StoryArchitectInput } from "../agents/storyArchitect.js";
@@ -71,7 +71,31 @@ export async function runStoryGenerationJob(router: ModelRouter, generationJobId
     throw error;
   }
 
+  let charged = false;
+  let doeAmount = 0;
+
   try {
+    const platformSettings = await prisma.platformSettings.findUniqueOrThrow({ where: { id: "singleton" } });
+    doeAmount = platformSettings.doeCostPerTextGeneration;
+    try {
+      await prisma.$transaction((tx) =>
+        chargeForGeneration(tx, {
+          userId: job.userId,
+          doeAmount,
+          referenceType: "GenerationJob",
+          referenceId: job.id,
+          idempotencyKey: `generation-spend:${job.id}`,
+        }),
+      );
+      charged = true;
+    } catch (chargeError) {
+      if (chargeError instanceof AlreadyChargedError) {
+        charged = true;
+      } else {
+        throw chargeError;
+      }
+    }
+
     const input = job.input as unknown as StoryArchitectInput;
     const output = await runStoryArchitect(router, input);
 
@@ -103,6 +127,13 @@ export async function runStoryGenerationJob(router: ModelRouter, generationJobId
     await transitionGenerationJob(job.id, "FINALIZING");
     await transitionGenerationJob(job.id, "SUCCEEDED");
   } catch (error) {
+    if (charged) {
+      await prisma
+        .$transaction((tx) =>
+          refundGenerationCharge(tx, { userId: job.userId, doeAmount, referenceType: "GenerationJob", referenceId: job.id }),
+        )
+        .catch((refundError) => console.error(`[storyGenerationService] failed to refund generation charge for job ${job.id}:`, refundError));
+    }
     const message = humanReadableError(error);
     await prisma.storyBible.update({ where: { projectId: job.projectId }, data: { status: "DRAFT" } }).catch(() => undefined);
     await prisma.project.update({ where: { id: job.projectId }, data: { status: "DRAFT" } }).catch(() => undefined);
@@ -112,6 +143,9 @@ export async function runStoryGenerationJob(router: ModelRouter, generationJobId
 }
 
 function humanReadableError(error: unknown): string {
+  if (error instanceof InsufficientGenerationDoeError) {
+    return error.message;
+  }
   if (error instanceof ProviderNotConfiguredError) {
     return "Story generation isn't available yet — no language model provider is configured. Add an AI provider API key in Settings.";
   }

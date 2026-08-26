@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { prisma } from "@cinerra/database";
+import { prisma, chargeForGeneration, refundGenerationCharge, InsufficientGenerationDoeError, AlreadyChargedError } from "@cinerra/database";
 import type { ModelRouter } from "@cinerra/ai";
 import { ProviderGenerationError, ProviderNotConfiguredError } from "@cinerra/ai";
 import type { StorageClient } from "@cinerra/storage";
@@ -51,9 +51,33 @@ export async function runSoundEffectGenerationJob(router: ModelRouter, storage: 
     throw error;
   }
 
+  let charged = false;
+  let doeAmount = 0;
+
   try {
     const shot = await prisma.shot.findUniqueOrThrow({ where: { id: job.shotId } });
     if (!shot.action?.trim()) throw new Error("This shot has no action description to generate a sound effect from.");
+
+    const platformSettings = await prisma.platformSettings.findUniqueOrThrow({ where: { id: "singleton" } });
+    doeAmount = platformSettings.doeCostPerAudioSecond * shot.durationSeconds;
+    try {
+      await prisma.$transaction((tx) =>
+        chargeForGeneration(tx, {
+          userId: job.userId,
+          doeAmount,
+          referenceType: "GenerationJob",
+          referenceId: job.id,
+          idempotencyKey: `generation-spend:${job.id}`,
+        }),
+      );
+      charged = true;
+    } catch (chargeError) {
+      if (chargeError instanceof AlreadyChargedError) {
+        charged = true;
+      } else {
+        throw chargeError;
+      }
+    }
 
     await transitionGenerationJob(job.id, "PROVIDER_GENERATING");
     const result = await router.execute("SOUND_EFFECT", "BEST_QUALITY", (provider) =>
@@ -99,12 +123,21 @@ export async function runSoundEffectGenerationJob(router: ModelRouter, storage: 
 
     await transitionGenerationJob(job.id, "SUCCEEDED");
   } catch (error) {
+    if (charged) {
+      await prisma
+        .$transaction((tx) =>
+          refundGenerationCharge(tx, { userId: job.userId, doeAmount, referenceType: "GenerationJob", referenceId: job.id }),
+        )
+        .catch((refundError) => console.error(`[soundEffectGenerationService] failed to refund generation charge for job ${job.id}:`, refundError));
+    }
     const message =
-      error instanceof ProviderNotConfiguredError
-        ? "Sound effect generation isn't available yet — no sound effect provider is configured. Add an AI provider API key in Settings."
-        : error instanceof ProviderGenerationError
-          ? "We couldn't generate this sound effect right now. Your project is safe — try again shortly."
-          : `We couldn't generate this sound effect: ${error instanceof Error ? error.message : "unexpected error"}`;
+      error instanceof InsufficientGenerationDoeError
+        ? error.message
+        : error instanceof ProviderNotConfiguredError
+          ? "Sound effect generation isn't available yet — no sound effect provider is configured. Add an AI provider API key in Settings."
+          : error instanceof ProviderGenerationError
+            ? "We couldn't generate this sound effect right now. Your project is safe — try again shortly."
+            : `We couldn't generate this sound effect: ${error instanceof Error ? error.message : "unexpected error"}`;
     await transitionGenerationJob(job.id, "FAILED", { errorMessage: message, attempts: { increment: 1 } });
     throw error;
   }

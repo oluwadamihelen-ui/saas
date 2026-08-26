@@ -263,6 +263,9 @@ export default async function AdminPage() {
             maxSceneCoinPrice: platformSettings.maxSceneCoinPrice,
             doeCostPerReferenceImage: platformSettings.doeCostPerReferenceImage,
             doeCostPerVideoSecond: platformSettings.doeCostPerVideoSecond,
+            doeCostPerTextGeneration: platformSettings.doeCostPerTextGeneration,
+            doeCostPerVoice100Chars: platformSettings.doeCostPerVoice100Chars,
+            doeCostPerAudioSecond: platformSettings.doeCostPerAudioSecond,
           }}
         />
       </section>

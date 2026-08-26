@@ -1594,6 +1594,17 @@ model PlatformSettings {
   // real per-unit provider pricing and the assumptions behind them.
   doeCostPerReferenceImage Int      @default(10)
   doeCostPerVideoSecond    Int      @default(7)
+  // Text generation (story/screenplay/character/location/prop bibles): one
+  // flat charge per generation call, same simplification as the reference
+  // image cost above — prompt/output size varies, but not enough to justify
+  // per-token billing at this stage.
+  doeCostPerTextGeneration Int      @default(8)
+  // Dialogue voice synthesis, per 100 characters of spoken text.
+  doeCostPerVoice100Chars  Int      @default(2)
+  // Sound effect and music generation share this rate — both are billed
+  // per second of generated audio and cost the platform a similar order of
+  // magnitude per provider-second.
+  doeCostPerAudioSecond    Int      @default(1)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 }

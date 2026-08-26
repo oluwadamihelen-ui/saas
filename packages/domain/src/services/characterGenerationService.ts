@@ -1,4 +1,4 @@
-import { prisma } from "@cinerra/database";
+import { prisma, chargeForGeneration, refundGenerationCharge, InsufficientGenerationDoeError, AlreadyChargedError } from "@cinerra/database";
 import type { ModelRouter } from "@cinerra/ai";
 import { ProviderGenerationError, ProviderNotConfiguredError } from "@cinerra/ai";
 import { runCharacterDesigner } from "../agents/characterDesigner.js";
@@ -38,7 +38,31 @@ export async function runCharacterGenerationJob(router: ModelRouter, generationJ
     throw error;
   }
 
+  let charged = false;
+  let doeAmount = 0;
+
   try {
+    const platformSettings = await prisma.platformSettings.findUniqueOrThrow({ where: { id: "singleton" } });
+    doeAmount = platformSettings.doeCostPerTextGeneration;
+    try {
+      await prisma.$transaction((tx) =>
+        chargeForGeneration(tx, {
+          userId: job.userId,
+          doeAmount,
+          referenceType: "GenerationJob",
+          referenceId: job.id,
+          idempotencyKey: `generation-spend:${job.id}`,
+        }),
+      );
+      charged = true;
+    } catch (chargeError) {
+      if (chargeError instanceof AlreadyChargedError) {
+        charged = true;
+      } else {
+        throw chargeError;
+      }
+    }
+
     const project = await prisma.project.findUniqueOrThrow({ where: { id: job.projectId }, include: { storyBible: true } });
     const bible = project.storyBible;
     if (!bible) throw new Error("This project has no Story Bible yet.");
@@ -136,12 +160,21 @@ export async function runCharacterGenerationJob(router: ModelRouter, generationJ
     await linkSceneCharacters(project.id);
     await transitionGenerationJob(job.id, "SUCCEEDED");
   } catch (error) {
+    if (charged) {
+      await prisma
+        .$transaction((tx) =>
+          refundGenerationCharge(tx, { userId: job.userId, doeAmount, referenceType: "GenerationJob", referenceId: job.id }),
+        )
+        .catch((refundError) => console.error(`[characterGenerationService] failed to refund generation charge for job ${job.id}:`, refundError));
+    }
     const message =
-      error instanceof ProviderNotConfiguredError
-        ? "Character generation isn't available yet — no language model provider is configured."
-        : error instanceof ProviderGenerationError
-          ? "We couldn't generate characters right now. Your project is safe — try again shortly."
-          : `We couldn't generate characters: ${error instanceof Error ? error.message : "unexpected error"}`;
+      error instanceof InsufficientGenerationDoeError
+        ? error.message
+        : error instanceof ProviderNotConfiguredError
+          ? "Character generation isn't available yet — no language model provider is configured."
+          : error instanceof ProviderGenerationError
+            ? "We couldn't generate characters right now. Your project is safe — try again shortly."
+            : `We couldn't generate characters: ${error instanceof Error ? error.message : "unexpected error"}`;
     await transitionGenerationJob(job.id, "FAILED", { errorMessage: message, attempts: { increment: 1 } });
     throw error;
   }

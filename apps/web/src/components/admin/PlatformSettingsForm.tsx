@@ -17,6 +17,9 @@ interface Settings {
   maxSceneCoinPrice: number;
   doeCostPerReferenceImage: number;
   doeCostPerVideoSecond: number;
+  doeCostPerTextGeneration: number;
+  doeCostPerVoice100Chars: number;
+  doeCostPerAudioSecond: number;
 }
 
 const FIELDS: { key: keyof Settings; label: string; type: "number" | "text" }[] = [
@@ -33,6 +36,9 @@ const FIELDS: { key: keyof Settings; label: string; type: "number" | "text" }[] 
   { key: "maxSceneCoinPrice", label: "Scene price — max (Doe)", type: "number" },
   { key: "doeCostPerReferenceImage", label: "Generation cost — reference image (Doe)", type: "number" },
   { key: "doeCostPerVideoSecond", label: "Generation cost — video, per second (Doe)", type: "number" },
+  { key: "doeCostPerTextGeneration", label: "Generation cost — story/script/character/location/prop text (Doe)", type: "number" },
+  { key: "doeCostPerVoice100Chars", label: "Generation cost — dialogue voice, per 100 characters (Doe)", type: "number" },
+  { key: "doeCostPerAudioSecond", label: "Generation cost — sound effect/music, per second (Doe)", type: "number" },
 ];
 
 export function PlatformSettingsForm({ initial }: { initial: Settings }) {
