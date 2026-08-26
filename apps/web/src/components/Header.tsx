@@ -38,7 +38,7 @@ export async function Header() {
             <Link
               href="/wallet"
               className="flex h-9 items-center gap-1.5 rounded-full border border-cinerra-border bg-cinerra-surface/80 px-3 text-sm font-medium text-cinerra-text transition hover:border-cinerra-accent/40"
-              title="Coin wallet"
+              title="Doe wallet"
             >
               🪙 {(balance ?? 0).toLocaleString()}
             </Link>

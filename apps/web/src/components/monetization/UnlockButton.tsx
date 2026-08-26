@@ -50,12 +50,12 @@ export function UnlockButton({
     <div className="rounded-xl border border-cinerra-border bg-cinerra-surface p-4 text-sm">
       {insufficientCoins ? (
         <>
-          <p className="font-medium text-cinerra-text">Not enough Coins</p>
+          <p className="font-medium text-cinerra-text">Not enough Doe</p>
           <p className="mt-1 text-cinerra-muted">
             You need 🪙 {price.toLocaleString()} — your balance is 🪙 {balance.toLocaleString()} ({(price - balance).toLocaleString()} more needed).
           </p>
           <Link href="/wallet" className="btn-primary-sm mt-3 inline-block">
-            Buy Coins
+            Buy Doe
           </Link>
         </>
       ) : (

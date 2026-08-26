@@ -24,7 +24,7 @@
   --brand-glow-secondary: rgba(236, 72, 153, 0.4); /* ambient glow, magenta side of the gradient */
 
   /* Secondary/functional accents — never compete with brand for identity. */
-  --accent-coin: #eec888; /* FilmDoe Coins, premium/reward indicators only */
+  --accent-coin: #eec888; /* FilmDoe Doe (the in-app currency), premium/reward indicators only */
   --accent-success: #34d399; /* financial-positive / success states (Tailwind emerald-400) */
   --accent-danger: #f87171; /* error / destructive states (Tailwind red-400) */
 

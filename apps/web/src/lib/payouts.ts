@@ -18,7 +18,7 @@ export class BelowPayoutMinimumError extends Error {
     public readonly minimum: number,
     public readonly available: number,
   ) {
-    super(`You need at least ${minimum.toLocaleString()} Coins available to withdraw — you have ${available.toLocaleString()}.`);
+    super(`You need at least ${minimum.toLocaleString()} Doe available to withdraw — you have ${available.toLocaleString()}.`);
   }
 }
 export class PayoutClaimConflictError extends Error {

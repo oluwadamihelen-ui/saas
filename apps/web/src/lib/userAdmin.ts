@@ -94,7 +94,7 @@ export async function adjustUserBalance(params: {
   reason?: string;
 }): Promise<{ balanceAfter: number }> {
   if (!Number.isInteger(params.amount) || params.amount === 0) {
-    throw new InvalidBalanceAdjustmentError("Enter a non-zero whole number of coins.");
+    throw new InvalidBalanceAdjustmentError("Enter a non-zero whole number of Doe.");
   }
 
   const targetUser = await prisma.user.findUnique({ where: { id: params.targetUserId }, select: { id: true } });

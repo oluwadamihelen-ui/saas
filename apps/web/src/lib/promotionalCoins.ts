@@ -16,7 +16,7 @@ export class UserNotFoundError extends Error {
 }
 export class InvalidGrantAmountError extends Error {
   constructor() {
-    super("Grant amount must be a positive number of coins.");
+    super("Grant amount must be a positive number of Doe.");
   }
 }
 

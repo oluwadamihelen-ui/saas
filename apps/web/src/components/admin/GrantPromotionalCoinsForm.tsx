@@ -24,13 +24,13 @@ export function GrantPromotionalCoinsForm() {
         body: JSON.stringify({ targetUserEmail, coins, expiresInDays, reason: reason || undefined }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Couldn't grant coins.");
+      if (!res.ok) throw new Error(data.error ?? "Couldn't grant Doe.");
       setGranted(true);
       setEmail("");
       setReason("");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't grant coins.");
+      setError(err instanceof Error ? err.message : "Couldn't grant Doe.");
     } finally {
       setSaving(false);
     }
@@ -43,7 +43,7 @@ export function GrantPromotionalCoinsForm() {
         <input type="email" value={targetUserEmail} onChange={(e) => { setEmail(e.target.value); setGranted(false); }} required className="input mt-1 w-full" />
       </label>
       <label className="text-xs text-cinerra-muted">
-        Coins
+        Doe
         <input type="number" min={1} value={coins} onChange={(e) => setCoins(Number(e.target.value))} className="input mt-1 w-full" />
       </label>
       <label className="text-xs text-cinerra-muted">
@@ -56,7 +56,7 @@ export function GrantPromotionalCoinsForm() {
       </label>
       <div className="sm:col-span-2 mt-2 flex items-center gap-3">
         <button type="submit" disabled={saving} className="btn-primary-sm">
-          {saving ? "Granting…" : "Grant coins"}
+          {saving ? "Granting…" : "Grant Doe"}
         </button>
         {granted && <span className="text-xs text-emerald-400">Granted.</span>}
         {error && <span className="text-xs text-red-300">{error}</span>}

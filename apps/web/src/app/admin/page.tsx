@@ -162,14 +162,14 @@ export default async function AdminPage() {
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="Total coin revenue" value={`🪙 ${revenueAnalytics.totals.coinRevenue.toLocaleString()}`} />
+          <Stat label="Total Doe revenue" value={`🪙 ${revenueAnalytics.totals.coinRevenue.toLocaleString()}`} />
           <Stat label="Publisher share" value={`🪙 ${revenueAnalytics.totals.publisherShare.toLocaleString()}`} />
           <Stat label="Platform share" value={`🪙 ${revenueAnalytics.totals.platformShare.toLocaleString()}`} />
           <Stat label="Avg revenue / viewer" value={`🪙 ${revenueAnalytics.totals.avgRevenuePerViewer.toFixed(1)}`} />
         </div>
 
         <div className="mt-6">
-          <p className="mb-2 text-xs uppercase tracking-wide text-cinerra-muted">Daily coin revenue (last 30 days)</p>
+          <p className="mb-2 text-xs uppercase tracking-wide text-cinerra-muted">Daily Doe revenue (last 30 days)</p>
           <DailyRevenueChart data={revenueAnalytics.dailyRevenue} />
         </div>
 
@@ -244,7 +244,7 @@ export default async function AdminPage() {
   const coinEconomyTab = (
     <div className="space-y-6">
       <section className="card">
-        <h2 className="text-lg font-semibold">Coin economy settings</h2>
+        <h2 className="text-lg font-semibold">Doe economy settings</h2>
         <p className="mt-1 text-sm text-cinerra-muted">
           Revenue share, price ranges, and payout economics — previously only editable via direct database access.
         </p>
@@ -266,10 +266,10 @@ export default async function AdminPage() {
       </section>
 
       <section className="card">
-        <h2 className="text-lg font-semibold">Promotional coins</h2>
+        <h2 className="text-lg font-semibold">Promotional Doe</h2>
         <p className="mt-1 text-sm text-cinerra-muted">
-          Grant a fixed batch of coins to a user that expires automatically after a set number of days. Unspent
-          coins from a grant are reclaimed the day it expires — this never affects coins the user purchased or
+          Grant a fixed batch of Doe to a user that expires automatically after a set number of days. Unspent
+          Doe from a grant are reclaimed the day it expires — this never affects Doe the user purchased or
           earned.
         </p>
         <GrantPromotionalCoinsForm />
@@ -281,7 +281,7 @@ export default async function AdminPage() {
     <section className="card">
       <h2 className="text-lg font-semibold">Users</h2>
       <p className="mt-1 text-sm text-cinerra-muted">
-        Click a user to edit their profile, credit or debit their coin balance, or suspend/unsuspend their account.
+        Click a user to edit their profile, credit or debit their Doe balance, or suspend/unsuspend their account.
       </p>
       <div className="mt-4">
         <UserManagementTable
@@ -386,7 +386,7 @@ export default async function AdminPage() {
               { key: "users", label: "Users", content: usersTab },
               { key: "moderation", label: "Moderation", badge: moderationQueueItems.length || undefined, content: moderationTab },
               { key: "revenue", label: "Revenue", content: revenueTab },
-              { key: "coins", label: "Coin Economy", content: coinEconomyTab },
+              { key: "coins", label: "Doe Economy", content: coinEconomyTab },
               { key: "risk", label: "Risk & Trust", badge: flaggedCount || undefined, content: riskTab },
             ]}
           />

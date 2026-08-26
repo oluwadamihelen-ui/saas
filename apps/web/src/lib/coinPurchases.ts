@@ -15,12 +15,12 @@ import { handlePayoutCompleted, handlePayoutFailed } from "./payouts";
 
 export class PaymentsNotConfiguredError extends Error {
   constructor(provider: PaymentProvider) {
-    super(`Buying coins with ${provider === "PAYSTACK" ? "Paystack" : "Korapay"} isn't available yet — it isn't configured on this server.`);
+    super(`Buying Doe with ${provider === "PAYSTACK" ? "Paystack" : "Korapay"} isn't available yet — it isn't configured on this server.`);
   }
 }
 export class CoinPackageUnavailableError extends Error {
   constructor() {
-    super("That coin package isn't available.");
+    super("That Doe package isn't available.");
   }
 }
 export class KorapayNotConfiguredError extends Error {

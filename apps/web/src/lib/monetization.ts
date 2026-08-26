@@ -19,7 +19,7 @@ export class InsufficientCoinsError extends Error {
     public readonly required: number,
     public readonly balance: number,
   ) {
-    super(`You need ${required} Coins to unlock this — your balance is ${balance}.`);
+    super(`You need ${required} Doe to unlock this — your balance is ${balance}.`);
   }
 }
 export class NotContentOwnerError extends Error {
@@ -29,7 +29,7 @@ export class NotContentOwnerError extends Error {
 }
 export class PriceOutOfRangeError extends Error {
   constructor(min: number, max: number) {
-    super(`Price must be between ${min} and ${max} Coins.`);
+    super(`Price must be between ${min} and ${max} Doe.`);
   }
 }
 export class InvalidMonetizationConfigError extends Error {}

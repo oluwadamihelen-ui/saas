@@ -8,7 +8,7 @@ import { MobileNav, DesktopSidebar } from "@/components/Nav";
 import { BuyCoinsGrid } from "@/components/wallet/BuyCoinsGrid";
 
 const TRANSACTION_LABELS: Record<string, string> = {
-  COIN_PURCHASE: "Bought Coins",
+  COIN_PURCHASE: "Bought Doe",
   CONTENT_UNLOCK: "Unlocked content",
   CREATOR_REVENUE: "Earnings from a viewer unlock",
   PLATFORM_REVENUE: "Platform revenue",
@@ -45,11 +45,11 @@ export default async function WalletPage({ searchParams }: { searchParams: { che
       <div className="flex">
         <DesktopSidebar />
         <main className="mx-auto w-full max-w-2xl flex-1 px-4 pb-24 pt-6 md:px-8">
-          <h1 className="font-display text-2xl font-bold">Coin Wallet</h1>
+          <h1 className="font-display text-2xl font-bold">Doe Wallet</h1>
 
           {searchParams.checkout === "success" && (
             <p className="mt-4 rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">
-              Payment received — your Coins will appear here as soon as it's confirmed (usually instant).
+              Payment received — your Doe will appear here as soon as it's confirmed (usually instant).
             </p>
           )}
           {searchParams.checkout === "cancelled" && (
@@ -63,16 +63,16 @@ export default async function WalletPage({ searchParams }: { searchParams: { che
 
           {activeGrants.length > 0 && (
             <section className="card mt-6">
-              <h2 className="text-lg font-semibold">Promotional coins</h2>
+              <h2 className="text-lg font-semibold">Promotional Doe</h2>
               <p className="mt-1 text-sm text-cinerra-muted">
-                These coins are already included in your balance above, but expire if unused — spend them before they do.
+                This Doe is already included in your balance above, but expires if unused — spend it before it does.
               </p>
               <div className="mt-3 flex flex-col divide-y divide-cinerra-border">
                 {activeGrants.map((grant) => (
                   <div key={grant.id} className="flex items-center justify-between py-2 text-sm">
                     <div>
                       <p className="text-cinerra-text">
-                        🪙 {grant.remainingCoins.toLocaleString()} {grant.reason ? `— ${grant.reason}` : "promotional coins"}
+                        🪙 {grant.remainingCoins.toLocaleString()} {grant.reason ? `— ${grant.reason}` : "promotional Doe"}
                       </p>
                       <p className="text-xs text-cinerra-muted">Expires {grant.expiresAt.toLocaleDateString()}</p>
                     </div>
@@ -83,14 +83,14 @@ export default async function WalletPage({ searchParams }: { searchParams: { che
           )}
 
           <section className="mt-6">
-            <h2 className="mb-3 text-lg font-semibold">Buy Coins</h2>
+            <h2 className="mb-3 text-lg font-semibold">Buy Doe</h2>
             {availableProviders.length === 0 ? (
               <p className="rounded-xl border border-dashed border-cinerra-border/80 bg-cinerra-surface/30 px-4 py-6 text-center text-sm text-cinerra-muted">
-                Buying Coins isn't configured on this server yet.
+                Buying Doe isn't configured on this server yet.
               </p>
             ) : packages.length === 0 ? (
               <p className="rounded-xl border border-dashed border-cinerra-border/80 bg-cinerra-surface/30 px-4 py-6 text-center text-sm text-cinerra-muted">
-                No Coin packages are available right now.
+                No Doe packages are available right now.
               </p>
             ) : (
               <BuyCoinsGrid packages={packages} availableProviders={availableProviders} />

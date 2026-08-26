@@ -7,7 +7,7 @@ export function DailyRevenueChart({ data }: { data: { date: string; coins: numbe
       {data.map((d) => (
         <div
           key={d.date}
-          title={`${d.date}: ${d.coins.toLocaleString()} coins`}
+          title={`${d.date}: ${d.coins.toLocaleString()} Doe`}
           className="flex-1 rounded-t bg-cinerra-accent/70 transition hover:bg-cinerra-accent"
           style={{ height: `${Math.max(2, (d.coins / max) * 100)}%` }}
         />

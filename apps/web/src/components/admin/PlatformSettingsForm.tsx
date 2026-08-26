@@ -20,15 +20,15 @@ interface Settings {
 const FIELDS: { key: keyof Settings; label: string; type: "number" | "text" }[] = [
   { key: "publisherRevenueShareBps", label: "Publisher revenue share (basis points, 5000 = 50%)", type: "number" },
   { key: "settlementPeriodDays", label: "Settlement hold (days)", type: "number" },
-  { key: "payoutMinimumCoins", label: "Minimum payout (coins)", type: "number" },
-  { key: "payoutCoinValueCents", label: "Payout rate (cents per coin)", type: "number" },
+  { key: "payoutMinimumCoins", label: "Minimum payout (Doe)", type: "number" },
+  { key: "payoutCoinValueCents", label: "Payout rate (cents per Doe)", type: "number" },
   { key: "payoutCurrency", label: "Payout currency (e.g. NGN)", type: "text" },
-  { key: "minMovieCoinPrice", label: "Movie price — min (coins)", type: "number" },
-  { key: "maxMovieCoinPrice", label: "Movie price — max (coins)", type: "number" },
-  { key: "minEpisodeCoinPrice", label: "Episode price — min (coins)", type: "number" },
-  { key: "maxEpisodeCoinPrice", label: "Episode price — max (coins)", type: "number" },
-  { key: "minSceneCoinPrice", label: "Scene price — min (coins)", type: "number" },
-  { key: "maxSceneCoinPrice", label: "Scene price — max (coins)", type: "number" },
+  { key: "minMovieCoinPrice", label: "Movie price — min (Doe)", type: "number" },
+  { key: "maxMovieCoinPrice", label: "Movie price — max (Doe)", type: "number" },
+  { key: "minEpisodeCoinPrice", label: "Episode price — min (Doe)", type: "number" },
+  { key: "maxEpisodeCoinPrice", label: "Episode price — max (Doe)", type: "number" },
+  { key: "minSceneCoinPrice", label: "Scene price — min (Doe)", type: "number" },
+  { key: "maxSceneCoinPrice", label: "Scene price — max (Doe)", type: "number" },
 ];
 
 export function PlatformSettingsForm({ initial }: { initial: Settings }) {

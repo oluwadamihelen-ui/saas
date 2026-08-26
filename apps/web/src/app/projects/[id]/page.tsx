@@ -225,7 +225,7 @@ export default async function ProjectPage({
 
         <section className="card mt-6">
           <h2 className="text-lg font-semibold">Monetization</h2>
-          <p className="mt-1 text-sm text-cinerra-muted">Charge viewers Coins to watch, or keep this movie free.</p>
+          <p className="mt-1 text-sm text-cinerra-muted">Charge viewers Doe to watch, or keep this movie free.</p>
           <div className="mt-4">
             <MonetizationSettings
               projectId={project.id}

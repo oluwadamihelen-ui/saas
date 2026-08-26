@@ -72,7 +72,7 @@ export default async function EarningsPage() {
         <DesktopSidebar />
         <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-24 pt-6 md:px-8">
           <h1 className="font-display text-2xl font-bold">Earnings</h1>
-          <p className="mt-1 text-sm text-cinerra-muted">Your share of coin-gated unlocks on your published movies.</p>
+          <p className="mt-1 text-sm text-cinerra-muted">Your share of Doe-gated unlocks on your published movies.</p>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-3">
             <div className="card text-center">
@@ -99,7 +99,7 @@ export default async function EarningsPage() {
               <p className="mt-1 text-lg font-semibold text-cinerra-text">{paidUnlocks.toLocaleString()}</p>
             </div>
             <div className="card text-center">
-              <p className="text-xs text-cinerra-muted">Coin Revenue</p>
+              <p className="text-xs text-cinerra-muted">Doe Revenue</p>
               <p className="mt-1 text-lg font-semibold text-cinerra-text">🪙 {coinRevenue.toLocaleString()}</p>
             </div>
           </div>
@@ -137,7 +137,7 @@ export default async function EarningsPage() {
                       </span>
                     </p>
                     {payoutBalance.coins < settings.payoutMinimumCoins && (
-                      <p className="mt-1 text-xs text-cinerra-muted">Minimum withdrawal is {settings.payoutMinimumCoins.toLocaleString()} Coins.</p>
+                      <p className="mt-1 text-xs text-cinerra-muted">Minimum withdrawal is {settings.payoutMinimumCoins.toLocaleString()} Doe.</p>
                     )}
                   </div>
                   <WithdrawButton disabled={!payoutAccount || payoutBalance.coins < settings.payoutMinimumCoins} />
@@ -149,7 +149,7 @@ export default async function EarningsPage() {
                       <thead className="bg-cinerra-surface text-xs uppercase text-cinerra-muted">
                         <tr>
                           <th className="px-4 py-2">Date</th>
-                          <th className="px-4 py-2">Coins</th>
+                          <th className="px-4 py-2">Doe</th>
                           <th className="px-4 py-2">Amount</th>
                           <th className="px-4 py-2">Provider</th>
                           <th className="px-4 py-2">Status</th>
@@ -187,7 +187,7 @@ export default async function EarningsPage() {
                       <th className="px-4 py-2">Date</th>
                       <th className="px-4 py-2">Movie</th>
                       <th className="px-4 py-2">Episode</th>
-                      <th className="px-4 py-2">Coins Spent</th>
+                      <th className="px-4 py-2">Doe Spent</th>
                       <th className="px-4 py-2">Your Share</th>
                       <th className="px-4 py-2">Status</th>
                     </tr>

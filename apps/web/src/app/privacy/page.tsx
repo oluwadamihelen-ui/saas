@@ -39,7 +39,7 @@ export default function PrivacyPage() {
               </li>
               <li>
                 <span className="text-cinerra-text">Billing information:</span> if you subscribe to a paid plan or buy
-                Coins, payment details are collected and processed directly by Paystack and/or Korapay (your choice,
+                Doe, payment details are collected and processed directly by Paystack and/or Korapay (your choice,
                 where both are offered) — we don&rsquo;t receive or store your card number.
               </li>
               <li>

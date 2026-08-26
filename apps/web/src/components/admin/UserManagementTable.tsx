@@ -277,7 +277,7 @@ function AdjustBalanceForm({ userId, onApplied }: { userId: string; onApplied: (
 
   return (
     <form onSubmit={handleSubmit} onClick={(e) => e.stopPropagation()} className="flex flex-col gap-1.5">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-cinerra-muted">Adjust coin balance</p>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-cinerra-muted">Adjust Doe balance</p>
       <input
         type="number"
         value={amount}
