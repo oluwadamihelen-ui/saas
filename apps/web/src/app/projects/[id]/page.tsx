@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
+import { requireAcceptedTerms } from "@/lib/authGuards";
 import { prisma } from "@/lib/db";
 import { getAssetDisplayUrl } from "@/lib/storage";
 import { providerRegistry } from "@/lib/ai";
@@ -64,6 +65,7 @@ export default async function ProjectPage({
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!userId) redirect("/login");
+  requireAcceptedTerms(session, `/projects/${params.id}`);
 
   const project = await prisma.project.findUnique({
     where: { id: params.id },

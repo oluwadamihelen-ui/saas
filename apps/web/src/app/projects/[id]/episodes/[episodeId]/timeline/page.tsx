@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
+import { requireAcceptedTerms } from "@/lib/authGuards";
 import { getEpisodeTimeline } from "@cinerra/domain";
 import { Header } from "@/components/Header";
 import { MobileNav } from "@/components/Nav";
@@ -10,6 +11,7 @@ export default async function TimelinePage({ params }: { params: { id: string; e
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!userId) redirect("/login");
+  requireAcceptedTerms(session, `/projects/${params.id}/episodes/${params.episodeId}/timeline`);
 
   const timeline = await getEpisodeTimeline({ userId, episodeId: params.episodeId }).catch(() => null);
   if (!timeline) notFound();

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { requireAcceptedTerms } from "@/lib/authGuards";
 import { prisma } from "@/lib/db";
 import { providerRegistry } from "@/lib/ai";
 import { Header } from "@/components/Header";
@@ -23,6 +24,7 @@ export default async function AdminPage() {
   const session = await auth();
   const user = session?.user as { id?: string; role?: string } | undefined;
   if (!user?.id) redirect("/login");
+  requireAcceptedTerms(session, "/admin");
   if (user.role !== "ADMIN") redirect("/");
 
   const [userCount, activeSubscriptions, jobStats, plans, recentJobs, pendingPublications, platformSettings, revenueAnalytics, engagementAnalytics, fraudSignals, usersPage] = await Promise.all([

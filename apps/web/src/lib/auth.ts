@@ -62,9 +62,15 @@ const { handlers, auth: uncachedAuth, signIn, signOut } = NextAuth({
         // Re-checked on every session resolution (not just at login) so a
         // JWT issued before a suspension keeps working. Piggybacks on this
         // existing per-request lookup rather than adding a second one.
-        const dbUser = await prisma.user.findUnique({ where: { id: token.userId as string }, select: { role: true, status: true } });
+        const dbUser = await prisma.user.findUnique({ where: { id: token.userId as string }, select: { role: true, status: true, termsAcceptedAt: true } });
         (session.user as { role?: string }).role = dbUser?.role;
         (session.user as { status?: string }).status = dbUser?.status;
+        // Google sign-in creates the User row via the Prisma adapter
+        // directly, bypassing /signup's required-checkbox flow — this lets
+        // middleware.ts gate app usage behind a real, present-tense accept
+        // (/accept-terms) for anyone whose account has no recorded consent,
+        // rather than the app silently treating OAuth sign-in itself as consent.
+        (session.user as { hasAcceptedTerms?: boolean }).hasAcceptedTerms = Boolean(dbUser?.termsAcceptedAt);
       }
       return session;
     },
@@ -76,4 +82,6 @@ const { handlers, auth: uncachedAuth, signIn, signOut } = NextAuth({
 // render — without this, a single page load re-runs that lookup 3-4
 // times. React's cache() dedupes those into one per request.
 export const auth = cache(uncachedAuth);
-export { handlers, signIn, signOut };
+// middleware.ts runs outside React's render tree (no request-scoped cache
+// to dedupe against), so it needs the raw, uncached auth() directly.
+export { uncachedAuth, handlers, signIn, signOut };

@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { requireAcceptedTerms } from "@/lib/authGuards";
 import { Header } from "@/components/Header";
 import { MobileNav, DesktopSidebar } from "@/components/Nav";
 import { DiscoverCard } from "@/components/DiscoverCard";
@@ -11,6 +12,7 @@ export default async function DiscoverPage() {
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!userId) redirect("/login");
+  requireAcceptedTerms(session, "/discover");
 
   const [popular, newReleases] = await Promise.all([listPopularPublications(18), listNewReleasePublications(18)]);
 

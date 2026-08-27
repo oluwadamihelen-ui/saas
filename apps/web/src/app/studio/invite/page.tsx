@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { requireAcceptedTerms } from "@/lib/authGuards";
 import { acceptOrganizationInvite, InvalidInviteError, InviteEmailMismatchError, AlreadyInOrganizationError, SeatLimitReachedError } from "@/lib/organizations";
 import { Header } from "@/components/Header";
 import { MobileNav } from "@/components/Nav";
@@ -22,6 +23,7 @@ export default async function StudioInvitePage({ searchParams }: { searchParams:
     const currentSession = await auth();
     const userId = (currentSession?.user as { id?: string } | undefined)?.id;
     if (!userId) redirect(`/login`);
+    requireAcceptedTerms(currentSession, `/studio/invite?token=${token}`);
 
     try {
       await acceptOrganizationInvite(userId, token);

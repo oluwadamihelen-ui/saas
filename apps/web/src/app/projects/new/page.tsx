@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { requireAcceptedTerms } from "@/lib/authGuards";
 import { Header } from "@/components/Header";
 import { MobileNav } from "@/components/Nav";
 import { StoryWizardForm } from "@/components/create/StoryWizardForm";
@@ -7,6 +8,7 @@ import { StoryWizardForm } from "@/components/create/StoryWizardForm";
 export default async function NewProjectPage({ searchParams }: { searchParams: { mode?: string } }) {
   const session = await auth();
   if (!(session?.user as { id?: string } | undefined)?.id) redirect("/login");
+  requireAcceptedTerms(session, "/projects/new");
 
   const mode = searchParams.mode === "ADAPTATION" ? "ADAPTATION" : "INSPIRATION";
 

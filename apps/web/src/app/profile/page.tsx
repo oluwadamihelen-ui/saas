@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/lib/auth";
+import { requireAcceptedTerms } from "@/lib/authGuards";
 import { prisma } from "@/lib/db";
 import { deleteUserAccount, SubscriptionCancellationError } from "@/lib/accounts";
 import { Header } from "@/components/Header";
@@ -22,6 +23,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: { er
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!userId) redirect("/login");
+  requireAcceptedTerms(session, "/profile");
 
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },

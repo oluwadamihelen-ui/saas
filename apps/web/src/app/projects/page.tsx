@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { requireAcceptedTerms } from "@/lib/authGuards";
 import { prisma } from "@/lib/db";
 import { Header } from "@/components/Header";
 import { MobileNav } from "@/components/Nav";
@@ -19,6 +20,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: { t
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!userId) redirect("/login");
+  requireAcceptedTerms(session, "/projects");
 
   const tab = TABS.some((t) => t.key === searchParams.tab) ? searchParams.tab! : "creations";
 

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { requireAcceptedTerms } from "@/lib/authGuards";
 import { prisma } from "@/lib/db";
 import { env } from "@/lib/env";
 import { getAvailablePayoutBalance } from "@/lib/payouts";
@@ -26,6 +27,7 @@ export default async function EarningsPage() {
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!userId) redirect("/login");
+  requireAcceptedTerms(session, "/earnings");
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);

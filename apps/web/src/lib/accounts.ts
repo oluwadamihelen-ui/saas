@@ -48,6 +48,19 @@ export async function updateUserName(userId: string, name: string) {
   return prisma.user.update({ where: { id: userId }, data: { name } });
 }
 
+/**
+ * Records a real, present-tense acceptance for an account that reached the
+ * app without one — Google sign-in creates the User row via NextAuth's own
+ * Prisma adapter, bypassing /signup's required checkbox (spec: never
+ * fabricate or backfill consent). middleware.ts routes anyone with no
+ * recorded acceptance here before they can use the app. Guarded to only
+ * ever set termsAcceptedAt once — a second call (e.g. a duplicate submit)
+ * must not overwrite a real timestamp that already exists.
+ */
+export async function acceptTerms(userId: string): Promise<void> {
+  await prisma.user.updateMany({ where: { id: userId, termsAcceptedAt: null }, data: { termsAcceptedAt: new Date() } });
+}
+
 export async function changeUserPassword(params: { userId: string; currentPassword: string; newPassword: string }) {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: params.userId } });
   if (!user.passwordHash) throw new NoPasswordSetError();

@@ -45,7 +45,7 @@ export default function SignupPage({ searchParams }: { searchParams: { error?: s
       <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-cinerra-surface/90 p-8 shadow-glow-lg backdrop-blur-sm">
         <Logo className="mb-6 block justify-center text-center" />
         <h1 className="mb-1 text-center text-xl font-semibold">Start creating</h1>
-        <p className="mb-6 text-center text-sm text-cinerra-muted">Unlimited AI movie creation. No credits, ever.</p>
+        <p className="mb-6 text-center text-sm text-cinerra-muted">A monthly Doe allowance for generation, included with every plan.</p>
 
         {searchParams.error === "exists" && (
           <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">An account with that email already exists.</p>

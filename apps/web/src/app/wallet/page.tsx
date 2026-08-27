@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { requireAcceptedTerms } from "@/lib/authGuards";
 import { prisma } from "@/lib/db";
 import { getWalletBalance } from "@/lib/wallet";
 import { env } from "@/lib/env";
@@ -23,6 +24,7 @@ export default async function WalletPage({ searchParams }: { searchParams: { che
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!userId) redirect("/login");
+  requireAcceptedTerms(session, "/wallet");
 
   const availableProviders: ("PAYSTACK" | "KORAPAY")[] = [
     ...(env.PAYSTACK_SECRET_KEY ? (["PAYSTACK"] as const) : []),
