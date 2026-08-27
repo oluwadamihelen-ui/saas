@@ -90,6 +90,18 @@ export function exportFailedEmail(params: { projectTitle: string; episodeTitle: 
   return { subject: `${params.episodeTitle} export failed`, html, text };
 }
 
+export function verifyEmailEmail(verifyUrl: string): EmailContent {
+  const preheader = "Confirm your email address for FilmDoe.";
+  const html = layout(
+    preheader,
+    `<p>One more step — confirm this is your email address to finish setting up your FilmDoe account.</p>
+     ${button(verifyUrl, "Confirm email")}
+     <p style="margin-top:20px;color:#9a9aa8;font-size:13px;">This link expires in 24 hours. If you didn&rsquo;t create a FilmDoe account, you can safely ignore this email.</p>`,
+  );
+  const text = `One more step — confirm this is your email address to finish setting up your FilmDoe account.\n\nConfirm it here (expires in 24 hours): ${verifyUrl}\n\nIf you didn't create a FilmDoe account, you can safely ignore this email.`;
+  return { subject: "Confirm your email for FilmDoe", html, text };
+}
+
 export function organizationInviteEmail(params: { organizationName: string; inviterName: string; acceptUrl: string }): EmailContent {
   const preheader = `${params.inviterName} invited you to join ${params.organizationName} on FilmDoe.`;
   const html = layout(

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { auth, signOut } from "@/lib/auth";
 import { requireAcceptedTerms } from "@/lib/authGuards";
 import { prisma } from "@/lib/db";
-import { deleteUserAccount, SubscriptionCancellationError } from "@/lib/accounts";
+import { deleteUserAccount, sendVerificationEmail, SubscriptionCancellationError } from "@/lib/accounts";
 import { Header } from "@/components/Header";
 import { MobileNav, DesktopSidebar } from "@/components/Nav";
 import { EditNameForm } from "@/components/account/EditNameForm";
@@ -19,7 +19,7 @@ const STATUS_LABEL: Record<string, string> = {
   INCOMPLETE: "Incomplete",
 };
 
-export default async function ProfilePage({ searchParams }: { searchParams: { error?: string } }) {
+export default async function ProfilePage({ searchParams }: { searchParams: { error?: string; verify?: string } }) {
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!userId) redirect("/login");
@@ -33,6 +33,15 @@ export default async function ProfilePage({ searchParams }: { searchParams: { er
   async function signOutAction() {
     "use server";
     await signOut({ redirectTo: "/" });
+  }
+
+  async function resendVerificationAction() {
+    "use server";
+    const currentSession = await auth();
+    const currentUserId = (currentSession?.user as { id?: string } | undefined)?.id;
+    if (!currentUserId) redirect("/login");
+    await sendVerificationEmail(currentUserId).catch((err) => console.error("[email] Failed to resend verification email:", err));
+    redirect("/profile?verify=sent");
   }
 
   async function deleteAccountAction(formData: FormData) {
@@ -69,7 +78,25 @@ export default async function ProfilePage({ searchParams }: { searchParams: { er
 
           <section className="card mt-6">
             <h2 className="text-lg font-semibold">Account</h2>
-            <p className="mt-1 text-sm text-cinerra-muted">{user.email}</p>
+            <div className="mt-1 flex items-center gap-2">
+              <p className="text-sm text-cinerra-muted">{user.email}</p>
+              {user.emailVerifiedAt ? (
+                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-300">Verified</span>
+              ) : (
+                <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300">Unverified</span>
+              )}
+            </div>
+            {!user.emailVerifiedAt && (
+              <div className="mt-2">
+                {searchParams.verify === "sent" ? (
+                  <p className="text-xs text-emerald-400">Confirmation email sent — check your inbox.</p>
+                ) : (
+                  <form action={resendVerificationAction}>
+                    <button className="text-xs text-cinerra-text underline hover:text-cinerra-accent">Resend confirmation email</button>
+                  </form>
+                )}
+              </div>
+            )}
             <div className="mt-4">
               <EditNameForm initialName={user.name ?? ""} />
             </div>

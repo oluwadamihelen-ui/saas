@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AuthError } from "next-auth";
 import { signIn } from "@/lib/auth";
 import { Logo } from "@/components/Logo";
+import { PasswordInput } from "@/components/PasswordInput";
 
 export default function LoginPage({ searchParams }: { searchParams: { error?: string; reset?: string } }) {
   async function loginAction(formData: FormData) {
@@ -37,7 +38,7 @@ export default function LoginPage({ searchParams }: { searchParams: { error?: st
 
         <form action={loginAction} className="flex flex-col gap-3">
           <input name="email" type="email" required placeholder="Email" className="input" />
-          <input name="password" type="password" required placeholder="Password" className="input" />
+          <PasswordInput name="password" required placeholder="Password" className="input" autoComplete="current-password" />
           <div className="text-right">
             <Link href="/forgot-password" className="text-xs text-cinerra-muted underline hover:text-cinerra-text">
               Forgot password?

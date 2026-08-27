@@ -6,6 +6,7 @@ import { signIn } from "@/lib/auth";
 import { createUserAccount, EmailAlreadyRegisteredError, TermsNotAcceptedError } from "@/lib/accounts";
 import { checkSignupRateLimit, getClientIp } from "@/lib/rateLimit";
 import { Logo } from "@/components/Logo";
+import { SignupPasswordFields } from "@/components/auth/SignupPasswordFields";
 
 export default function SignupPage({ searchParams }: { searchParams: { error?: string } }) {
   async function signupAction(formData: FormData) {
@@ -13,7 +14,10 @@ export default function SignupPage({ searchParams }: { searchParams: { error?: s
     const name = String(formData.get("name") ?? "");
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
+    const confirmPassword = String(formData.get("confirmPassword") ?? "");
     const termsAccepted = formData.get("termsAccepted") === "on";
+
+    if (password !== confirmPassword) redirect("/signup?error=password-mismatch");
 
     const { allowed } = await checkSignupRateLimit(getClientIp(headers()));
     if (!allowed) redirect("/signup?error=ratelimit");
@@ -50,6 +54,9 @@ export default function SignupPage({ searchParams }: { searchParams: { error?: s
         {searchParams.error === "exists" && (
           <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">An account with that email already exists.</p>
         )}
+        {searchParams.error === "password-mismatch" && (
+          <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">Passwords don&rsquo;t match.</p>
+        )}
         {searchParams.error === "terms" && (
           <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
             You must accept the Terms of Service and Privacy Policy to create an account.
@@ -65,7 +72,7 @@ export default function SignupPage({ searchParams }: { searchParams: { error?: s
         <form action={signupAction} className="flex flex-col gap-3">
           <input name="name" required placeholder="Full name" className="input" />
           <input name="email" type="email" required placeholder="Email" className="input" />
-          <input name="password" type="password" required minLength={8} placeholder="Password (min. 8 characters)" className="input" />
+          <SignupPasswordFields />
           <label className="mt-1 flex items-start gap-2 text-xs text-cinerra-muted">
             <input type="checkbox" name="termsAccepted" required className="mt-0.5 accent-cinerra-accent" />
             <span>

@@ -1,12 +1,13 @@
 import { randomBytes } from "node:crypto";
 import { hashPassword, verifyPassword } from "@cinerra/config";
 import { createPaystackClient } from "@cinerra/billing";
-import { welcomeEmail, passwordResetEmail } from "@cinerra/email";
+import { welcomeEmail, passwordResetEmail, verifyEmailEmail } from "@cinerra/email";
 import { prisma } from "./db";
 import { emailClient } from "./email";
 import { env } from "./env";
 
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
+const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export class EmailAlreadyRegisteredError extends Error {
   constructor() {
@@ -35,6 +36,12 @@ export class NoPasswordSetError extends Error {
 export class InvalidResetTokenError extends Error {
   constructor() {
     super("This password reset link is invalid or has expired.");
+  }
+}
+
+export class InvalidVerificationTokenError extends Error {
+  constructor() {
+    super("This confirmation link is invalid or has expired.");
   }
 }
 
@@ -93,8 +100,40 @@ export async function createUserAccount(params: { name: string; email: string; p
   emailClient
     .send({ to: user.email, ...welcomeEmail(user.name ?? "", `${env.APP_BASE_URL}/projects/new`) })
     .catch((err) => console.error("[email] Failed to send welcome email:", err));
+  sendVerificationEmail(user.id).catch((err) => console.error("[email] Failed to send verification email:", err));
 
   return user;
+}
+
+/**
+ * Sends (or re-sends) the email-confirmation link. Any previous unconsumed
+ * token for this user is cleared first — only ever one live link at a
+ * time, so an old email doesn't keep working after a resend.
+ */
+export async function sendVerificationEmail(userId: string): Promise<void> {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  if (user.emailVerifiedAt) return;
+
+  const token = randomBytes(32).toString("hex");
+  await prisma.$transaction([
+    prisma.verificationToken.deleteMany({ where: { userId } }),
+    prisma.verificationToken.create({ data: { userId, token, expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS) } }),
+  ]);
+
+  const verifyUrl = `${env.APP_BASE_URL}/verify-email?token=${token}`;
+  await emailClient.send({ to: user.email, ...verifyEmailEmail(verifyUrl) });
+}
+
+export async function verifyEmail(token: string): Promise<void> {
+  const verificationToken = await prisma.verificationToken.findUnique({ where: { token } });
+  if (!verificationToken || verificationToken.expiresAt < new Date()) {
+    throw new InvalidVerificationTokenError();
+  }
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: verificationToken.userId }, data: { emailVerifiedAt: new Date() } }),
+    prisma.verificationToken.delete({ where: { id: verificationToken.id } }),
+  ]);
 }
 
 /** Never reveals whether the email is registered, or whether it's a password vs. OAuth account — always resolves the same way, to avoid email enumeration. */
