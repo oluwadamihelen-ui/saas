@@ -7,6 +7,7 @@ import { Header } from "@/components/Header";
 import { MobileNav, DesktopSidebar } from "@/components/Nav";
 import { ModerationQueue } from "@/components/ModerationQueue";
 import { PlatformSettingsForm } from "@/components/admin/PlatformSettingsForm";
+import { PlanDoeAllowanceForm } from "@/components/admin/PlanDoeAllowanceForm";
 import { GrantPromotionalCoinsForm } from "@/components/admin/GrantPromotionalCoinsForm";
 import { DailyRevenueChart } from "@/components/admin/DailyRevenueChart";
 import { RiskUserActions } from "@/components/admin/RiskUserActions";
@@ -269,6 +270,22 @@ export default async function AdminPage() {
             doeCostPerVoice100Chars: platformSettings.doeCostPerVoice100Chars,
             doeCostPerAudioSecond: platformSettings.doeCostPerAudioSecond,
           }}
+        />
+      </section>
+
+      <section className="card">
+        <h2 className="text-lg font-semibold">Plan Doe allowances</h2>
+        <p className="mt-1 text-sm text-cinerra-muted">
+          How much Doe each plan includes per month, granted as an expiring promotional balance on each billing
+          cycle (or lazily, once a month, for the Free plan). Previously seed-only, direct database access.
+        </p>
+        <PlanDoeAllowanceForm
+          initial={plans.map((plan) => ({
+            id: plan.id,
+            name: plan.name,
+            priceMonthlyCents: plan.priceMonthlyCents,
+            includedGenerationDoe: plan.includedGenerationDoe,
+          }))}
         />
       </section>
 
