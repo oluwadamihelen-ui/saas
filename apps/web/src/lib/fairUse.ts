@@ -5,6 +5,12 @@ const ACTIVE_JOB_STATUSES = ["QUEUED", "PROCESSING", "PROVIDER_GENERATING", "DOW
 
 export class FairUseLimitError extends Error {}
 
+export class EmailNotVerifiedError extends Error {
+  constructor() {
+    super("Confirm your email before generating — check your inbox, or resend the link from your profile page.");
+  }
+}
+
 /**
  * Paid subscribers get their included-Doe grant eagerly from the Paystack
  * webhook (subscriptions.ts), keyed to their real billing period. A user
@@ -51,6 +57,9 @@ async function ensureFreePlanDoeGrant(userId: string, plan: { id: string; name: 
  * actually starts the paid provider call) — the two limits work together.
  */
 export async function assertCanStartGeneration(userId: string): Promise<PlanFairUsePolicy> {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { emailVerifiedAt: true } });
+  if (!user.emailVerifiedAt) throw new EmailNotVerifiedError();
+
   const subscription = await prisma.subscription.findUnique({ where: { userId }, include: { plan: true } });
   const hasActiveSubscription = subscription?.status === "ACTIVE" || subscription?.status === "TRIALING";
   const plan = hasActiveSubscription ? subscription.plan : await prisma.plan.findUniqueOrThrow({ where: { key: "free" } });

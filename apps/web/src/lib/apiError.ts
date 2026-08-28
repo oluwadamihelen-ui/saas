@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/node";
 import { ProviderNotConfiguredError } from "@cinerra/ai";
-import { PublishNotEligibleError } from "@cinerra/domain";
-import { FairUseLimitError } from "./fairUse";
+import { PublishNotEligibleError, PublisherEmailNotVerifiedError } from "@cinerra/domain";
+import { FairUseLimitError, EmailNotVerifiedError } from "./fairUse";
 import { PaystackNotConfiguredError, PlanNotAvailableError, InvalidWebhookSignatureError, NoActiveSubscriptionError } from "./subscriptions";
 import { PayoutsNotConfiguredError, NoPayoutAccountError, BelowPayoutMinimumError, PayoutClaimConflictError, AccountResolutionFailedError } from "./payouts";
 import { UserNotFoundError, InvalidGrantAmountError } from "./promotionalCoins";
@@ -17,6 +17,9 @@ import { CannotRemoveOwnAdminRoleError, InvalidBalanceAdjustmentError, EmailAlre
 export function toApiErrorResponse(error: unknown): NextResponse {
   if (error instanceof FairUseLimitError) {
     return NextResponse.json({ error: error.message }, { status: 429 });
+  }
+  if (error instanceof EmailNotVerifiedError || error instanceof PublisherEmailNotVerifiedError) {
+    return NextResponse.json({ error: error.message }, { status: 403 });
   }
   if (error instanceof ProviderNotConfiguredError) {
     return NextResponse.json({ error: error.message }, { status: 503 });

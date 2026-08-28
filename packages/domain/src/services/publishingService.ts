@@ -10,6 +10,14 @@ export class PublishNotEligibleError extends Error {
   }
 }
 
+/** Thrown when the publishing user hasn't confirmed their email yet. */
+export class PublisherEmailNotVerifiedError extends Error {
+  constructor() {
+    super("Confirm your email before publishing — check your inbox, or resend the link from your profile page.");
+    this.name = "PublisherEmailNotVerifiedError";
+  }
+}
+
 async function loadOwnedProjectWithExports(projectId: string, userId: string) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -27,6 +35,9 @@ async function loadOwnedProjectWithExports(projectId: string, userId: string) {
  * actually exists, never a placeholder listing (spec §81 honesty rule).
  */
 export async function publishProject(params: { userId: string; projectId: string }) {
+  const publisher = await prisma.user.findUniqueOrThrow({ where: { id: params.userId }, select: { emailVerifiedAt: true } });
+  if (!publisher.emailVerifiedAt) throw new PublisherEmailNotVerifiedError();
+
   const project = await loadOwnedProjectWithExports(params.projectId, params.userId);
 
   const eligibility = checkProjectPublishEligibility(project.episodes);
