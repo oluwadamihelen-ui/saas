@@ -30,6 +30,7 @@ export interface UserAdminRow {
   status: string;
   createdAt: Date;
   walletBalance: number;
+  emailVerified: boolean;
 }
 
 export const USERS_PAGE_SIZE = 20;
@@ -73,6 +74,7 @@ export async function listUsers(params: { search?: string; page?: number } = {})
       status: u.status,
       createdAt: u.createdAt,
       walletBalance: u.wallet?.balance ?? 0,
+      emailVerified: Boolean(u.emailVerifiedAt),
     })),
     totalCount,
     page,
@@ -169,4 +171,25 @@ export async function updateUserProfile(params: {
     }
     throw error;
   }
+}
+
+/**
+ * Manual override for when a real user can't complete self-serve
+ * verification because outbound email isn't actually configured/working
+ * (RESEND_API_KEY unset or rejected) — otherwise they'd be stuck, since
+ * generation/publishing require emailVerifiedAt and the only way to set it
+ * themselves is clicking a link in an email that never arrived. Guarded to
+ * only ever set it once, same as the self-serve path (acceptTerms,
+ * verifyEmail) — never overwrites a real timestamp that already exists.
+ */
+export async function verifyUserEmail(params: { targetUserId: string; adminUserId: string }): Promise<void> {
+  const targetUser = await prisma.user.findUnique({ where: { id: params.targetUserId }, select: { id: true } });
+  if (!targetUser) throw new UserNotFoundError();
+
+  await prisma.$transaction([
+    prisma.user.updateMany({ where: { id: params.targetUserId, emailVerifiedAt: null }, data: { emailVerifiedAt: new Date() } }),
+    prisma.auditLog.create({
+      data: { userId: params.adminUserId, action: "USER_EMAIL_VERIFIED_BY_ADMIN", entityType: "User", entityId: params.targetUserId },
+    }),
+  ]);
 }

@@ -317,6 +317,7 @@ export default async function AdminPage() {
             status: u.status,
             walletBalance: u.walletBalance,
             createdAt: u.createdAt.toISOString(),
+            emailVerified: u.emailVerified,
           }))}
           initialTotalCount={usersPage.totalCount}
           pageSize={usersPage.pageSize}

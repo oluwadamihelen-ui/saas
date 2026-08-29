@@ -10,6 +10,7 @@ export interface UserAdminRowData {
   status: string;
   walletBalance: number;
   createdAt: string;
+  emailVerified: boolean;
 }
 
 interface UsersResponse {
@@ -177,6 +178,7 @@ function UserRows({
               <EditProfileForm user={user} onSaved={onChanged} />
               <AdjustBalanceForm userId={user.id} onApplied={onChanged} />
               <SuspendToggle email={user.email} status={user.status} onChanged={onChanged} />
+              <EmailVerificationAction userId={user.id} emailVerified={user.emailVerified} onChanged={onChanged} />
             </div>
           </td>
         </tr>
@@ -301,6 +303,44 @@ function AdjustBalanceForm({ userId, onApplied }: { userId: string; onApplied: (
         {error && <span className="text-xs text-red-300">{error}</span>}
       </div>
     </form>
+  );
+}
+
+function EmailVerificationAction({ userId, emailVerified, onChanged }: { userId: string; emailVerified: boolean; onChanged: () => void }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    setError(null);
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/verify-email`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Couldn't verify this email.");
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't verify this email.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div onClick={(e) => e.stopPropagation()} className="flex flex-col gap-1.5">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-cinerra-muted">Email verification</p>
+      <p className="text-xs text-cinerra-muted">
+        {emailVerified ? "Verified — can generate and publish." : "Unverified — blocked from generation and publishing."}
+      </p>
+      {!emailVerified && (
+        <div className="mt-1 flex items-center gap-3">
+          <button type="button" onClick={handleClick} disabled={saving} className="btn-secondary-xs">
+            {saving ? "Verifying…" : "Mark verified"}
+          </button>
+          {error && <span className="text-xs text-red-300">{error}</span>}
+        </div>
+      )}
+    </div>
   );
 }
 
