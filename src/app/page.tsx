@@ -82,20 +82,20 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="mx-auto w-full max-w-6xl px-6 pb-20 pt-20 text-center md:pt-28">
-        <div className="mx-auto mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-secondary/60 px-4 py-1.5 text-xs font-medium text-muted-foreground">
+      {/* Hero — sized to fit one viewport alongside the header and preview card below */}
+      <section className="mx-auto w-full max-w-6xl px-6 pb-8 pt-10 text-center md:pt-14">
+        <div className="mx-auto mb-4 inline-flex items-center gap-2 rounded-full border border-border bg-secondary/60 px-4 py-1.5 text-xs font-medium text-muted-foreground">
           <Sparkles className="h-3.5 w-3.5 text-accent" />
           Built for African businesses, WhatsApp-first
         </div>
-        <h1 className="mx-auto max-w-3xl text-balance text-4xl font-bold tracking-tight md:text-6xl">
+        <h1 className="mx-auto max-w-3xl text-balance text-4xl font-bold tracking-tight md:text-5xl">
           Your business. One intelligent platform.
         </h1>
-        <p className="mx-auto mt-6 max-w-2xl text-balance text-lg text-muted-foreground">
+        <p className="mx-auto mt-4 max-w-2xl text-balance text-lg text-muted-foreground">
           MAMA helps African businesses sell, manage customers, track orders, control inventory and
           grow — starting with WhatsApp.
         </p>
-        <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+        <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button asChild size="lg">
             <Link href="/register">
               Start for free <ArrowRight className="h-4 w-4" />
@@ -105,26 +105,26 @@ export default function LandingPage() {
             <Link href="/shop/mama-foodstuff">See how it works</Link>
           </Button>
         </div>
-        <p className="mt-4 text-xs text-muted-foreground">
+        <p className="mt-3 text-xs text-muted-foreground">
           No credit card required · Free plan available forever
         </p>
       </section>
 
       {/* Product screenshot placeholder */}
-      <section className="mx-auto w-full max-w-5xl px-6 pb-24">
+      <section className="mx-auto w-full max-w-5xl px-6 pb-10">
         <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
-          <div className="flex items-center gap-1.5 border-b border-border bg-secondary/50 px-4 py-3">
+          <div className="flex items-center gap-1.5 border-b border-border bg-secondary/50 px-4 py-2.5">
             <span className="h-2.5 w-2.5 rounded-full bg-red-300" />
             <span className="h-2.5 w-2.5 rounded-full bg-amber-300" />
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
           </div>
-          <div className="grid gap-4 p-6 md:grid-cols-4">
+          <div className="grid gap-3 p-4 md:grid-cols-4">
             <StatPreview label="Today's Sales" value="₦186,500" />
             <StatPreview label="Orders" value="14" />
             <StatPreview label="Customers" value="9" />
             <StatPreview label="Avg. Order Value" value="₦13,321" />
           </div>
-          <div className="mx-6 mb-6 rounded-xl bg-primary/5 p-4 text-sm">
+          <div className="mx-4 mb-4 rounded-xl bg-primary/5 p-3 text-sm">
             <span className="font-medium text-primary">Mama AI insight — </span>
             <span className="text-foreground/80">
               Your rice products generated 43% of this week&apos;s revenue. Consider restocking 10kg Rice —
