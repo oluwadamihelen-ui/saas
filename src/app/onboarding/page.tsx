@@ -366,6 +366,10 @@ export default function OnboardingPage() {
                   Connect your WhatsApp Business account and let Mama help you manage customer
                   conversations and orders.
                 </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  This step connects via Meta directly. Prefer Twilio instead (no Meta Business Portfolio
+                  needed)? Skip this for now and connect it from Dashboard → WhatsApp.
+                </p>
                 <div className="mt-6 space-y-4 text-left">
                   <Field label="Phone Number ID">
                     <Input

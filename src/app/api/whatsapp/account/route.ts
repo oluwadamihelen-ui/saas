@@ -7,8 +7,12 @@ import { encryptSecret } from "@/lib/crypto";
 
 const schema = z.object({
   businessId: z.string(),
+  provider: z.enum(["META", "TWILIO"]).default("META"),
+  // Meta: Phone Number ID. Twilio: the WhatsApp-enabled Twilio number.
   phoneNumberId: z.string().min(1),
+  // Meta: WABA ID. Twilio: Account SID.
   wabaId: z.string().min(1),
+  // Meta: access token. Twilio: Auth Token.
   accessToken: z.string().min(1),
   displayPhoneNumber: z.string().optional(),
 });
@@ -23,6 +27,7 @@ export async function POST(req: NextRequest) {
       where: { businessId: data.businessId },
       create: {
         businessId: data.businessId,
+        provider: data.provider,
         phoneNumberId: data.phoneNumberId,
         wabaId: data.wabaId,
         displayPhoneNumber: data.displayPhoneNumber,
@@ -31,6 +36,7 @@ export async function POST(req: NextRequest) {
         connectedAt: new Date(),
       },
       update: {
+        provider: data.provider,
         phoneNumberId: data.phoneNumberId,
         wabaId: data.wabaId,
         displayPhoneNumber: data.displayPhoneNumber,

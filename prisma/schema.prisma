@@ -415,9 +415,18 @@ model Payment {
 // WhatsApp
 // ---------------------------------------------------------------------------
 
+enum WhatsAppProvider {
+  META // Official WhatsApp Cloud API (Meta for Developers)
+  TWILIO // Twilio's WhatsApp Business API / Sandbox — a Meta-certified BSP
+}
+
 model WhatsAppAccount {
-  id                    String   @id @default(cuid())
-  businessId            String   @unique
+  id                    String           @id @default(cuid())
+  businessId            String           @unique
+  provider              WhatsAppProvider @default(META)
+  // Field meaning depends on `provider`:
+  //   META:   phoneNumberId = Meta Phone Number ID, wabaId = WABA ID, accessTokenEncrypted = permanent/temporary access token
+  //   TWILIO: phoneNumberId = the WhatsApp-enabled Twilio number (E.164, no "whatsapp:" prefix), wabaId = Twilio Account SID, accessTokenEncrypted = Twilio Auth Token
   phoneNumberId         String?
   wabaId                String?
   displayPhoneNumber    String?

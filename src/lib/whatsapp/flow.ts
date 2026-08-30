@@ -21,6 +21,7 @@ type FlowState = {
   customerName?: string;
   deliveryAddress?: string;
   activeCategoryId?: string;
+  lastShownProductId?: string;
 };
 
 const EMPTY_STATE: FlowState = { step: "IDLE", cart: [] };
@@ -28,7 +29,57 @@ const EMPTY_STATE: FlowState = { step: "IDLE", cart: [] };
 function parseState(raw: unknown): FlowState {
   if (!raw || typeof raw !== "object") return { ...EMPTY_STATE };
   const s = raw as Partial<FlowState>;
-  return { step: s.step ?? "IDLE", cart: s.cart ?? [], customerName: s.customerName, deliveryAddress: s.deliveryAddress, activeCategoryId: s.activeCategoryId };
+  return {
+    step: s.step ?? "IDLE",
+    cart: s.cart ?? [],
+    customerName: s.customerName,
+    deliveryAddress: s.deliveryAddress,
+    activeCategoryId: s.activeCategoryId,
+    lastShownProductId: s.lastShownProductId,
+  };
+}
+
+/**
+ * Lets the shopping flow work over plain text — not just Meta's tappable
+ * buttons/lists — by matching a typed number (matching the position in the
+ * menu we most recently sent) or the option's name against what's valid at
+ * the current step. This is what makes the flow usable over Twilio (which
+ * has no native interactive-message equivalent) without needing separate
+ * flow logic per provider.
+ */
+async function resolveTextShortcut(business: Business, state: FlowState, text: string): Promise<string | undefined> {
+  const trimmed = text.trim();
+  const lower = trimmed.toLowerCase();
+  const asNumber = /^\d+$/.test(trimmed) ? parseInt(trimmed, 10) : null;
+
+  if (state.step === "SHOP_CATEGORY") {
+    const categories = await prisma.productCategory.findMany({
+      where: { businessId: business.id, products: { some: { isActive: true } } },
+      orderBy: { name: "asc" },
+    });
+    if (asNumber && categories[asNumber - 1]) return `category:${categories[asNumber - 1].id}`;
+    const match = categories.find((c) => c.name.toLowerCase() === lower || c.name.toLowerCase().includes(lower));
+    return match ? `category:${match.id}` : undefined;
+  }
+
+  if (state.step === "SHOP_PRODUCTS") {
+    if (state.lastShownProductId) {
+      if (asNumber === 1 || /^add( to cart)?$/.test(lower)) return `add:${state.lastShownProductId}`;
+      if (asNumber === 2 || /keep shopping/.test(lower)) return "menu:shop";
+    }
+    if (state.activeCategoryId) {
+      const products = await prisma.product.findMany({
+        where: { businessId: business.id, categoryId: state.activeCategoryId, isActive: true },
+        orderBy: { name: "asc" },
+        take: 10,
+      });
+      if (asNumber && products[asNumber - 1]) return `product:${products[asNumber - 1].id}`;
+      const match = products.find((p) => p.name.toLowerCase() === lower || p.name.toLowerCase().includes(lower));
+      if (match) return `product:${match.id}`;
+    }
+  }
+
+  return undefined;
 }
 
 export type IncomingMessage =
@@ -115,6 +166,7 @@ async function sendWelcome(business: Business, account: WhatsAppAccount, to: str
 async function sendCategories(business: Business, account: WhatsAppAccount, to: string, conversationId: string) {
   const categories = await prisma.productCategory.findMany({
     where: { businessId: business.id, products: { some: { isActive: true } } },
+    orderBy: { name: "asc" },
   });
 
   if (categories.length === 0) {
@@ -139,6 +191,7 @@ async function sendProductsInCategory(
 ) {
   const products = await prisma.product.findMany({
     where: { businessId: business.id, categoryId, isActive: true },
+    orderBy: { name: "asc" },
     take: 10,
   });
 
@@ -216,14 +269,22 @@ export async function handleIncomingMessage(
   const currency = business.currency;
   const conversationId = conversation.id;
 
-  const optionId = message.type === "text" ? undefined : message.id;
   const text = message.type === "text" ? message.text.trim() : "";
   const lower = text.toLowerCase();
+  const rawOptionId = message.type === "text" ? undefined : message.id;
+  // Free-text fallback (e.g. Twilio, or a Meta client that didn't send a
+  // structured reply): try to resolve typed text to the same option ids
+  // the button/list branches below already understand.
+  const optionId =
+    rawOptionId ??
+    (message.type === "text" && (state.step === "SHOP_CATEGORY" || state.step === "SHOP_PRODUCTS")
+      ? await resolveTextShortcut(business, state, text)
+      : undefined);
 
   // Global commands available from anywhere in the flow.
   if (optionId === "menu:shop" || /^(shop|menu|hi|hello|hey|start)$/i.test(lower)) {
     await sendCategories(business, account, fromWaId, conversationId);
-    return { ...state, step: "SHOP_CATEGORY" } satisfies FlowState;
+    return { ...state, step: "SHOP_CATEGORY", lastShownProductId: undefined } satisfies FlowState;
   }
 
   if (optionId === "menu:orders") {
@@ -276,13 +337,13 @@ export async function handleIncomingMessage(
   if (optionId?.startsWith("category:")) {
     const categoryId = optionId.split(":")[1];
     await sendProductsInCategory(business, account, fromWaId, conversationId, categoryId);
-    return { ...state, step: "SHOP_PRODUCTS", activeCategoryId: categoryId };
+    return { ...state, step: "SHOP_PRODUCTS", activeCategoryId: categoryId, lastShownProductId: undefined };
   }
 
   if (optionId?.startsWith("product:")) {
     const productId = optionId.split(":")[1];
     await sendProductDetail(business, account, fromWaId, conversationId, productId);
-    return state;
+    return { ...state, lastShownProductId: productId };
   }
 
   if (optionId?.startsWith("add:")) {
@@ -301,7 +362,7 @@ export async function handleIncomingMessage(
       { id: "cart:view", title: "Checkout" },
       { id: "menu:shop", title: "Keep shopping" },
     ]);
-    return { ...state, cart };
+    return { ...state, cart, lastShownProductId: undefined };
   }
 
   if (optionId === "cart:view" || /^cart$/i.test(lower)) {

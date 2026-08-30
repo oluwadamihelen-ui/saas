@@ -185,6 +185,31 @@ Message templates for outbound marketing outside the 24-hour customer service wi
 be created and approved in Meta Business Manager — MAMA's campaign sender currently sends
 free-form text (works within the 24h window); see §11.
 
+### Alternative: connect via Twilio instead of Meta directly
+
+Setting up your own Meta Business Portfolio can hit account-specific walls (portfolio
+creation limits, business verification, phone-OTP loops) that have nothing to do with
+MAMA. As a Meta-certified WhatsApp Business Solution Provider, **Twilio** is a legitimate
+"official platform" alternative that sidesteps all of that — sign up at
+[twilio.com](https://twilio.com), open their free WhatsApp Sandbox, and:
+
+1. In **Dashboard → WhatsApp**, set **Provider** to **Twilio**.
+2. Enter the **Twilio WhatsApp number** (the sandbox number, e.g. `+14155238886`), your
+   **Account SID**, and your **Auth Token** (all from the Twilio Console).
+3. In Twilio's console, set the Sandbox/Sender's inbound webhook to
+   `https://<your-domain>/api/whatsapp/webhook` (same URL as Meta — the route
+   auto-detects which provider sent the request by payload shape).
+4. From your own WhatsApp, send the sandbox's join code to link your number as a test
+   recipient, then message it — it should flow straight into MAMA's conversation list.
+
+**Trade-off:** Twilio's API has no equivalent of Meta's tappable interactive
+buttons/lists without pre-approved Content Templates, so the shopping flow renders
+menus as numbered plain text over Twilio (see `renderOptionsAsText` in
+`lib/whatsapp/client.ts`) and customers reply with a number or the option's name
+instead of tapping — `lib/whatsapp/flow.ts`'s `resolveTextShortcut` handles matching
+that back to the right category/product. Everything else (orders, payments, inventory)
+behaves identically regardless of provider.
+
 ---
 
 ## 7. Paystack setup

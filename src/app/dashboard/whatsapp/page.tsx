@@ -29,7 +29,8 @@ export default async function WhatsAppPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">WhatsApp</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Connected through Meta&apos;s official WhatsApp Business Platform (Cloud API).
+          Connected through the official WhatsApp Business Platform — directly via Meta&apos;s Cloud API, or
+          through Twilio (a Meta-certified provider).
         </p>
       </div>
 
@@ -44,14 +45,20 @@ export default async function WhatsAppPage() {
           <WhatsAppSettingsForm
             businessId={business.id}
             initial={{
+              provider: account?.provider ?? "META",
               phoneNumberId: account?.phoneNumberId ?? "",
               wabaId: account?.wabaId ?? "",
               displayPhoneNumber: account?.displayPhoneNumber ?? "",
             }}
           />
           <p className="mt-4 text-xs text-muted-foreground">
-            Webhook URL: <code>{process.env.NEXT_PUBLIC_APP_URL}/api/whatsapp/webhook</code> — register this in
-            Meta for Developers with your verify token.
+            Webhook URL (same for both providers — the app auto-detects the payload shape):{" "}
+            <code>{process.env.NEXT_PUBLIC_APP_URL}/api/whatsapp/webhook</code>
+            <br />
+            Meta: register this with your verify token under WhatsApp → Configuration.
+            <br />
+            Twilio: paste this into your Sandbox/Sender&apos;s &quot;When a message comes in&quot; webhook field (Messaging
+            configuration), as an HTTP POST.
           </p>
         </CardContent>
       </Card>
