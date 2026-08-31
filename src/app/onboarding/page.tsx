@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { BUSINESS_CATEGORIES } from "@/lib/validation/business";
 import { cn } from "@/lib/utils";
+import { ProductImageUpload } from "@/components/dashboard/products/product-image-upload";
 
 const STEPS = [
   "WELCOME",
@@ -47,6 +48,7 @@ export default function OnboardingPage() {
     sku: "",
     stockQuantity: "",
     lowStockThreshold: "10",
+    primaryImageUrl: null as string | null,
   });
   const [whatsapp, setWhatsapp] = useState({ phoneNumberId: "", wabaId: "", accessToken: "" });
   const [paystack, setPaystack] = useState({ paystackPublicKey: "", paystackSecretKey: "" });
@@ -91,6 +93,7 @@ export default function OnboardingPage() {
           sku: product.sku || undefined,
           stockQuantity: Number(product.stockQuantity || 0),
           lowStockThreshold: Number(product.lowStockThreshold || 10),
+          primaryImageUrl: product.primaryImageUrl,
         }),
       });
       const data = await res.json();
@@ -293,6 +296,10 @@ export default function OnboardingPage() {
                       placeholder="5kg Rice"
                     />
                   </Field>
+                  <ProductImageUpload
+                    value={product.primaryImageUrl}
+                    onChange={(dataUrl) => setProduct({ ...product, primaryImageUrl: dataUrl })}
+                  />
                   <Field label="Description">
                     <Textarea
                       value={product.description}

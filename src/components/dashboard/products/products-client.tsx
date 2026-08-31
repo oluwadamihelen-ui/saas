@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/utils";
+import { ProductImageUpload } from "@/components/dashboard/products/product-image-upload";
 
 type Product = {
   id: string;
@@ -29,6 +30,7 @@ type Product = {
   stockQuantity: number;
   lowStockThreshold: number;
   isActive: boolean;
+  primaryImageUrl: string | null;
   category: { name: string } | null;
 };
 
@@ -42,6 +44,7 @@ const emptyForm = {
   stockQuantity: "",
   lowStockThreshold: "10",
   categoryName: "",
+  primaryImageUrl: null as string | null,
 };
 
 export function ProductsClient({
@@ -75,6 +78,7 @@ export function ProductsClient({
       stockQuantity: String(p.stockQuantity),
       lowStockThreshold: String(p.lowStockThreshold),
       categoryName: p.category?.name ?? "",
+      primaryImageUrl: p.primaryImageUrl,
     });
     setOpen(true);
   }
@@ -92,6 +96,7 @@ export function ProductsClient({
         stockQuantity: Number(form.stockQuantity || 0),
         lowStockThreshold: Number(form.lowStockThreshold || 10),
         categoryName: form.categoryName || undefined,
+        primaryImageUrl: form.primaryImageUrl ?? null,
       };
 
       const res = await fetch(editing ? `/api/products/${form.id}` : "/api/products", {
@@ -164,8 +169,20 @@ export function ProductsClient({
             {products.map((p) => (
               <TableRow key={p.id}>
                 <TableCell>
-                  <p className="font-medium">{p.name}</p>
-                  {p.sku && <p className="text-xs text-muted-foreground">SKU: {p.sku}</p>}
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-secondary/40">
+                      {p.primaryImageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={p.primaryImageUrl} alt={p.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <Package className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-medium">{p.name}</p>
+                      {p.sku && <p className="text-xs text-muted-foreground">SKU: {p.sku}</p>}
+                    </div>
+                  </div>
                 </TableCell>
                 <TableCell>{p.category?.name ?? "—"}</TableCell>
                 <TableCell>{formatCurrency(p.price, currency)}</TableCell>
@@ -203,6 +220,10 @@ export function ProductsClient({
               <Label>Product name</Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
+            <ProductImageUpload
+              value={form.primaryImageUrl}
+              onChange={(dataUrl) => setForm({ ...form, primaryImageUrl: dataUrl })}
+            />
             <div className="space-y-2">
               <Label>Description</Label>
               <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />

@@ -34,7 +34,10 @@ export const productSchema = z.object({
   stockQuantity: z.coerce.number().int().nonnegative().default(0),
   lowStockThreshold: z.coerce.number().int().nonnegative().default(10),
   categoryName: z.string().max(80).optional().nullable(),
-  primaryImageUrl: z.string().url().optional().nullable(),
+  // Either a hosted image URL or a client-resized data: URL (see
+  // lib/image-resize.ts) — capped well above what a compressed ~800px
+  // JPEG needs, as a sanity bound rather than a real storage limit.
+  primaryImageUrl: z.string().max(2_000_000).optional().nullable(),
   isActive: z.boolean().optional().default(true),
 });
 
