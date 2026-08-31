@@ -5,10 +5,13 @@ import { requireBusinessMembership, requireRole } from "@/lib/tenant";
 import { apiError } from "@/lib/api-helpers";
 import { debitWallet, creditWallet } from "@/lib/wallet";
 import { getPlatformPaystackSecret, initiateTransfer } from "@/lib/payments/paystack";
+import { requireCurrentPassword, logWalletSecurityEvent, maskAccountNumber } from "@/lib/wallet-security";
+import { formatCurrency } from "@/lib/utils";
 
 const schema = z.object({
   businessId: z.string(),
   amount: z.coerce.number().positive(),
+  currentPassword: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -16,11 +19,20 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const data = schema.parse(body);
     const membership = await requireBusinessMembership(data.businessId);
-    requireRole(membership, ["OWNER", "ADMIN"]);
+    requireRole(membership, ["OWNER"]);
+    await requireCurrentPassword(membership.userId, data.currentPassword);
 
     const bankAccount = await prisma.bankAccount.findUnique({ where: { businessId: data.businessId } });
     if (!bankAccount?.isVerified || !bankAccount.paystackRecipientCode) {
       return NextResponse.json({ error: "Add and verify a bank account before withdrawing" }, { status: 422 });
+    }
+    if (bankAccount.lockedUntil && bankAccount.lockedUntil > new Date()) {
+      return NextResponse.json(
+        {
+          error: `Your payout account was recently added or changed. For your security, withdrawals are locked until ${bankAccount.lockedUntil.toLocaleString()} so you have time to notice and report a change that wasn't yours.`,
+        },
+        { status: 423 }
+      );
     }
 
     const payout = await prisma.payoutRequest.create({
@@ -67,6 +79,14 @@ export async function POST(req: NextRequest) {
         where: { id: payout.id },
         data: { status: "PROCESSING", paystackTransferCode: transfer.transfer_code },
       });
+
+      await logWalletSecurityEvent(
+        data.businessId,
+        membership.userId,
+        "WITHDRAWAL_REQUESTED",
+        { amount: formatCurrency(data.amount), accountNumber: maskAccountNumber(bankAccount.accountNumber) },
+        req.headers.get("x-forwarded-for") ?? undefined
+      );
 
       return NextResponse.json({ payout: updated }, { status: 201 });
     } catch (err) {

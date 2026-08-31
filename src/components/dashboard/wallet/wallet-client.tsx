@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { Landmark, Wallet as WalletIcon, ArrowDownToLine } from "lucide-react";
+import { Landmark, Wallet as WalletIcon, ArrowDownToLine, ShieldAlert, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,6 +33,7 @@ type BankAccount = {
   bankName: string | null;
   accountName: string;
   isVerified: boolean;
+  lockedUntil: string | null;
 } | null;
 
 type WalletTransaction = {
@@ -63,13 +64,17 @@ export function WalletClient({
   const [bankAccount, setBankAccount] = useState(initialBankAccount);
   const [transactions] = useState(initialTransactions);
   const [banks, setBanks] = useState<Array<{ name: string; code: string }>>([]);
-  const [bankForm, setBankForm] = useState({ bankCode: "", accountNumber: "" });
+  const [bankForm, setBankForm] = useState({ bankCode: "", accountNumber: "", currentPassword: "" });
   const [verifying, setVerifying] = useState(false);
   const [editingBank, setEditingBank] = useState(false);
+  const [nameMismatchWarning, setNameMismatchWarning] = useState<string | null>(null);
 
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [amount, setAmount] = useState("");
+  const [withdrawPassword, setWithdrawPassword] = useState("");
   const [withdrawing, setWithdrawing] = useState(false);
+
+  const isLocked = Boolean(bankAccount?.lockedUntil && new Date(bankAccount.lockedUntil) > new Date());
 
   useEffect(() => {
     fetch("/api/wallet/banks")
@@ -80,6 +85,7 @@ export function WalletClient({
 
   async function saveBankAccount() {
     setVerifying(true);
+    setNameMismatchWarning(null);
     try {
       const res = await fetch("/api/wallet/bank-account", {
         method: "POST",
@@ -93,7 +99,13 @@ export function WalletClient({
       }
       setBankAccount(data.bankAccount);
       setEditingBank(false);
+      setBankForm({ bankCode: "", accountNumber: "", currentPassword: "" });
       toast.success(`Verified — ${data.bankAccount.accountName}`);
+      if (data.nameMismatch) {
+        setNameMismatchWarning(
+          `This account is registered to "${data.bankAccount.accountName}", which doesn't match your business owner name. Double check this is really your account.`
+        );
+      }
     } finally {
       setVerifying(false);
     }
@@ -105,7 +117,7 @@ export function WalletClient({
       const res = await fetch("/api/wallet/withdraw", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessId, amount: Number(amount) }),
+        body: JSON.stringify({ businessId, amount: Number(amount), currentPassword: withdrawPassword }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -115,6 +127,7 @@ export function WalletClient({
       toast.success("Withdrawal requested — you'll be notified once it's paid out");
       setWithdrawOpen(false);
       setAmount("");
+      setWithdrawPassword("");
       router.refresh();
     } finally {
       setWithdrawing(false);
@@ -129,8 +142,28 @@ export function WalletClient({
             <h2 className="flex items-center gap-2 font-semibold">
               <Landmark className="h-4 w-4" /> Payout bank account
             </h2>
-            {bankAccount?.isVerified && <Badge variant="success">Verified</Badge>}
+            <div className="flex gap-2">
+              {isLocked && (
+                <Badge variant="warning">
+                  <Lock className="h-3 w-3" /> Withdrawals locked
+                </Badge>
+              )}
+              {bankAccount?.isVerified && <Badge variant="success">Verified</Badge>}
+            </div>
           </div>
+
+          {nameMismatchWarning && (
+            <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>{nameMismatchWarning}</p>
+            </div>
+          )}
+
+          {isLocked && bankAccount?.lockedUntil && (
+            <p className="mt-4 flex items-center gap-1.5 text-xs text-amber-700">
+              <Lock className="h-3 w-3" /> Withdrawals are locked until {new Date(bankAccount.lockedUntil).toLocaleString()} since this account was just added or changed — this window lets you catch a change that wasn&apos;t yours.
+            </p>
+          )}
 
           {bankAccount?.isVerified && !editingBank ? (
             <div className="mt-4 flex items-center justify-between rounded-lg bg-secondary/50 p-4">
@@ -170,10 +203,19 @@ export function WalletClient({
                   placeholder="0123456789"
                 />
               </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Confirm your password</Label>
+                <Input
+                  type="password"
+                  value={bankForm.currentPassword}
+                  onChange={(e) => setBankForm({ ...bankForm, currentPassword: e.target.value })}
+                  placeholder="Required to add or change a payout account"
+                />
+              </div>
               <div className="sm:col-span-2">
                 <Button
                   onClick={saveBankAccount}
-                  disabled={verifying || !bankForm.bankCode || bankForm.accountNumber.length !== 10}
+                  disabled={verifying || !bankForm.bankCode || bankForm.accountNumber.length !== 10 || !bankForm.currentPassword}
                 >
                   {verifying ? "Verifying…" : "Verify & save"}
                 </Button>
@@ -186,7 +228,9 @@ export function WalletClient({
             </div>
           )}
           <p className="mt-3 text-xs text-muted-foreground">
-            No Paystack account needed here — we verify the account number directly and pay out on your behalf.
+            No Paystack account needed here — we verify the account number directly and pay out on your behalf. Only
+            the business owner can add or change this, and a new/changed account is locked from withdrawals for 24
+            hours as a safety window.
           </p>
         </CardContent>
       </Card>
@@ -250,10 +294,22 @@ export function WalletClient({
               <Label>Amount ({currency})</Label>
               <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="10000" />
             </div>
+            <div className="space-y-2">
+              <Label>Confirm your password</Label>
+              <Input
+                type="password"
+                value={withdrawPassword}
+                onChange={(e) => setWithdrawPassword(e.target.value)}
+                placeholder="Required to request a withdrawal"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setWithdrawOpen(false)}>Cancel</Button>
-            <Button onClick={requestWithdrawal} disabled={withdrawing || !amount || Number(amount) <= 0}>
+            <Button
+              onClick={requestWithdrawal}
+              disabled={withdrawing || !amount || Number(amount) <= 0 || !withdrawPassword}
+            >
               {withdrawing ? "Requesting…" : "Request withdrawal"}
             </Button>
           </DialogFooter>

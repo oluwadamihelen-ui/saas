@@ -492,6 +492,11 @@ model BankAccount {
   accountName           String
   paystackRecipientCode String?
   isVerified            Boolean  @default(false)
+  // Set to now()+24h whenever this account is created or its number/bank
+  // changes. Withdrawals are refused until this passes — a brief window
+  // for the real owner to notice and react to an unexpected change
+  // before any money can actually leave. See lib/wallet-security.ts.
+  lockedUntil           DateTime?
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
@@ -816,6 +821,7 @@ enum NotificationType {
   SUBSCRIPTION_RENEWAL
   SUBSCRIPTION_FAILURE
   AI_INSIGHT
+  SECURITY_ALERT // payout bank account changed, withdrawal requested, etc.
 }
 
 model Notification {

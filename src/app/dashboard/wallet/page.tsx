@@ -42,7 +42,7 @@ export default async function WalletPage() {
       <WalletClient
         businessId={business.id}
         currency={business.currency}
-        initialBankAccount={bankAccount}
+        initialBankAccount={JSON.parse(JSON.stringify(bankAccount))}
         initialTransactions={JSON.parse(JSON.stringify(transactions))}
         balance={wallet.balance.toString()}
       />

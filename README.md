@@ -255,6 +255,28 @@ settled to them directly by Paystack.
   than read-then-write, so two concurrent withdrawal requests can never both succeed against
   a balance that only covers one (covered by `tests/wallet.test.ts`).
 
+**Payout security (`lib/wallet-security.ts`)** — a pooled wallet means the platform key can
+move real money on a merchant's behalf, so adding or changing *where* it goes is treated as
+a high-risk action, not a normal settings edit:
+
+- **Owner-only**: only a business's `OWNER` can add/change the payout bank account or request
+  a withdrawal — `ADMIN`/`STAFF` members can view the wallet but not move money out of it.
+- **Password re-confirmation**: both actions require the acting user to re-enter their current
+  account password (`requireCurrentPassword`, bcrypt-checked against `User.passwordHash`), so
+  a hijacked session or an unattended logged-in browser isn't enough on its own. Accounts with
+  no password (Google-only sign-in) are blocked from these actions until one is set.
+- **24-hour withdrawal lock on change**: adding or changing the payout bank account sets
+  `BankAccount.lockedUntil` to 24h out; withdrawals are refused until it passes
+  (`computeLockedUntil`). This gives the real owner a window to notice and react to a change
+  that wasn't theirs before any money can actually leave.
+- **Audit trail + alerts**: every add/change/withdrawal writes an `AuditLog` row and creates a
+  `SECURITY_ALERT` notification for the business (`logWalletSecurityEvent`), so there's always
+  a record and an in-app nudge if something looks wrong.
+- **Name-match warning**: the account name Paystack resolves for a new/changed bank account is
+  loosely compared against the business's owner/business name (`accountNameLikelyMatches`). A
+  mismatch is surfaced as a warning, not a hard block — merchants legitimately withdraw to a
+  partner's or relative's account sometimes — but it's a visible signal to double-check.
+
 **Regulatory note, stated plainly:** pooling third-party funds in one account and moving
 them between merchants or out to bank accounts is what makes a platform a payment service
 provider under Nigerian law, which typically requires a CBN license (or a licensed partner
