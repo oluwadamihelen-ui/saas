@@ -27,6 +27,15 @@ export async function getPaystackPublicKeyForBusiness(businessId: string): Promi
   return process.env.PAYSTACK_PUBLIC_KEY || null;
 }
 
+/**
+ * The platform's own Paystack key — used for wallet operations (bank
+ * lookups, transfer recipients, payouts) that must always run against
+ * MAMA's own pooled account, never a business's individual key.
+ */
+export function getPlatformPaystackSecret(): string | null {
+  return process.env.PAYSTACK_SECRET_KEY || null;
+}
+
 export type InitializeTransactionInput = {
   secretKey: string;
   email: string;
@@ -85,4 +94,78 @@ export function verifyWebhookSignature(rawBody: string, signature: string | null
   if (!signature) return false;
   const hash = crypto.createHmac("sha512", secretKey).update(rawBody).digest("hex");
   return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(signature));
+}
+
+// ---------------------------------------------------------------------------
+// Wallet / payout support — bank lookups and transfers always run against
+// the platform's own Paystack key (see getPlatformPaystackSecret above),
+// never a merchant's individual key, since the merchant may not have one.
+// ---------------------------------------------------------------------------
+
+export async function listNigerianBanks(secretKey: string) {
+  const res = await fetch(`${PAYSTACK_BASE_URL}/bank?country=nigeria&currency=NGN`, {
+    headers: { Authorization: `Bearer ${secretKey}` },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.status) {
+    throw new Error(data.message || "Failed to load bank list");
+  }
+  return data.data as Array<{ name: string; code: string; slug: string }>;
+}
+
+/** Confirms an account number is real and returns the name it's registered under. */
+export async function resolveAccountNumber(secretKey: string, accountNumber: string, bankCode: string) {
+  const res = await fetch(
+    `${PAYSTACK_BASE_URL}/bank/resolve?account_number=${encodeURIComponent(accountNumber)}&bank_code=${encodeURIComponent(bankCode)}`,
+    { headers: { Authorization: `Bearer ${secretKey}` } }
+  );
+  const data = await res.json();
+  if (!res.ok || !data.status) {
+    throw new Error(data.message || "Could not verify that account number");
+  }
+  return data.data as { account_number: string; account_name: string };
+}
+
+export async function createTransferRecipient(
+  secretKey: string,
+  input: { name: string; accountNumber: string; bankCode: string; currency?: string }
+) {
+  const res = await fetch(`${PAYSTACK_BASE_URL}/transferrecipient`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${secretKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: "nuban",
+      name: input.name,
+      account_number: input.accountNumber,
+      bank_code: input.bankCode,
+      currency: input.currency ?? "NGN",
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.status) {
+    throw new Error(data.message || "Failed to save payout destination");
+  }
+  return data.data as { recipient_code: string };
+}
+
+export async function initiateTransfer(
+  secretKey: string,
+  input: { amountKobo: number; recipientCode: string; reason: string; reference: string }
+) {
+  const res = await fetch(`${PAYSTACK_BASE_URL}/transfer`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${secretKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      source: "balance",
+      amount: input.amountKobo,
+      recipient: input.recipientCode,
+      reason: input.reason,
+      reference: input.reference,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.status) {
+    throw new Error(data.message || "Failed to initiate withdrawal");
+  }
+  return data.data as { transfer_code: string; status: string };
 }

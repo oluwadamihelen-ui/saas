@@ -139,6 +139,10 @@ the explicitly public ones (customer-facing checkout, webhooks).
 | `/api/campaigns`, `/api/campaigns/[id]/send` | GET/POST | Marketing campaigns |
 | `/api/storefront/orders` | POST | **Public** — storefront checkout (no MAMA account needed) |
 | `/api/subscription` | POST | Change plan (see §11 re: no real billing yet) |
+| `/api/wallet` | GET | Balance + ledger for a wallet-mode business |
+| `/api/wallet/bank-account` | GET/POST | Add + verify a payout bank account (platform key, no merchant Paystack needed) |
+| `/api/wallet/withdraw` | POST | Request a payout to the saved bank account |
+| `/api/wallet/pay-order` | POST | Pay another merchant's order using the caller's own wallet balance |
 | `/api/admin/businesses/[id]/suspend` | POST | Admin-only |
 
 ---
@@ -222,6 +226,40 @@ behaves identically regardless of provider.
 4. Every webhook is signature-verified (HMAC-SHA512) against the *business's* secret key
    before anything is written, and idempotent via a unique `(source, externalId)`
    constraint — replays and duplicate deliveries are no-ops.
+
+### Merchant wallets — for businesses without their own Paystack account
+
+Paystack requires CAC business registration to sign up, which locks out a lot of small
+merchants this product is meant to serve. Any business that hasn't connected its own
+Paystack account is automatically in **wallet mode**: customer payments are collected into
+**MAMA's own platform Paystack account** (`PAYSTACK_SECRET_KEY`), and each business's share
+is tracked as an internal balance (`Wallet`/`WalletTransaction` in the schema) rather than
+settled to them directly by Paystack.
+
+- **Getting paid out**: a merchant adds a payout bank account from **Dashboard → Wallet**.
+  This never requires *their own* Paystack account — MAMA's platform key calls Paystack's
+  bank-lookup API to confirm the account is real (and whose name it's under) and creates a
+  Transfer Recipient, entirely on the platform's side. Withdrawal requests then call
+  Paystack's Transfers API the same way, debiting the wallet immediately and reconciling
+  against `transfer.success` / `transfer.failed` / `transfer.reversed` webhooks (same
+  endpoint as charge webhooks, verified against the platform key instead of a business's).
+- **Paying another merchant with wallet balance**: on any business's storefront
+  (`/shop/[slug]`), a merchant logged into their *own* MAMA account sees a "Pay with wallet
+  balance" option at checkout if they have enough balance. No real money moves — it's a
+  same-transaction re-attribution between the two wallets (`lib/wallet.ts`,
+  `transferBetweenWallets`). Anonymous customers never see this; a wallet belongs to a
+  business, not a one-off shopper.
+- **Ledger correctness**: `Wallet.balance` is a cached total that must always equal the sum
+  of `WalletTransaction` rows — every credit/debit writes both in one DB transaction
+  (`lib/wallet.ts`). Debits use a conditional `UPDATE ... WHERE balance >= amount` rather
+  than read-then-write, so two concurrent withdrawal requests can never both succeed against
+  a balance that only covers one (covered by `tests/wallet.test.ts`).
+
+**Regulatory note, stated plainly:** pooling third-party funds in one account and moving
+them between merchants or out to bank accounts is what makes a platform a payment service
+provider under Nigerian law, which typically requires a CBN license (or a licensed partner
+underneath). This is modeled correctly as software; it does not make the arrangement itself
+compliant — that's a legal decision, not a code one.
 
 ---
 

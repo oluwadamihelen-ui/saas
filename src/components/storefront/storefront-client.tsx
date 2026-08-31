@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ShoppingCart, MessageCircle, Minus, Plus, X } from "lucide-react";
+import { ShoppingCart, MessageCircle, Minus, Plus, X, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,16 +34,19 @@ export function StorefrontClient({
   business,
   categories,
   products,
+  viewerWallet,
 }: {
   business: { slug: string; name: string; category: string; currency: string; phone: string; logoUrl: string | null; coverImageUrl: string | null };
   categories: { id: string; name: string }[];
   products: Product[];
+  viewerWallet: { businessId: string; balance: string; currency: string } | null;
 }) {
   const [activeCategory, setActiveCategory] = useState<string | "all">("all");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [placing, setPlacing] = useState(false);
+  const [payingWithWallet, setPayingWithWallet] = useState(false);
   const [form, setForm] = useState({ name: "", phone: "", address: "" });
 
   const filtered = useMemo(
@@ -73,40 +76,71 @@ export function StorefrontClient({
     );
   }
 
+  async function createOrder() {
+    const res = await fetch("/api/storefront/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        businessSlug: business.slug,
+        customerPhone: form.phone,
+        customerName: form.name,
+        deliveryAddress: form.address,
+        items: cart.map((c) => ({ productId: c.productId, quantity: c.quantity })),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      toast.error(data.error ?? "Could not place order");
+      return null;
+    }
+    return data.order as { id: string };
+  }
+
   async function placeOrder() {
     setPlacing(true);
     try {
-      const res = await fetch("/api/storefront/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          businessSlug: business.slug,
-          customerPhone: form.phone,
-          customerName: form.name,
-          deliveryAddress: form.address,
-          items: cart.map((c) => ({ productId: c.productId, quantity: c.quantity })),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error ?? "Could not place order");
-        return;
-      }
+      const order = await createOrder();
+      if (!order) return;
 
       const payRes = await fetch("/api/payments/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: data.order.id }),
+        body: JSON.stringify({ orderId: order.id }),
       });
       const payData = await payRes.json();
       if (!payRes.ok) {
         // Order was created but payment isn't configured — send them to the order page anyway.
-        window.location.href = `/shop/${business.slug}/order/${data.order.id}`;
+        window.location.href = `/shop/${business.slug}/order/${order.id}`;
         return;
       }
       window.location.href = payData.authorizationUrl;
     } finally {
       setPlacing(false);
+    }
+  }
+
+  async function placeOrderWithWallet() {
+    if (!viewerWallet) return;
+    setPayingWithWallet(true);
+    try {
+      const order = await createOrder();
+      if (!order) return;
+
+      const res = await fetch("/api/wallet/pay-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: order.id, buyerBusinessId: viewerWallet.businessId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "Could not pay with wallet balance");
+        window.location.href = `/shop/${business.slug}/order/${order.id}`;
+        return;
+      }
+      toast.success("Paid with your MAMA wallet balance");
+      window.location.href = `/shop/${business.slug}/order/${order.id}`;
+    } finally {
+      setPayingWithWallet(false);
     }
   }
 
@@ -259,11 +293,32 @@ export function StorefrontClient({
               <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
             </div>
             <p className="text-sm font-medium">Total: {formatCurrency(cartTotal, business.currency)}</p>
+            {viewerWallet && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
+                <p className="flex items-center gap-1.5 font-medium text-primary">
+                  <Wallet className="h-4 w-4" /> MAMA wallet balance: {formatCurrency(viewerWallet.balance, viewerWallet.currency)}
+                </p>
+                {Number(viewerWallet.balance) < cartTotal && (
+                  <p className="mt-1 text-xs text-muted-foreground">Not enough balance to cover this order with your wallet.</p>
+                )}
+              </div>
+            )}
           </div>
-          <DialogFooter>
-            <Button className="w-full" onClick={placeOrder} disabled={placing || !form.name || !form.phone}>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button className="w-full" onClick={placeOrder} disabled={placing || payingWithWallet || !form.name || !form.phone}>
               {placing ? "Placing order…" : "Pay now"}
             </Button>
+            {viewerWallet && Number(viewerWallet.balance) >= cartTotal && (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={placeOrderWithWallet}
+                disabled={placing || payingWithWallet || !form.name || !form.phone}
+              >
+                <Wallet className="h-4 w-4" />
+                {payingWithWallet ? "Paying…" : "Pay with wallet balance"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

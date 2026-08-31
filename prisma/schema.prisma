@@ -127,6 +127,9 @@ model Business {
   paymentSettings    PaymentSettings?
   marketingSettings  MarketingSettings?
   webhookEvents      WebhookEvent[]
+  wallet             Wallet?
+  bankAccount        BankAccount?
+  payoutRequests     PayoutRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -349,6 +352,7 @@ model Order {
   items     OrderItem[]
   payments  Payment[]
   movements InventoryMovement[]
+  walletTransactions WalletTransaction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -383,6 +387,7 @@ model OrderItem {
 enum PaymentProvider {
   PAYSTACK
   MANUAL
+  WALLET // paid using another business's MAMA wallet balance — see Wallet models below
 }
 
 model Payment {
@@ -409,6 +414,115 @@ model Payment {
   @@index([businessId])
   @@index([orderId])
   @@index([providerReference])
+}
+
+// ---------------------------------------------------------------------------
+// Wallet — for merchants without their own Paystack account. Money is
+// collected into MAMA's own platform Paystack account (a pooled/omnibus
+// account); each business's share is tracked here as an internal ledger,
+// spendable at other MAMA merchants or withdrawn to a personal/business
+// bank account via Paystack Transfers. Merchants with their own connected
+// Paystack account (PaymentSettings.isConnected) bypass this entirely —
+// their money goes straight to them and never touches the wallet.
+//
+// IMPORTANT: holding pooled third-party funds and moving them between
+// merchants or out to bank accounts is a regulated activity in Nigeria
+// (typically requires a CBN license or a licensed partner underneath).
+// This models the bookkeeping correctly; it does not make the arrangement
+// itself compliant — that's a legal/business decision, not a schema one.
+// ---------------------------------------------------------------------------
+
+model Wallet {
+  id         String   @id @default(cuid())
+  businessId String   @unique
+  balance    Decimal  @default(0) @db.Decimal(14, 2)
+  currency   String   @default("NGN")
+
+  business     Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum WalletTransactionType {
+  SALE_CREDIT             // a customer paid for this business's order via the platform pooled Paystack account
+  WITHDRAWAL              // sent to the business's own bank account
+  WITHDRAWAL_REVERSAL     // a withdrawal failed/was reversed by Paystack — credited back
+  WALLET_PURCHASE_DEBIT   // this business spent wallet balance buying from another business
+  WALLET_PURCHASE_CREDIT  // this business received wallet balance from another business's purchase
+  ADJUSTMENT              // manual admin correction — always logged, never silent
+}
+
+// Append-only ledger — Wallet.balance is a cached running total that must
+// always equal the sum of these rows; never mutate balance without writing
+// a corresponding row in the same DB transaction (see lib/wallet.ts).
+model WalletTransaction {
+  id           String                @id @default(cuid())
+  walletId     String
+  type         WalletTransactionType
+  amount       Decimal               @db.Decimal(14, 2) // always positive; `type` gives direction
+  balanceAfter Decimal               @db.Decimal(14, 2)
+  description  String?
+  orderId      String?
+  payoutId     String?
+  counterpartyBusinessId String?     // the other business, for WALLET_PURCHASE_* rows
+
+  wallet Wallet         @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  order  Order?         @relation(fields: [orderId], references: [id])
+  payout PayoutRequest? @relation(fields: [payoutId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([walletId])
+  @@index([orderId])
+  @@index([payoutId])
+}
+
+// One saved payout destination per business. `accountName` is always the
+// name Paystack's bank-lookup API resolved for this account number — shown
+// back to the merchant so they can confirm it's really their account
+// before it's saved, never taken from what they typed.
+model BankAccount {
+  id                    String   @id @default(cuid())
+  businessId            String   @unique
+  accountNumber         String
+  bankCode              String
+  bankName              String?
+  accountName           String
+  paystackRecipientCode String?
+  isVerified            Boolean  @default(false)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+  REVERSED
+}
+
+model PayoutRequest {
+  id                   String       @id @default(cuid())
+  businessId           String
+  amount               Decimal      @db.Decimal(14, 2)
+  currency             String       @default("NGN")
+  status               PayoutStatus @default(PENDING)
+  paystackTransferCode String?      @unique
+  failureReason        String?
+
+  business     Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+
+  createdAt   DateTime  @default(now())
+  processedAt DateTime?
+
+  @@index([businessId])
 }
 
 // ---------------------------------------------------------------------------
