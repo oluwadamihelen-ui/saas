@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Wallet } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -12,17 +14,22 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { signOut } from "next-auth/react";
 import { Badge } from "@/components/ui/badge";
+import { formatCurrency } from "@/lib/utils";
 
 export function Topbar({
   userName,
   planName,
   businesses,
   activeBusinessId,
+  walletBalance,
+  currency,
 }: {
   userName: string;
   planName?: string;
   businesses: { id: string; name: string }[];
   activeBusinessId: string;
+  walletBalance: string;
+  currency: string;
 }) {
   const router = useRouter();
 
@@ -53,19 +60,28 @@ export function Topbar({
         )}
         {planName && <Badge variant="secondary">{planName} plan</Badge>}
       </div>
-      <DropdownMenu>
-        <DropdownMenuTrigger className="flex items-center gap-2 rounded-full">
-          <Avatar>
-            <AvatarFallback>{userName.slice(0, 1).toUpperCase()}</AvatarFallback>
-          </Avatar>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          <DropdownMenuLabel>{userName}</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => router.push("/dashboard/settings")}>Settings</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })}>Log out</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="flex items-center gap-3">
+        <Link
+          href="/dashboard/wallet"
+          className="flex items-center gap-1.5 rounded-full border border-border bg-secondary/50 px-3 py-1.5 text-sm font-medium hover:bg-secondary"
+        >
+          <Wallet className="h-3.5 w-3.5 text-primary" />
+          {formatCurrency(walletBalance, currency)}
+        </Link>
+        <DropdownMenu>
+          <DropdownMenuTrigger className="flex items-center gap-2 rounded-full">
+            <Avatar>
+              <AvatarFallback>{userName.slice(0, 1).toUpperCase()}</AvatarFallback>
+            </Avatar>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuLabel>{userName}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => router.push("/dashboard/settings")}>Settings</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })}>Log out</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </header>
   );
 }
