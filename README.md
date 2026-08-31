@@ -140,10 +140,12 @@ the explicitly public ones (customer-facing checkout, webhooks).
 | `/api/storefront/orders` | POST | **Public** — storefront checkout (no MAMA account needed) |
 | `/api/subscription` | POST | Change plan (see §11 re: no real billing yet) |
 | `/api/wallet` | GET | Balance + ledger for a wallet-mode business |
-| `/api/wallet/bank-account` | GET/POST | Add + verify a payout bank account (platform key, no merchant Paystack needed) |
+| `/api/wallet/bank-account` | GET/POST | Add a payout bank account (first time only — never edits an existing one) |
+| `/api/wallet/bank-account/change-request` | GET/POST | Request a reviewed change to an already-saved payout account |
 | `/api/wallet/withdraw` | POST | Request a payout to the saved bank account |
 | `/api/wallet/pay-order` | POST | Pay another merchant's order using the caller's own wallet balance |
 | `/api/admin/businesses/[id]/suspend` | POST | Admin-only |
+| `/api/admin/payout-requests/[id]/approve`, `/reject` | POST | Admin-only — apply or decline a payout account change request |
 
 ---
 
@@ -276,6 +278,18 @@ a high-risk action, not a normal settings edit:
   loosely compared against the business's owner/business name (`accountNameLikelyMatches`). A
   mismatch is surfaced as a warning, not a hard block — merchants legitimately withdraw to a
   partner's or relative's account sometimes — but it's a visible signal to double-check.
+- **No self-service edit or delete, once added**: a saved `BankAccount` is immutable from the
+  dashboard — `POST /api/wallet/bank-account` only ever creates one; if a business already has
+  one, it refuses. Setting one up for the first time also requires answering three fixed
+  security questions (`SECURITY_QUESTIONS` in `lib/wallet-security.ts`), hashed and stored per
+  business (`SecurityAnswer`). Changing an existing account requires a separate, higher-friction
+  path: `POST /api/wallet/bank-account/change-request` re-checks the password *and* every
+  security answer, then creates a `PayoutAccountChangeRequest` — which by itself changes
+  nothing. It only becomes a real `BankAccount` update once a platform admin reviews and
+  approves it from **Admin → Payout requests** (`/admin/payout-requests`), which is meant to
+  happen after contacting the merchant directly to confirm the change out of band. Wrong
+  password or wrong answers never touch the bank account at all; they just fail the request and
+  fire a `PAYOUT_CHANGE_DENIED` audit log + security alert.
 
 **Regulatory note, stated plainly:** pooling third-party funds in one account and moving
 them between merchants or out to bank accounts is what makes a platform a payment service

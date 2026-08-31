@@ -1,5 +1,6 @@
 import { getCurrentBusiness } from "@/lib/current-business";
 import { getOrCreateWallet, isWalletModeBusiness } from "@/lib/wallet";
+import { SECURITY_QUESTIONS } from "@/lib/wallet-security";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,7 +11,7 @@ export default async function WalletPage() {
   if (!current) return null;
   const { business } = current;
 
-  const [wallet, walletMode, bankAccount, transactions] = await Promise.all([
+  const [wallet, walletMode, bankAccount, transactions, latestChangeRequest] = await Promise.all([
     getOrCreateWallet(business.id),
     isWalletModeBusiness(business.id),
     prisma.bankAccount.findUnique({ where: { businessId: business.id } }),
@@ -18,6 +19,10 @@ export default async function WalletPage() {
       where: { wallet: { businessId: business.id } },
       orderBy: { createdAt: "desc" },
       take: 50,
+    }),
+    prisma.payoutAccountChangeRequest.findFirst({
+      where: { businessId: business.id },
+      orderBy: { createdAt: "desc" },
     }),
   ]);
 
@@ -44,6 +49,8 @@ export default async function WalletPage() {
         currency={business.currency}
         initialBankAccount={JSON.parse(JSON.stringify(bankAccount))}
         initialTransactions={JSON.parse(JSON.stringify(transactions))}
+        latestChangeRequest={JSON.parse(JSON.stringify(latestChangeRequest))}
+        securityQuestions={SECURITY_QUESTIONS as unknown as string[]}
         balance={wallet.balance.toString()}
       />
     </div>
