@@ -107,6 +107,10 @@ class MockProvider implements AIProvider {
       return pick("generate_marketing_message", segment ? { segment } : {});
     }
     if (/haven'?t (bought|ordered|purchase)|inactive|lapsed/.test(userText)) return pick("get_customer_segments");
+    // Contact-detail follow-ups ("his email", "her phone number", "their
+    // contact") rarely repeat the word "customer", so they need their own
+    // check — otherwise they'd fall through to the generic metrics default.
+    if (/email|phone number|contact (info|detail)/.test(userText)) return pick("get_customers");
     if (/this month|month'?s sales|monthly sales/.test(userText)) return pick("get_sales_summary", { from: monthStartISO() });
     if (/category|categories/.test(userText)) return pick("get_sales_by_category");
     if (/inventory|stock level/.test(userText)) return pick("get_inventory");
@@ -153,15 +157,15 @@ function formatToolResult(toolName: string | undefined, data: unknown): string {
       return `Order ${o.orderNumber} is ${o.status} — total ${formatCurrency(o.total)}.`;
     }
     case "get_customers": {
-      const rows = (d as Array<{ name: string | null; phone: string; stats: { totalOrders: number; totalSpent: number } }>) ?? [];
+      const rows = (d as Array<{ name: string | null; phone: string; email: string | null; stats: { totalOrders: number; totalSpent: number } }>) ?? [];
       if (rows.length === 0) return "No customers yet.";
-      const lines = rows.slice(0, 10).map((c) => `• ${c.name ?? c.phone} — ${c.stats.totalOrders} orders, ${formatCurrency(c.stats.totalSpent)} lifetime`);
+      const lines = rows.slice(0, 10).map((c) => `• ${c.name ?? c.phone} — ${c.phone} · ${c.email ?? "no email on file"} — ${c.stats.totalOrders} orders, ${formatCurrency(c.stats.totalSpent)} lifetime`);
       return [`${rows.length} customer${rows.length === 1 ? "" : "s"}:`, ...lines].join("\n");
     }
     case "get_customer": {
       if (!d) return "I couldn't find a customer with that phone number.";
-      const c = d as { name: string | null; phone: string; stats: { totalOrders: number; totalSpent: number } };
-      return `${c.name ?? c.phone}: ${c.stats.totalOrders} orders, ${formatCurrency(c.stats.totalSpent)} lifetime value.`;
+      const c = d as { name: string | null; phone: string; email: string | null; stats: { totalOrders: number; totalSpent: number } };
+      return `${c.name ?? c.phone} — ${c.phone} · ${c.email ?? "no email on file"}: ${c.stats.totalOrders} orders, ${formatCurrency(c.stats.totalSpent)} lifetime value.`;
     }
     case "get_customer_segments": {
       const r = d as { vip: number; returning: number; new: number; inactive: number; total: number };
