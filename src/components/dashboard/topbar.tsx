@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Wallet, ShieldCheck } from "lucide-react";
+import { Wallet } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -23,7 +23,6 @@ export function Topbar({
   activeBusinessId,
   walletBalance,
   currency,
-  isPlatformAdmin,
 }: {
   userName: string;
   planName?: string;
@@ -31,7 +30,6 @@ export function Topbar({
   activeBusinessId: string;
   walletBalance: string;
   currency: string;
-  isPlatformAdmin: boolean;
 }) {
   const router = useRouter();
 
@@ -63,14 +61,6 @@ export function Topbar({
         {planName && <Badge variant="secondary">{planName} plan</Badge>}
       </div>
       <div className="flex items-center gap-3">
-        {isPlatformAdmin && (
-          <Link
-            href="/admin"
-            className="flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/20"
-          >
-            <ShieldCheck className="h-3.5 w-3.5" /> Admin panel
-          </Link>
-        )}
         <Link
           href="/dashboard/wallet"
           className="flex items-center gap-1.5 rounded-full border border-border bg-secondary/50 px-3 py-1.5 text-sm font-medium hover:bg-secondary"

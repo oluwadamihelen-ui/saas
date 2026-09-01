@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut } from "lucide-react";
+import { LogOut, ShieldCheck } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { MamaLogo } from "@/components/brand/logo";
 import { SIDEBAR_NAV } from "@/components/dashboard/nav-items";
 import { cn } from "@/lib/utils";
 
-export function Sidebar({ businessName }: { businessName: string }) {
+export function Sidebar({ businessName, isPlatformAdmin }: { businessName: string; isPlatformAdmin: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -38,6 +38,19 @@ export function Sidebar({ businessName }: { businessName: string }) {
           );
         })}
       </nav>
+      {isPlatformAdmin && (
+        // /admin has its own separate layout (src/app/admin/layout.tsx), so
+        // this link always navigates away from the dashboard shell entirely
+        // — it's never the "active" item while this sidebar is rendered.
+        <div className="border-t border-border px-3 py-2">
+          <Link
+            href="/admin"
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+          >
+            <ShieldCheck className="h-4 w-4" /> Admin panel
+          </Link>
+        </div>
+      )}
       <div className="border-t border-border p-3">
         <button
           onClick={() => signOut({ callbackUrl: "/" })}

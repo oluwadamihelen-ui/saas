@@ -17,9 +17,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
     getOrCreateWallet(current.business.id),
   ]);
 
+  const isPlatformAdmin = ["ADMIN", "SUPER_ADMIN"].includes(current.session.user.globalRole);
+
   return (
     <div className="flex min-h-screen">
-      <Sidebar businessName={current.business.name} />
+      <Sidebar businessName={current.business.name} isPlatformAdmin={isPlatformAdmin} />
       <div className="flex min-w-0 flex-1 flex-col pb-16 md:pb-0">
         <Topbar
           userName={current.session.user.name ?? current.session.user.email ?? "Merchant"}
@@ -28,7 +30,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
           activeBusinessId={current.business.id}
           walletBalance={wallet.balance.toString()}
           currency={current.business.currency}
-          isPlatformAdmin={["ADMIN", "SUPER_ADMIN"].includes(current.session.user.globalRole)}
         />
         <main className="flex-1 bg-secondary/20 p-4 md:p-8">{children}</main>
       </div>
