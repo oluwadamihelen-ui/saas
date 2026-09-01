@@ -28,6 +28,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           activeBusinessId={current.business.id}
           walletBalance={wallet.balance.toString()}
           currency={current.business.currency}
+          isPlatformAdmin={["ADMIN", "SUPER_ADMIN"].includes(current.session.user.globalRole)}
         />
         <main className="flex-1 bg-secondary/20 p-4 md:p-8">{children}</main>
       </div>
