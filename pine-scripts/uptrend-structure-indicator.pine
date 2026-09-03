@@ -209,7 +209,7 @@ f_registerSwings() =>
             array.shift(swingLowBar)
             array.shift(swingLowPrice)
         if debugMode
-            label.new(bar_index - pivotLen, pl, "SL", style = label.style_circle, color = color.new(color.blue, 40), size = size.tiny)
+            label.new(bar_index - pivotLen, pl, "SL", style = label.style_circle, color = color.new(color.blue, 0), textcolor = color.white, size = size.small)
     if not na(ph)
         array.push(swingHighBar, bar_index - pivotLen)
         array.push(swingHighPrice, ph)
@@ -217,7 +217,7 @@ f_registerSwings() =>
             array.shift(swingHighBar)
             array.shift(swingHighPrice)
         if debugMode
-            label.new(bar_index - pivotLen, ph, "SH", style = label.style_circle, color = color.new(color.orange, 40), size = size.tiny)
+            label.new(bar_index - pivotLen, ph, "SH", style = label.style_circle, color = color.new(color.orange, 0), textcolor = color.white, size = size.small)
 
 // -------------------- SUPPLY ZONE CREATED --------------------
 // A confirmed swing-high pivot whose candle range is at least
@@ -431,18 +431,25 @@ if barstate.isconfirmed
             float tp2 = array.get(swingLowPrice, nSL - 1)
             int   tb1 = array.get(swingLowBar, nSL - 2)
             float tp1 = array.get(swingLowPrice, nSL - 2)
-            if tp2 > tp1 and tb2 > tb1 and (tb1 != activeTL.x1 or tb2 != activeTL.x2)
+            // IMPORTANT: compare with na() explicitly, never `!= na` / `== na`
+            // directly — Pine's na comparisons via relational operators are
+            // unreliable, and activeTL.x1/x2 START as na (no trendline has
+            // ever been created yet). Using `!=` against na here was the bug
+            // that silently prevented the very first trendline from ever
+            // being drawn, even once valid rising swing-low pairs existed.
+            bool isNewAscPair = na(activeTL.x1) or na(activeTL.x2) or tb1 != activeTL.x1 or tb2 != activeTL.x2
+            if tp2 > tp1 and tb2 > tb1 and isNewAscPair
                 if not na(activeTL.ln)
                     line.delete(activeTL.ln)
                 if not na(activeTL.lbl)
                     label.delete(activeTL.lbl)
-                line newLn = line.new(tb1, tp1, tb2, tp2, xloc = xloc.bar_index, extend = extend.right, color = color.new(color.aqua, 0), style = line.style_solid, width = 2)
+                line newLn = line.new(tb1, tp1, tb2, tp2, xloc = xloc.bar_index, extend = extend.right, color = color.new(color.blue, 0), style = line.style_solid, width = 3)
                 label newLbl = na
                 if showLabels
-                    newLbl := label.new(tb2, tp2, "ASCENDING TL", style = label.style_label_up, color = color.new(color.aqua, 0), textcolor = color.black, size = size.tiny)
+                    newLbl := label.new(tb2, tp2, "ASCENDING TL", style = label.style_label_up, color = color.new(color.blue, 0), textcolor = color.white, size = size.small)
                 activeTL := TrendLine.new(tb1, tp1, tb2, tp2, true, false, newLn, newLbl)
                 if debugMode
-                    label.new(tb1, tp1, "TL anchor1", style = label.style_circle, color = color.new(color.aqua, 20), size = size.tiny)
+                    label.new(tb1, tp1, "TL anchor1", style = label.style_circle, color = color.new(color.blue, 0), size = size.small)
 
     // -------- DESCENDING TRENDLINE (prior-downtrend context) --------
     // Mirror of the ascending-trendline construction, using the two most
@@ -457,15 +464,17 @@ if barstate.isconfirmed
             float dp2 = array.get(swingHighPrice, nSH - 1)
             int   db1 = array.get(swingHighBar, nSH - 2)
             float dp1 = array.get(swingHighPrice, nSH - 2)
-            if dp2 < dp1 and db2 > db1 and (db1 != activeDescTL.x1 or db2 != activeDescTL.x2)
+            // Same na()-explicit fix as the ascending trendline above.
+            bool isNewDescPair = na(activeDescTL.x1) or na(activeDescTL.x2) or db1 != activeDescTL.x1 or db2 != activeDescTL.x2
+            if dp2 < dp1 and db2 > db1 and isNewDescPair
                 if not na(activeDescTL.ln)
                     line.delete(activeDescTL.ln)
                 if not na(activeDescTL.lbl)
                     label.delete(activeDescTL.lbl)
-                line newDLn = line.new(db1, dp1, db2, dp2, xloc = xloc.bar_index, extend = extend.right, color = color.new(color.fuchsia, 0), style = line.style_solid, width = 1)
+                line newDLn = line.new(db1, dp1, db2, dp2, xloc = xloc.bar_index, extend = extend.right, color = color.new(color.fuchsia, 0), style = line.style_solid, width = 2)
                 label newDLbl = na
                 if showLabels and debugMode
-                    newDLbl := label.new(db2, dp2, "DESCENDING TL", style = label.style_label_down, color = color.new(color.fuchsia, 0), textcolor = color.white, size = size.tiny)
+                    newDLbl := label.new(db2, dp2, "DESCENDING TL", style = label.style_label_down, color = color.new(color.fuchsia, 0), textcolor = color.white, size = size.small)
                 activeDescTL := TrendLine.new(db1, dp1, db2, dp2, true, false, newDLn, newDLbl)
 
     // DESCENDING TRENDLINE BROKEN -> the downtrend-context precondition
