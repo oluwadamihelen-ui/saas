@@ -8,7 +8,14 @@
 //   "Demand areas are respected (new demand is formed), supply areas are taken
 //    out, with ascending trendline being respected."
 //
-//   UP TREND is confirmed by exactly ONE of two independent paths:
+//   PRECONDITION ("downtrend context"): per the video's worked examples, a
+//   prior DESCENDING trendline (the mirror image of the ascending one, built
+//   from two falling confirmed swing highs) must be BROKEN by a confirmed
+//   close first. Breaking it and then taking out just one supply zone is
+//   explicitly called CONSOLIDATION, "not yet an uptrend" — it is displayed
+//   as such (gray background / "CONSOLIDATION" label) and does NOT by itself
+//   confirm UP TREND. Only after this precondition fires do the two scenarios
+//   below become eligible to confirm UP TREND:
 //
 //   SCENARIO 1: A valid ascending trendline (drawn from two rising, confirmed
 //               swing lows) exists and is respected, AND at least one
@@ -126,6 +133,27 @@ var bool   inUpTrend      = false
 var string trendMethod    = ""      // "TL" or "2SUPPLY"
 var bool   prevHasValidTL = false
 
+// -----------------------------------------------------------------------
+// DOWNTREND-CONTEXT PRECONDITION ("CONSOLIDATION")  — added per the
+// reference video's worked examples: "once we have a descending trendline
+// broken and one supply area removed, that doesn't mean we have an
+// uptrend, we just have consolidation... we need to break the trendline,
+// remove one area of supply, and then at least have the possibility of
+// drawing an ascending trendline [Scenario 1] or [get two supply zones
+// taken out with no possibility of drawing a trendline — Scenario 2]."
+//
+// Mechanically: a DESCENDING trendline (from two falling, confirmed swing
+// highs — the mirror image of the ascending trendline) must be BROKEN by a
+// confirmed close before either scenario is allowed to confirm UP TREND.
+// Breaking it plus taking out >=1 supply zone only reaches CONSOLIDATION;
+// the full Scenario 1 / Scenario 2 condition is still required for UP TREND.
+// -----------------------------------------------------------------------
+var TrendLine activeDescTL         = TrendLine.new(na, na, na, na, false, false, na, na)
+var bool      priorDowntrendBroken = false   // the descending TL precondition has fired
+var int       supplyTakenSinceContext = 0
+var bool      consolidationLabeled = false   // edge-trigger for the CONSOLIDATION label
+var bool      inConsolidationDisplay = false // persists for bgcolor() outside the isconfirmed block
+
 MAX_TRACKED_ZONES = 40
 
 // per-bar alert flags (recomputed fresh every bar — no `var`)
@@ -134,6 +162,8 @@ alertUpTrend2Supply  = false
 alertSupplyTakenOut  = false
 alertTLBroken        = false
 alertDemandRespected = false
+alertConsolidation   = false
+alertDescTLBroken    = false
 
 // ---------------------------------------------------------------------------
 // SERIES (must be computed unconditionally every bar)
@@ -415,6 +445,57 @@ if barstate.isconfirmed
                     if debugMode
                         label.new(tb1, tp1, "TL anchor1", style = label.style_circle, color = color.new(color.aqua, 20), size = size.tiny)
 
+    // -------- DESCENDING TRENDLINE (prior-downtrend context) --------
+    // Mirror of the ascending-trendline construction, using the two most
+    // recent confirmed swing HIGHS: valid when the second high is LOWER
+    // than the first (descending) and no confirmed close between the two
+    // anchors traded above the connecting line. Only re-evaluated when a
+    // new swing high is registered, for the same reasons as the ascending
+    // trendline (bounded dynamic lookback, no redundant recompute).
+    if not na(ph)
+        int nSH = array.size(swingHighBar)
+        if nSH >= 2
+            int   db2 = array.get(swingHighBar, nSH - 1)
+            float dp2 = array.get(swingHighPrice, nSH - 1)
+            int   db1 = array.get(swingHighBar, nSH - 2)
+            float dp1 = array.get(swingHighPrice, nSH - 2)
+            if dp2 < dp1 and db2 > db1 and (db2 - db1) <= 500
+                float dslope = (dp2 - dp1) / (db2 - db1)
+                bool drespected = true
+                int di2 = db1
+                while di2 <= db2
+                    float dLineVal = dp1 + dslope * (di2 - db1)
+                    float dc = close[bar_index - di2]
+                    if not na(dc) and dc > dLineVal
+                        drespected := false
+                    di2 += 1
+                if drespected and (db1 != activeDescTL.x1 or db2 != activeDescTL.x2)
+                    if not na(activeDescTL.ln)
+                        line.delete(activeDescTL.ln)
+                    if not na(activeDescTL.lbl)
+                        label.delete(activeDescTL.lbl)
+                    line newDLn = line.new(db1, dp1, db2, dp2, xloc = xloc.bar_index, extend = extend.right, color = color.new(color.fuchsia, 0), style = line.style_solid, width = 1)
+                    label newDLbl = na
+                    if showLabels and debugMode
+                        newDLbl := label.new(db2, dp2, "DESCENDING TL", style = label.style_label_down, color = color.new(color.fuchsia, 0), textcolor = color.white, size = size.tiny)
+                    activeDescTL := TrendLine.new(db1, dp1, db2, dp2, true, false, newDLn, newDLbl)
+
+    // DESCENDING TRENDLINE BROKEN -> the downtrend-context precondition
+    // ("priorDowntrendBroken") fires once, on a confirmed close above the
+    // active descending trendline, and stays true (a structural fact)
+    // until the whole state machine resets (see structural invalidation).
+    if activeDescTL.valid and not activeDescTL.broken and not na(activeDescTL.x2) and bar_index > activeDescTL.x2
+        float dLineValNow = f_tlValue(activeDescTL, bar_index)
+        if close > dLineValNow
+            activeDescTL.broken := true
+            priorDowntrendBroken := true
+            alertDescTLBroken := true
+            if not na(activeDescTL.ln)
+                line.set_color(activeDescTL.ln, color.new(color.gray, 60))
+                line.set_style(activeDescTL.ln, line.style_dashed)
+            if debugMode
+                label.new(bar_index, dLineValNow, "DESC TL BROKEN", style = label.style_label_up, color = color.new(color.purple, 0), textcolor = color.white, size = size.tiny)
+
     // -------- TRENDLINE RESPECT / BREAK --------
     // TRENDLINE RESPECTED : valid line exists and no confirmed close has
     //                        traded below the projected line value since the
@@ -455,7 +536,12 @@ if barstate.isconfirmed
         if state1 != 0
             state1 := 0   // trendline lost -> back to neutral for this path
 
-    if suppliesTakenOutThisBar > 0
+    // Both scenarios are only evaluated for UP TREND confirmation AFTER the
+    // downtrend-context precondition has fired (see DOWNTREND-CONTEXT block
+    // above) — matches "we need to break the [descending] trendline, remove
+    // one area of supply, and then [Scenario 1 or Scenario 2]" from the video.
+    if priorDowntrendBroken and suppliesTakenOutThisBar > 0
+        supplyTakenSinceContext += 1
         if hasValidTL and state1 >= 1
             if not inUpTrend or trendMethod != "TL"
                 inUpTrend := true
@@ -475,6 +561,18 @@ if barstate.isconfirmed
                         label.new(bar_index, high, "UP TREND — 2 SUPPLY", style = label.style_label_down, color = color.new(color.teal, 0), textcolor = color.white, size = size.normal, tooltip = "No ascending trendline possible; 2 supply zones taken out")
                     alertUpTrend2Supply := true
 
+    // CONSOLIDATION: downtrend-context broken + >=1 supply removed since,
+    // but neither scenario has confirmed UP TREND yet. Edge-triggered label
+    // (fires once per cycle) per: "that doesn't mean we have an uptrend,
+    // we just have consolidation."
+    bool inConsolidation = priorDowntrendBroken and supplyTakenSinceContext >= 1 and not inUpTrend
+    inConsolidationDisplay := inConsolidation
+    if inConsolidation and not consolidationLabeled
+        consolidationLabeled := true
+        alertConsolidation := true
+        if showLabels
+            label.new(bar_index, low, "CONSOLIDATION", style = label.style_label_up, color = color.new(color.gray, 20), textcolor = color.white, size = size.small, tooltip = "Descending trendline broken + supply removed, but UP TREND not yet confirmed")
+
     // --- Structural invalidation (deep failure resets the state machine) ---
     float floorLevel = not na(activeTL.y1) ? activeTL.y1 : f_lowestActiveDemandBottom()
     if inUpTrend and not na(floorLevel) and close < floorLevel
@@ -482,6 +580,9 @@ if barstate.isconfirmed
         trendMethod := ""
         state1 := 0
         stateA := 0
+        priorDowntrendBroken := false
+        supplyTakenSinceContext := 0
+        consolidationLabeled := false
         if debugMode
             label.new(bar_index, low, "TREND STRUCTURE RESET", style = label.style_label_up, color = color.new(color.maroon, 0), textcolor = color.white, size = size.tiny)
 
@@ -489,19 +590,19 @@ if barstate.isconfirmed
     prevHasValidTL := hasValidTL
 
     if debugMode
-        label.new(bar_index, low - (atrVal * 0.5), "s1=" + str.tostring(state1) + " sA=" + str.tostring(stateA) + " TL=" + (hasValidTL ? "OK" : "NO") + " trend=" + (inUpTrend ? trendMethod : "-"), style = label.style_label_up, color = color.new(color.black, 70), textcolor = color.silver, size = size.tiny)
+        label.new(bar_index, low - (atrVal * 0.5), "s1=" + str.tostring(state1) + " sA=" + str.tostring(stateA) + " TL=" + (hasValidTL ? "OK" : "NO") + " ctx=" + (priorDowntrendBroken ? "BROKEN" : "NO") + " phase=" + (inUpTrend ? trendMethod : inConsolidation ? "CONSOL" : "-"), style = label.style_label_up, color = color.new(color.black, 70), textcolor = color.silver, size = size.tiny)
 
 // ---------------------------------------------------------------------------
 // VISUALS
 // ---------------------------------------------------------------------------
-bgcolor(inUpTrend ? color.new(color.green, 92) : na, title = "UP TREND background")
+bgcolor(inUpTrend ? color.new(color.green, 92) : inConsolidationDisplay ? color.new(color.gray, 88) : na, title = "UP TREND / CONSOLIDATION background")
 
 plotshape(inUpTrend and trendMethod == "TL", title = "UP TREND (TL) marker", style = shape.triangleup, location = location.belowbar, color = color.new(color.green, 0), size = size.tiny)
 plotshape(inUpTrend and trendMethod == "2SUPPLY", title = "UP TREND (2 Supply) marker", style = shape.triangleup, location = location.belowbar, color = color.new(color.teal, 0), size = size.tiny)
 
 var table dbg = table.new(position.top_right, 1, 1)
 if debugMode and barstate.islast
-    table.cell(dbg, 0, 0, "state1=" + str.tostring(state1) + "  stateA=" + str.tostring(stateA) + "\ninUpTrend=" + str.tostring(inUpTrend) + "  method=" + trendMethod + "\nsupplyZones=" + str.tostring(array.size(supplyZones)) + "  demandZones=" + str.tostring(array.size(demandZones)), text_color = color.white, bgcolor = color.new(color.black, 20), text_size = size.small)
+    table.cell(dbg, 0, 0, "state1=" + str.tostring(state1) + "  stateA=" + str.tostring(stateA) + "\ninUpTrend=" + str.tostring(inUpTrend) + "  method=" + trendMethod + "\ncontextBroken=" + str.tostring(priorDowntrendBroken) + "  consolidation=" + str.tostring(inConsolidationDisplay) + "\nsupplyZones=" + str.tostring(array.size(supplyZones)) + "  demandZones=" + str.tostring(array.size(demandZones)), text_color = color.white, bgcolor = color.new(color.black, 20), text_size = size.small)
 
 // ---------------------------------------------------------------------------
 // ALERTS  (fire only on confirmed-bar events, never intrabar)
@@ -511,3 +612,5 @@ alertcondition(alertUpTrend2Supply, title = "UP TREND — 2 Supply Zones", messa
 alertcondition(alertSupplyTakenOut, title = "Supply Zone Taken Out", message = "A supply zone was taken out (confirmed close beyond zone top).")
 alertcondition(alertTLBroken, title = "Ascending Trendline Broken", message = "The active ascending trendline was broken (confirmed close below the line).")
 alertcondition(alertDemandRespected, title = "Demand Zone Respected", message = "A demand zone was respected (price closed back above it after dipping in).")
+alertcondition(alertDescTLBroken, title = "Downtrend Context Broken (Descending TL)", message = "The prior descending trendline was broken — downtrend-context precondition satisfied.")
+alertcondition(alertConsolidation, title = "Consolidation (not yet UP TREND)", message = "Descending trendline broken and a supply zone removed, but UP TREND is not yet confirmed — consolidation.")
