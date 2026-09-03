@@ -64,7 +64,6 @@ maxActiveSupplyZones   = input.int(3, "Max Active Supply Zones", minval = 1, max
 maxActiveDemandZones   = input.int(3, "Max Active Demand Zones", minval = 1, maxval = 10, group = "Structure")
 breakMethod            = input.string("Close Beyond Zone", "Break Confirmation Method", options = ["Close Beyond Zone", "Close + ATR Buffer"], group = "Structure")
 atrBufferMult           = input.float(0.10, "ATR Buffer Multiplier (if selected above)", minval = 0.0, step = 0.05, group = "Structure")
-showLabels             = input.bool(true, "Show Zone / Event Labels", group = "Display")
 keepHistoricalZones    = input.bool(true, "Keep Historical (Taken-Out) Zones Visible", group = "Display")
 debugMode              = input.bool(false, "Debug Mode", group = "Debug")
 
@@ -238,9 +237,7 @@ f_createSupplyZone() =>
         j += 1
     if sig and departed
         box zb = box.new(left = pBar, top = zTop, right = bar_index, bottom = zBottom, border_color = color.new(color.red, 0), border_width = 1, bgcolor = color.new(color.red, 85), extend = extend.none)
-        label zl = na
-        if showLabels
-            zl := label.new(pBar, zTop, "SUPPLY", style = label.style_label_down, color = color.new(color.red, 0), textcolor = color.white, size = size.tiny)
+        label zl = na   // no on-chart text label — the red box is enough; keeps the chart uncluttered
         SupplyZone zone = SupplyZone.new(zTop, zBottom, pBar, true, false, na, zb, zl, "ACTIVE")
         array.push(supplyZones, zone)
         if debugMode
@@ -264,9 +261,7 @@ f_createDemandZone() =>
         j += 1
     if sig and departed
         box zb = box.new(left = pBar, top = zTop, right = bar_index, bottom = zBottom, border_color = color.new(color.lime, 0), border_width = 1, bgcolor = color.new(color.lime, 85), extend = extend.none)
-        label zl = na
-        if showLabels
-            zl := label.new(pBar, zBottom, "DEMAND", style = label.style_label_up, color = color.new(color.lime, 0), textcolor = color.black, size = size.tiny)
+        label zl = na   // no on-chart text label — the green box is enough; keeps the chart uncluttered
         DemandZone zone = DemandZone.new(zTop, zBottom, pBar, true, false, false, zb, zl, "ACTIVE")
         array.push(demandZones, zone)
         if debugMode
@@ -296,8 +291,7 @@ f_updateSupplyZones() =>
                 takenOutCount += 1
                 box.set_bgcolor(z.zbox, color.new(color.gray, 90))
                 box.set_border_color(z.zbox, color.new(color.gray, 50))
-                if showLabels
-                    label.new(bar_index, z.top, "SUPPLY TAKEN", style = label.style_label_down, color = color.new(color.orange, 0), textcolor = color.white, size = size.tiny)
+                // no on-chart text label — the box turning gray marks the event; UP TREND label carries the "why"
                 if not keepHistoricalZones
                     box.delete(z.zbox)
                     if not na(z.zlabel)
@@ -336,8 +330,7 @@ f_updateDemandZones() =>
                 z.respected := true
                 z.state := "RESPECTED"
                 anyRespected := true
-                if showLabels
-                    label.new(bar_index, z.bottom, "DEMAND RESPECTED", style = label.style_label_up, color = color.new(color.green, 0), textcolor = color.white, size = size.tiny)
+                // no on-chart text label; state is still tracked internally and alertable
         i += 1
     anyRespected
 
@@ -444,9 +437,7 @@ if barstate.isconfirmed
                 if not na(activeTL.lbl)
                     label.delete(activeTL.lbl)
                 line newLn = line.new(tb1, tp1, tb2, tp2, xloc = xloc.bar_index, extend = extend.right, color = color.new(color.blue, 0), style = line.style_solid, width = 3)
-                label newLbl = na
-                if showLabels
-                    newLbl := label.new(tb2, tp2, "ASCENDING TL", style = label.style_label_up, color = color.new(color.blue, 0), textcolor = color.white, size = size.small)
+                label newLbl = na   // no on-chart text label — the blue diagonal line is self-explanatory
                 activeTL := TrendLine.new(tb1, tp1, tb2, tp2, true, false, newLn, newLbl)
                 if debugMode
                     label.new(tb1, tp1, "TL anchor1", style = label.style_circle, color = color.new(color.blue, 0), size = size.small)
@@ -473,7 +464,7 @@ if barstate.isconfirmed
                     label.delete(activeDescTL.lbl)
                 line newDLn = line.new(db1, dp1, db2, dp2, xloc = xloc.bar_index, extend = extend.right, color = color.new(color.fuchsia, 0), style = line.style_solid, width = 2)
                 label newDLbl = na
-                if showLabels and debugMode
+                if debugMode
                     newDLbl := label.new(db2, dp2, "DESCENDING TL", style = label.style_label_down, color = color.new(color.fuchsia, 0), textcolor = color.white, size = size.small)
                 activeDescTL := TrendLine.new(db1, dp1, db2, dp2, true, false, newDLn, newDLbl)
 
@@ -543,8 +534,7 @@ if barstate.isconfirmed
             if not inUpTrend or trendMethod != "TL"
                 inUpTrend := true
                 trendMethod := "TL"
-                if showLabels
-                    label.new(bar_index, high, "UP TREND", style = label.style_label_down, color = color.new(color.green, 0), textcolor = color.white, size = size.normal, tooltip = "Ascending trendline respected + supply zone taken out")
+                label.new(bar_index, high, "UP TREND", style = label.style_label_down, color = color.new(color.green, 0), textcolor = color.white, size = size.normal, tooltip = "Ascending trendline respected + supply zone taken out")
                 alertUpTrendTL := true
             state1 := 2   // STATE 2: UP TREND CONFIRMED (trendline + 1 supply)
         else if not hasValidTL
@@ -554,8 +544,7 @@ if barstate.isconfirmed
                 if not inUpTrend or trendMethod != "2SUPPLY"
                     inUpTrend := true
                     trendMethod := "2SUPPLY"
-                    if showLabels
-                        label.new(bar_index, high, "UP TREND — 2 SUPPLY", style = label.style_label_down, color = color.new(color.teal, 0), textcolor = color.white, size = size.normal, tooltip = "No ascending trendline possible; 2 supply zones taken out")
+                    label.new(bar_index, high, "UP TREND — 2 SUPPLY", style = label.style_label_down, color = color.new(color.teal, 0), textcolor = color.white, size = size.normal, tooltip = "No ascending trendline possible; 2 supply zones taken out")
                     alertUpTrend2Supply := true
 
     // CONSOLIDATION: downtrend-context broken + >=1 supply removed since,
@@ -567,8 +556,7 @@ if barstate.isconfirmed
     if inConsolidation and not consolidationLabeled
         consolidationLabeled := true
         alertConsolidation := true
-        if showLabels
-            label.new(bar_index, low, "CONSOLIDATION", style = label.style_label_up, color = color.new(color.gray, 20), textcolor = color.white, size = size.small, tooltip = "Descending trendline broken + supply removed, but UP TREND not yet confirmed")
+        label.new(bar_index, low, "CONSOLIDATION", style = label.style_label_up, color = color.new(color.gray, 20), textcolor = color.white, size = size.small, tooltip = "Descending trendline broken + supply removed, but UP TREND not yet confirmed")
 
     // --- Structural invalidation (deep failure resets the state machine) ---
     float floorLevel = not na(activeTL.y1) ? activeTL.y1 : f_lowestActiveDemandBottom()
