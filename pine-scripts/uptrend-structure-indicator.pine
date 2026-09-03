@@ -403,18 +403,27 @@ if barstate.isconfirmed
     // -------- ASCENDING TRENDLINE CONSTRUCTION --------
     // Uses only the two most recent confirmed rising swing lows. Only the
     // single most structurally relevant ascending trendline is ever kept —
-    // a new valid pair replaces the old line instead of accumulating more.
+    // a new valid pair replaces the old line instead of accumulating more,
+    // which is what makes the line DIAGONAL (sloped between two distinct
+    // price/bar points, never horizontal) and DYNAMIC (re-anchored to the
+    // freshest qualifying pair, and auto-extended forward every bar via
+    // `extend.right`, so it keeps pace with the chart without redrawing it
+    // manually).
     //
-    // TRENDLINE VALID at creation requires:
-    //   1) second anchor price  > first anchor price   (ascending)
-    //   2) second anchor bar    > first anchor bar
-    //   3) no confirmed close between the two anchors traded below the
-    //      straight line connecting them (rising support never violated
-    //      while the line was being formed)
-    // Only re-evaluated when a NEW swing low was just registered this bar —
-    // the candidate pair can only change then, and this keeps the dynamic
-    // close[] lookback below bounded (anchors stay recent, never drifting
-    // arbitrarily far behind bar_index across a long quiet history).
+    // TRENDLINE VALID at creation requires only:
+    //   1) second anchor price > first anchor price   (ascending)
+    //   2) second anchor bar   > first anchor bar
+    // No other confirmed pivot low exists between two ADJACENT entries in
+    // swingLowBar/Price by construction, so this pair is already a genuine
+    // rising structure. (An earlier version also required zero confirmed
+    // closes below the connecting ray between the anchors — on real price
+    // data that is almost never true even for a textbook-valid trendline,
+    // so it made the line fail to appear; removed. Forward "respected vs.
+    // broken" behavior — what the methodology actually means by "the
+    // trendline must be respected by price" — is judged separately below,
+    // once the line exists.)
+    // Re-evaluated only when a NEW swing low is registered this bar, since
+    // the candidate pair can only change then.
     if not na(pl)
         int nSL = array.size(swingLowBar)
         if nSL >= 2
@@ -422,36 +431,25 @@ if barstate.isconfirmed
             float tp2 = array.get(swingLowPrice, nSL - 1)
             int   tb1 = array.get(swingLowBar, nSL - 2)
             float tp1 = array.get(swingLowPrice, nSL - 2)
-            if tp2 > tp1 and tb2 > tb1 and (tb2 - tb1) <= 500
-                float tslope = (tp2 - tp1) / (tb2 - tb1)
-                bool trespected = true
-                int ti = tb1
-                while ti <= tb2
-                    float lineVal2 = tp1 + tslope * (ti - tb1)
-                    float cc = close[bar_index - ti]
-                    if not na(cc) and cc < lineVal2
-                        trespected := false
-                    ti += 1
-                if trespected and (tb1 != activeTL.x1 or tb2 != activeTL.x2)
-                    if not na(activeTL.ln)
-                        line.delete(activeTL.ln)
-                    if not na(activeTL.lbl)
-                        label.delete(activeTL.lbl)
-                    line newLn = line.new(tb1, tp1, tb2, tp2, xloc = xloc.bar_index, extend = extend.right, color = color.new(color.aqua, 0), style = line.style_solid, width = 2)
-                    label newLbl = na
-                    if showLabels
-                        newLbl := label.new(tb2, tp2, "ASCENDING TL", style = label.style_label_up, color = color.new(color.aqua, 0), textcolor = color.black, size = size.tiny)
-                    activeTL := TrendLine.new(tb1, tp1, tb2, tp2, true, false, newLn, newLbl)
-                    if debugMode
-                        label.new(tb1, tp1, "TL anchor1", style = label.style_circle, color = color.new(color.aqua, 20), size = size.tiny)
+            if tp2 > tp1 and tb2 > tb1 and (tb1 != activeTL.x1 or tb2 != activeTL.x2)
+                if not na(activeTL.ln)
+                    line.delete(activeTL.ln)
+                if not na(activeTL.lbl)
+                    label.delete(activeTL.lbl)
+                line newLn = line.new(tb1, tp1, tb2, tp2, xloc = xloc.bar_index, extend = extend.right, color = color.new(color.aqua, 0), style = line.style_solid, width = 2)
+                label newLbl = na
+                if showLabels
+                    newLbl := label.new(tb2, tp2, "ASCENDING TL", style = label.style_label_up, color = color.new(color.aqua, 0), textcolor = color.black, size = size.tiny)
+                activeTL := TrendLine.new(tb1, tp1, tb2, tp2, true, false, newLn, newLbl)
+                if debugMode
+                    label.new(tb1, tp1, "TL anchor1", style = label.style_circle, color = color.new(color.aqua, 20), size = size.tiny)
 
     // -------- DESCENDING TRENDLINE (prior-downtrend context) --------
     // Mirror of the ascending-trendline construction, using the two most
     // recent confirmed swing HIGHS: valid when the second high is LOWER
-    // than the first (descending) and no confirmed close between the two
-    // anchors traded above the connecting line. Only re-evaluated when a
-    // new swing high is registered, for the same reasons as the ascending
-    // trendline (bounded dynamic lookback, no redundant recompute).
+    // than the first (descending). Same simplification as above applies —
+    // no interior no-violation requirement, just the two-anchor ordering.
+    // Re-evaluated only when a new swing high is registered.
     if not na(ph)
         int nSH = array.size(swingHighBar)
         if nSH >= 2
@@ -459,26 +457,16 @@ if barstate.isconfirmed
             float dp2 = array.get(swingHighPrice, nSH - 1)
             int   db1 = array.get(swingHighBar, nSH - 2)
             float dp1 = array.get(swingHighPrice, nSH - 2)
-            if dp2 < dp1 and db2 > db1 and (db2 - db1) <= 500
-                float dslope = (dp2 - dp1) / (db2 - db1)
-                bool drespected = true
-                int di2 = db1
-                while di2 <= db2
-                    float dLineVal = dp1 + dslope * (di2 - db1)
-                    float dc = close[bar_index - di2]
-                    if not na(dc) and dc > dLineVal
-                        drespected := false
-                    di2 += 1
-                if drespected and (db1 != activeDescTL.x1 or db2 != activeDescTL.x2)
-                    if not na(activeDescTL.ln)
-                        line.delete(activeDescTL.ln)
-                    if not na(activeDescTL.lbl)
-                        label.delete(activeDescTL.lbl)
-                    line newDLn = line.new(db1, dp1, db2, dp2, xloc = xloc.bar_index, extend = extend.right, color = color.new(color.fuchsia, 0), style = line.style_solid, width = 1)
-                    label newDLbl = na
-                    if showLabels and debugMode
-                        newDLbl := label.new(db2, dp2, "DESCENDING TL", style = label.style_label_down, color = color.new(color.fuchsia, 0), textcolor = color.white, size = size.tiny)
-                    activeDescTL := TrendLine.new(db1, dp1, db2, dp2, true, false, newDLn, newDLbl)
+            if dp2 < dp1 and db2 > db1 and (db1 != activeDescTL.x1 or db2 != activeDescTL.x2)
+                if not na(activeDescTL.ln)
+                    line.delete(activeDescTL.ln)
+                if not na(activeDescTL.lbl)
+                    label.delete(activeDescTL.lbl)
+                line newDLn = line.new(db1, dp1, db2, dp2, xloc = xloc.bar_index, extend = extend.right, color = color.new(color.fuchsia, 0), style = line.style_solid, width = 1)
+                label newDLbl = na
+                if showLabels and debugMode
+                    newDLbl := label.new(db2, dp2, "DESCENDING TL", style = label.style_label_down, color = color.new(color.fuchsia, 0), textcolor = color.white, size = size.tiny)
+                activeDescTL := TrendLine.new(db1, dp1, db2, dp2, true, false, newDLn, newDLbl)
 
     // DESCENDING TRENDLINE BROKEN -> the downtrend-context precondition
     // ("priorDowntrendBroken") fires once, on a confirmed close above the
