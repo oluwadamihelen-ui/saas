@@ -1,0 +1,513 @@
+//@version=6
+// =============================================================================
+// UP TREND STRUCTURE (Supply/Demand + Ascending Trendline)  —  Pine Script v6
+// =============================================================================
+//
+// METHODOLOGY REPRODUCED (from the reference material, NOT a generic S/D tool):
+//
+//   "Demand areas are respected (new demand is formed), supply areas are taken
+//    out, with ascending trendline being respected."
+//
+//   UP TREND is confirmed by exactly ONE of two independent paths:
+//
+//   SCENARIO 1: A valid ascending trendline (drawn from two rising, confirmed
+//               swing lows) exists and is respected, AND at least one
+//               structurally relevant supply zone has been taken out
+//               (confirmed close beyond it) while that trendline was valid.
+//
+//   SCENARIO 2: No ascending trendline can reasonably be drawn (fewer than two
+//               qualifying rising swing lows, or the last attempted trendline
+//               was broken), BUT two successive structurally relevant supply
+//               zones have been taken out.
+//
+//   Demand zones are tracked separately as supporting/contextual structure:
+//   a demand zone is "respected" when price dips into it and closes back
+//   above it, and "new demand" is flagged when a fresh demand zone forms at a
+//   higher level than the last respected one — this is displayed but is not
+//   itself one of the two confirmation paths (per the methodology, only the
+//   trendline and supply-taken-out conditions gate the UP TREND label).
+//
+// See the MECHANICAL DEFINITIONS comments throughout for the exact,
+// code-level definitions of every state required by the spec:
+//   SUPPLY ZONE CREATED / ACTIVE / TESTED / TAKEN OUT / INVALID
+//   DEMAND ZONE CREATED / ACTIVE / RESPECTED / BROKEN
+//   TRENDLINE RESPECTED / BROKEN / INVALID
+//
+// NO REPAINTING: all structural mutations (pivot registration, zone creation,
+// zone break/respect classification, trendline creation/break, state-machine
+// transitions, and UP TREND confirmation) execute exactly once per bar, and
+// ONLY when barstate.isconfirmed is true. Historical bars are always
+// "confirmed", so the exact same code path runs historically and in real
+// time — nothing is computed from, or moved using, future bars, and
+// lookahead_on is never used. A pivot is only registered `pivotLen` bars
+// after it occurs (standard ta.pivothigh/ta.pivotlow confirmation delay),
+// its bar index/price are fixed forever once registered, and no earlier bar's
+// signal is ever redrawn or shifted after it has appeared.
+// =============================================================================
+
+indicator("UP TREND Structure (Supply/Demand + Ascending TL)", shorttitle = "UpTrendStructure", overlay = true, max_boxes_count = 300, max_lines_count = 100, max_labels_count = 300)
+
+// ---------------------------------------------------------------------------
+// INPUTS  (deliberately small — technical parameters only; the methodology
+// itself is not configurable, per spec)
+// ---------------------------------------------------------------------------
+pivotLen              = input.int(5, "Pivot Confirmation Length", minval = 2, maxval = 20, group = "Structure")
+minZoneATRMult         = input.float(0.25, "Minimum Zone Size (x ATR)", minval = 0.0, step = 0.05, group = "Structure")
+maxActiveSupplyZones   = input.int(3, "Max Active Supply Zones", minval = 1, maxval = 10, group = "Structure")
+maxActiveDemandZones   = input.int(3, "Max Active Demand Zones", minval = 1, maxval = 10, group = "Structure")
+breakMethod            = input.string("Close Beyond Zone", "Break Confirmation Method", options = ["Close Beyond Zone", "Close + ATR Buffer"], group = "Structure")
+atrBufferMult           = input.float(0.10, "ATR Buffer Multiplier (if selected above)", minval = 0.0, step = 0.05, group = "Structure")
+showLabels             = input.bool(true, "Show Zone / Event Labels", group = "Display")
+keepHistoricalZones    = input.bool(true, "Keep Historical (Taken-Out) Zones Visible", group = "Display")
+debugMode              = input.bool(false, "Debug Mode", group = "Debug")
+
+// ---------------------------------------------------------------------------
+// TYPES
+// ---------------------------------------------------------------------------
+type SupplyZone
+    float top
+    float bottom
+    int   leftBar
+    bool  active
+    bool  takenOut
+    int   takenOutBar
+    box   zbox
+    label zlabel
+    string state   // "ACTIVE" | "TESTED" | "TAKEN_OUT" | "INVALID"
+
+type DemandZone
+    float top
+    float bottom
+    int   leftBar
+    bool  active
+    bool  respected
+    bool  broken
+    box   zbox
+    label zlabel
+    string state   // "ACTIVE" | "RESPECTED" | "BROKEN" | "INVALID"
+
+type TrendLine
+    int    x1
+    float  y1
+    int    x2
+    float  y2
+    bool   valid
+    bool   broken
+    line   ln
+    label  lbl
+
+// ---------------------------------------------------------------------------
+// PERSISTENT STATE
+// ---------------------------------------------------------------------------
+var array<SupplyZone> supplyZones = array.new<SupplyZone>()
+var array<DemandZone> demandZones = array.new<DemandZone>()
+
+var array<int>   swingLowBar    = array.new<int>()
+var array<float> swingLowPrice  = array.new<float>()
+var array<int>   swingHighBar   = array.new<int>()
+var array<float> swingHighPrice = array.new<float>()
+
+var TrendLine activeTL = TrendLine.new(na, na, na, na, false, false, na, na)
+
+// Scenario-1 state machine (ascending trendline path)
+//   0 = NEUTRAL                 (no valid ascending trendline)
+//   1 = TRENDLINE_ESTABLISHED   (valid ascending trendline, currently respected)
+//   2 = UPTREND_CONFIRMED_TL    (trendline respected AND >=1 supply zone taken out while valid)
+var int state1 = 0
+
+// Scenario-2 state machine (two-supply path; only progresses while no valid
+// ascending trendline exists — "no possibility of drawing" one)
+//   0 = NEUTRAL
+//   1 = FIRST_SUPPLY_TAKEN      (1 relevant supply zone taken out, no ascending TL possible)
+//   2 = UPTREND_CONFIRMED_2SUPPLY
+var int stateA = 0
+
+var bool   inUpTrend      = false
+var string trendMethod    = ""      // "TL" or "2SUPPLY"
+var bool   prevHasValidTL = false
+
+MAX_TRACKED_ZONES = 40
+
+// per-bar alert flags (recomputed fresh every bar — no `var`)
+alertUpTrendTL       = false
+alertUpTrend2Supply  = false
+alertSupplyTakenOut  = false
+alertTLBroken        = false
+alertDemandRespected = false
+
+// ---------------------------------------------------------------------------
+// SERIES (must be computed unconditionally every bar)
+// ---------------------------------------------------------------------------
+atrVal = ta.atr(14)
+ph     = ta.pivothigh(pivotLen, pivotLen)   // confirmed pivotLen bars after the pivot
+pl     = ta.pivotlow(pivotLen, pivotLen)
+
+// ---------------------------------------------------------------------------
+// HELPER FUNCTIONS
+// (These only ever: read outer-scope variables, mutate FIELDS of objects
+//  obtained by reference, or mutate the CONTENTS of outer-scope arrays via
+//  array.*() builtins. None of them rebind an outer-scope variable itself —
+//  that always happens inline in the MAIN block below, which is safe.)
+// ---------------------------------------------------------------------------
+
+// Value of an ascending trendline projected to bar `atBar`.
+f_tlValue(TrendLine tl, int atBar) =>
+    float slope = (tl.y2 - tl.y1) / (tl.x2 - tl.x1)
+    tl.y2 + slope * (atBar - tl.x2)
+
+// Lowest bottom among currently active demand zones (structural floor).
+f_lowestActiveDemandBottom() =>
+    float lowest = na
+    int i = 0
+    while i < array.size(demandZones)
+        DemandZone dz = array.get(demandZones, i)
+        if dz.active and (na(lowest) or dz.bottom < lowest)
+            lowest := dz.bottom
+        i += 1
+    lowest
+
+// -------------------- SWING DETECTION --------------------
+// A swing low/high is registered only once ta.pivotlow/high(pivotLen,pivotLen)
+// confirms it (pivotLen bars after it occurred), and only once per bar thanks
+// to the barstate.isconfirmed gate at the call site — the standard
+// non-repainting pivot pattern. Bar index/price never change afterward.
+f_registerSwings() =>
+    if not na(pl)
+        array.push(swingLowBar, bar_index - pivotLen)
+        array.push(swingLowPrice, pl)
+        if array.size(swingLowBar) > 20
+            array.shift(swingLowBar)
+            array.shift(swingLowPrice)
+        if debugMode
+            label.new(bar_index - pivotLen, pl, "SL", style = label.style_circle, color = color.new(color.blue, 40), size = size.tiny)
+    if not na(ph)
+        array.push(swingHighBar, bar_index - pivotLen)
+        array.push(swingHighPrice, ph)
+        if array.size(swingHighBar) > 20
+            array.shift(swingHighBar)
+            array.shift(swingHighPrice)
+        if debugMode
+            label.new(bar_index - pivotLen, ph, "SH", style = label.style_circle, color = color.new(color.orange, 40), size = size.tiny)
+
+// -------------------- SUPPLY ZONE CREATED --------------------
+// A confirmed swing-high pivot whose candle range is at least
+// `minZoneATRMult` x ATR tall (structurally significant, not every swing
+// high), AND price closed below the zone's body-low within the pivotLen
+// bars following the pivot (a genuine bearish departure from the base).
+f_createSupplyZone() =>
+    float zTop     = high[pivotLen]
+    float zBottom  = math.min(open[pivotLen], close[pivotLen])
+    int   pBar     = bar_index - pivotLen
+    float height   = zTop - zBottom
+    bool  sig      = height >= minZoneATRMult * atrVal
+    bool  departed = false
+    int j = 0
+    while j < pivotLen
+        if close[j] < zBottom
+            departed := true
+        j += 1
+    if sig and departed
+        box zb = box.new(left = pBar, top = zTop, right = bar_index, bottom = zBottom, border_color = color.new(color.red, 0), border_width = 1, bgcolor = color.new(color.red, 85), extend = extend.none)
+        label zl = na
+        if showLabels
+            zl := label.new(pBar, zTop, "SUPPLY", style = label.style_label_down, color = color.new(color.red, 0), textcolor = color.white, size = size.tiny)
+        SupplyZone zone = SupplyZone.new(zTop, zBottom, pBar, true, false, na, zb, zl, "ACTIVE")
+        array.push(supplyZones, zone)
+        if debugMode
+            label.new(pBar, zBottom, "SZ created h=" + str.tostring(height, "#.#####"), style = label.style_label_up, color = color.new(color.gray, 30), textcolor = color.white, size = size.tiny)
+
+// -------------------- DEMAND ZONE CREATED --------------------
+// Mirror of the supply logic: a confirmed swing-low pivot with a significant
+// range, followed by a genuine bullish departure (confirmed close above the
+// zone's body-high within pivotLen bars).
+f_createDemandZone() =>
+    float zBottom  = low[pivotLen]
+    float zTop     = math.max(open[pivotLen], close[pivotLen])
+    int   pBar     = bar_index - pivotLen
+    float height   = zTop - zBottom
+    bool  sig      = height >= minZoneATRMult * atrVal
+    bool  departed = false
+    int j = 0
+    while j < pivotLen
+        if close[j] > zTop
+            departed := true
+        j += 1
+    if sig and departed
+        box zb = box.new(left = pBar, top = zTop, right = bar_index, bottom = zBottom, border_color = color.new(color.lime, 0), border_width = 1, bgcolor = color.new(color.lime, 85), extend = extend.none)
+        label zl = na
+        if showLabels
+            zl := label.new(pBar, zBottom, "DEMAND", style = label.style_label_up, color = color.new(color.lime, 0), textcolor = color.black, size = size.tiny)
+        DemandZone zone = DemandZone.new(zTop, zBottom, pBar, true, false, false, zb, zl, "ACTIVE")
+        array.push(demandZones, zone)
+        if debugMode
+            label.new(pBar, zTop, "DZ created h=" + str.tostring(height, "#.#####"), style = label.style_label_down, color = color.new(color.gray, 30), textcolor = color.white, size = size.tiny)
+
+// -------------------- SUPPLY ZONE STATE UPDATE --------------------
+// SUPPLY ZONE ACTIVE    : created, not yet taken out.
+// SUPPLY ZONE TESTED    : price traded into the zone (high >= bottom) but
+//                          closed back below the zone top.
+// SUPPLY ZONE TAKEN OUT : a CONFIRMED candle close beyond the zone top
+//                          (optionally + ATR buffer). A wick alone never
+//                          qualifies.
+// Returns how many zones flipped to TAKEN_OUT on this bar.
+f_updateSupplyZones() =>
+    int takenOutCount = 0
+    int i = 0
+    while i < array.size(supplyZones)
+        SupplyZone z = array.get(supplyZones, i)
+        if z.active
+            box.set_right(z.zbox, bar_index)
+            float breakLevel = breakMethod == "Close + ATR Buffer" ? z.top + atrBufferMult * atrVal : z.top
+            if close > breakLevel
+                z.active := false
+                z.takenOut := true
+                z.takenOutBar := bar_index
+                z.state := "TAKEN_OUT"
+                takenOutCount += 1
+                box.set_bgcolor(z.zbox, color.new(color.gray, 90))
+                box.set_border_color(z.zbox, color.new(color.gray, 50))
+                if showLabels
+                    label.new(bar_index, z.top, "SUPPLY TAKEN", style = label.style_label_down, color = color.new(color.orange, 0), textcolor = color.white, size = size.tiny)
+                if not keepHistoricalZones
+                    box.delete(z.zbox)
+                    if not na(z.zlabel)
+                        label.delete(z.zlabel)
+            else if high >= z.bottom and close < z.top
+                z.state := "TESTED"
+        i += 1
+    takenOutCount
+
+// -------------------- DEMAND ZONE STATE UPDATE --------------------
+// DEMAND ZONE RESPECTED : price traded into the zone (low <= top) and a
+//                          CONFIRMED close back above the zone top ("new
+//                          demand formed" is implied when a later demand
+//                          zone forms at a higher level than a respected one).
+// DEMAND ZONE BROKEN    : a CONFIRMED close beyond (below) the zone bottom.
+// Returns true if any demand zone was newly respected on this bar.
+f_updateDemandZones() =>
+    bool anyRespected = false
+    int i = 0
+    while i < array.size(demandZones)
+        DemandZone z = array.get(demandZones, i)
+        if z.active
+            box.set_right(z.zbox, bar_index)
+            float breakLevel = breakMethod == "Close + ATR Buffer" ? z.bottom - atrBufferMult * atrVal : z.bottom
+            if close < breakLevel
+                z.active := false
+                z.broken := true
+                z.state := "BROKEN"
+                box.set_bgcolor(z.zbox, color.new(color.gray, 90))
+                box.set_border_color(z.zbox, color.new(color.gray, 50))
+                if not keepHistoricalZones
+                    box.delete(z.zbox)
+                    if not na(z.zlabel)
+                        label.delete(z.zlabel)
+            else if low <= z.top and close > z.top and not z.respected
+                z.respected := true
+                z.state := "RESPECTED"
+                anyRespected := true
+                if showLabels
+                    label.new(bar_index, z.bottom, "DEMAND RESPECTED", style = label.style_label_up, color = color.new(color.green, 0), textcolor = color.white, size = size.tiny)
+        i += 1
+    anyRespected
+
+// -------------------- CAPACITY TRIMMING / INVALID --------------------
+// Bounds tracked-zone memory and enforces the max-active-zone inputs by
+// invalidating (SUPPLY/DEMAND ZONE INVALID) the oldest active zone(s) beyond
+// capacity, replaced implicitly by newer structurally relevant ones.
+f_trimZones() =>
+    while array.size(supplyZones) > MAX_TRACKED_ZONES
+        SupplyZone old = array.shift(supplyZones)
+        if not na(old.zbox)
+            box.delete(old.zbox)
+        if not na(old.zlabel)
+            label.delete(old.zlabel)
+    while array.size(demandZones) > MAX_TRACKED_ZONES
+        DemandZone old = array.shift(demandZones)
+        if not na(old.zbox)
+            box.delete(old.zbox)
+        if not na(old.zlabel)
+            label.delete(old.zlabel)
+
+    int activeSupply = 0
+    int si = array.size(supplyZones) - 1
+    while si >= 0
+        SupplyZone z = array.get(supplyZones, si)
+        if z.active
+            activeSupply += 1
+            if activeSupply > maxActiveSupplyZones
+                z.active := false
+                z.state := "INVALID"
+                if not keepHistoricalZones
+                    box.delete(z.zbox)
+                    if not na(z.zlabel)
+                        label.delete(z.zlabel)
+        si -= 1
+
+    int activeDemand = 0
+    int di = array.size(demandZones) - 1
+    while di >= 0
+        DemandZone z = array.get(demandZones, di)
+        if z.active
+            activeDemand += 1
+            if activeDemand > maxActiveDemandZones
+                z.active := false
+                z.state := "INVALID"
+                if not keepHistoricalZones
+                    box.delete(z.zbox)
+                    if not na(z.zlabel)
+                        label.delete(z.zlabel)
+        di -= 1
+
+// ---------------------------------------------------------------------------
+// MAIN — executes once per bar, ONLY on confirmed bars (see NO REPAINTING note)
+// ---------------------------------------------------------------------------
+if barstate.isconfirmed
+    f_registerSwings()
+
+    if not na(ph)
+        f_createSupplyZone()
+    if not na(pl)
+        f_createDemandZone()
+
+    // -------- ASCENDING TRENDLINE CONSTRUCTION --------
+    // Uses only the two most recent confirmed rising swing lows. Only the
+    // single most structurally relevant ascending trendline is ever kept —
+    // a new valid pair replaces the old line instead of accumulating more.
+    //
+    // TRENDLINE VALID at creation requires:
+    //   1) second anchor price  > first anchor price   (ascending)
+    //   2) second anchor bar    > first anchor bar
+    //   3) no confirmed close between the two anchors traded below the
+    //      straight line connecting them (rising support never violated
+    //      while the line was being formed)
+    // Only re-evaluated when a NEW swing low was just registered this bar —
+    // the candidate pair can only change then, and this keeps the dynamic
+    // close[] lookback below bounded (anchors stay recent, never drifting
+    // arbitrarily far behind bar_index across a long quiet history).
+    if not na(pl)
+        int nSL = array.size(swingLowBar)
+        if nSL >= 2
+            int   tb2 = array.get(swingLowBar, nSL - 1)
+            float tp2 = array.get(swingLowPrice, nSL - 1)
+            int   tb1 = array.get(swingLowBar, nSL - 2)
+            float tp1 = array.get(swingLowPrice, nSL - 2)
+            if tp2 > tp1 and tb2 > tb1 and (tb2 - tb1) <= 500
+                float tslope = (tp2 - tp1) / (tb2 - tb1)
+                bool trespected = true
+                int ti = tb1
+                while ti <= tb2
+                    float lineVal2 = tp1 + tslope * (ti - tb1)
+                    float cc = close[bar_index - ti]
+                    if not na(cc) and cc < lineVal2
+                        trespected := false
+                    ti += 1
+                if trespected and (tb1 != activeTL.x1 or tb2 != activeTL.x2)
+                    if not na(activeTL.ln)
+                        line.delete(activeTL.ln)
+                    if not na(activeTL.lbl)
+                        label.delete(activeTL.lbl)
+                    line newLn = line.new(tb1, tp1, tb2, tp2, xloc = xloc.bar_index, extend = extend.right, color = color.new(color.aqua, 0), style = line.style_solid, width = 2)
+                    label newLbl = na
+                    if showLabels
+                        newLbl := label.new(tb2, tp2, "ASCENDING TL", style = label.style_label_up, color = color.new(color.aqua, 0), textcolor = color.black, size = size.tiny)
+                    activeTL := TrendLine.new(tb1, tp1, tb2, tp2, true, false, newLn, newLbl)
+                    if debugMode
+                        label.new(tb1, tp1, "TL anchor1", style = label.style_circle, color = color.new(color.aqua, 20), size = size.tiny)
+
+    // -------- TRENDLINE RESPECT / BREAK --------
+    // TRENDLINE RESPECTED : valid line exists and no confirmed close has
+    //                        traded below the projected line value since the
+    //                        second anchor (a wick below does NOT break it).
+    // TRENDLINE BROKEN     : a confirmed candle CLOSE traded below the
+    //                        projected line value.
+    // TRENDLINE INVALID     : no two qualifying rising, unbroken swing-low
+    //                        anchors currently exist (never formed, or
+    //                        broken and not yet replaced) — i.e. !hasValidTL.
+    if activeTL.valid and not activeTL.broken and not na(activeTL.x2) and bar_index > activeTL.x2
+        float lineValNow = f_tlValue(activeTL, bar_index)
+        if close < lineValNow
+            activeTL.broken := true
+            alertTLBroken := true
+            if not na(activeTL.ln)
+                line.set_color(activeTL.ln, color.new(color.gray, 40))
+                line.set_style(activeTL.ln, line.style_dashed)
+            if debugMode
+                label.new(bar_index, lineValNow, "TL BROKEN", style = label.style_label_down, color = color.new(color.red, 0), textcolor = color.white, size = size.tiny)
+
+    int  suppliesTakenOutThisBar = f_updateSupplyZones()
+    bool demandRespectedNow      = f_updateDemandZones()
+    alertSupplyTakenOut := suppliesTakenOutThisBar > 0
+    alertDemandRespected := demandRespectedNow
+
+    bool hasValidTL = activeTL.valid and not activeTL.broken and not na(activeTL.x2) and bar_index >= activeTL.x2
+
+    // Scenario 2 only applies while no ascending trendline is possible —
+    // its counter resets once a trendline becomes available again.
+    if hasValidTL and not prevHasValidTL
+        stateA := 0
+
+    // --- STATE MACHINE — Scenario 1 (trendline path) ---
+    if hasValidTL
+        if state1 < 1
+            state1 := 1   // STATE 1: ascending trendline established & respected
+    else
+        if state1 != 0
+            state1 := 0   // trendline lost -> back to neutral for this path
+
+    if suppliesTakenOutThisBar > 0
+        if hasValidTL and state1 >= 1
+            if not inUpTrend or trendMethod != "TL"
+                inUpTrend := true
+                trendMethod := "TL"
+                if showLabels
+                    label.new(bar_index, high, "UP TREND", style = label.style_label_down, color = color.new(color.green, 0), textcolor = color.white, size = size.normal, tooltip = "Ascending trendline respected + supply zone taken out")
+                alertUpTrendTL := true
+            state1 := 2   // STATE 2: UP TREND CONFIRMED (trendline + 1 supply)
+        else if not hasValidTL
+            // --- STATE MACHINE — Scenario 2 (two-supply path) ---
+            stateA := stateA == 0 ? 1 : math.min(stateA + 1, 2)
+            if stateA == 2
+                if not inUpTrend or trendMethod != "2SUPPLY"
+                    inUpTrend := true
+                    trendMethod := "2SUPPLY"
+                    if showLabels
+                        label.new(bar_index, high, "UP TREND — 2 SUPPLY", style = label.style_label_down, color = color.new(color.teal, 0), textcolor = color.white, size = size.normal, tooltip = "No ascending trendline possible; 2 supply zones taken out")
+                    alertUpTrend2Supply := true
+
+    // --- Structural invalidation (deep failure resets the state machine) ---
+    float floorLevel = not na(activeTL.y1) ? activeTL.y1 : f_lowestActiveDemandBottom()
+    if inUpTrend and not na(floorLevel) and close < floorLevel
+        inUpTrend := false
+        trendMethod := ""
+        state1 := 0
+        stateA := 0
+        if debugMode
+            label.new(bar_index, low, "TREND STRUCTURE RESET", style = label.style_label_up, color = color.new(color.maroon, 0), textcolor = color.white, size = size.tiny)
+
+    f_trimZones()
+    prevHasValidTL := hasValidTL
+
+    if debugMode
+        label.new(bar_index, low - (atrVal * 0.5), "s1=" + str.tostring(state1) + " sA=" + str.tostring(stateA) + " TL=" + (hasValidTL ? "OK" : "NO") + " trend=" + (inUpTrend ? trendMethod : "-"), style = label.style_label_up, color = color.new(color.black, 70), textcolor = color.silver, size = size.tiny)
+
+// ---------------------------------------------------------------------------
+// VISUALS
+// ---------------------------------------------------------------------------
+bgcolor(inUpTrend ? color.new(color.green, 92) : na, title = "UP TREND background")
+
+plotshape(inUpTrend and trendMethod == "TL", title = "UP TREND (TL) marker", style = shape.triangleup, location = location.belowbar, color = color.new(color.green, 0), size = size.tiny)
+plotshape(inUpTrend and trendMethod == "2SUPPLY", title = "UP TREND (2 Supply) marker", style = shape.triangleup, location = location.belowbar, color = color.new(color.teal, 0), size = size.tiny)
+
+var table dbg = table.new(position.top_right, 1, 1)
+if debugMode and barstate.islast
+    table.cell(dbg, 0, 0, "state1=" + str.tostring(state1) + "  stateA=" + str.tostring(stateA) + "\ninUpTrend=" + str.tostring(inUpTrend) + "  method=" + trendMethod + "\nsupplyZones=" + str.tostring(array.size(supplyZones)) + "  demandZones=" + str.tostring(array.size(demandZones)), text_color = color.white, bgcolor = color.new(color.black, 20), text_size = size.small)
+
+// ---------------------------------------------------------------------------
+// ALERTS  (fire only on confirmed-bar events, never intrabar)
+// ---------------------------------------------------------------------------
+alertcondition(alertUpTrendTL, title = "UP TREND — Ascending TL + 1 Supply", message = "UP TREND confirmed: ascending trendline respected and a supply zone was taken out.")
+alertcondition(alertUpTrend2Supply, title = "UP TREND — 2 Supply Zones", message = "UP TREND confirmed: 2 supply zones taken out with no ascending trendline possible.")
+alertcondition(alertSupplyTakenOut, title = "Supply Zone Taken Out", message = "A supply zone was taken out (confirmed close beyond zone top).")
+alertcondition(alertTLBroken, title = "Ascending Trendline Broken", message = "The active ascending trendline was broken (confirmed close below the line).")
+alertcondition(alertDemandRespected, title = "Demand Zone Respected", message = "A demand zone was respected (price closed back above it after dipping in).")
