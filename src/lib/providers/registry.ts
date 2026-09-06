@@ -11,6 +11,7 @@ import { EmailProvider } from "./email/types";
 import { MockEmailProvider } from "./email/mock";
 import { prisma } from "@/lib/db";
 import { decryptSecret } from "@/lib/security/encryption";
+import { logger } from "@/lib/security/logger";
 
 /**
  * Central lookup for provider adapters. Callers ask for "the payment
@@ -44,6 +45,15 @@ export async function getPaymentProvider(): Promise<PaymentProvider> {
 
 let cachedDomainProvider: DomainProvider | null = null;
 export async function getDomainProvider(): Promise<DomainProvider> {
+  const preferred = process.env.DOMAIN_PROVIDER ?? "mock";
+  // No real registrar adapter exists yet -- this branch is the seam where one
+  // plugs in later (env credential or DB-stored ProviderCredential, decrypted,
+  // exactly like PaystackPaymentProvider above), so adding it is a config
+  // change here, not a call-site rewrite. Anything other than "mock" today
+  // falls back to mock rather than failing the whole request.
+  if (preferred !== "mock") {
+    logger.warn("domain_provider.unimplemented_adapter_requested", { preferred });
+  }
   if (!cachedDomainProvider) cachedDomainProvider = new MockDomainProvider();
   return cachedDomainProvider;
 }

@@ -30,6 +30,7 @@ const STATUS_MAP: Record<string, { label: string; variant: "neutral" | "accent" 
   SUSPENDED: { label: "Suspended", variant: "danger" },
   TRANSFERRED: { label: "Transferred", variant: "neutral" },
   TERMINATED: { label: "Terminated", variant: "neutral" },
+  UPCOMING: { label: "Upcoming", variant: "warning" },
   // Tickets
   OPEN: { label: "Open", variant: "accent" },
   WAITING_FOR_CUSTOMER: { label: "Waiting on You", variant: "warning" },

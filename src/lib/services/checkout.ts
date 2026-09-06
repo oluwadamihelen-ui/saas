@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { createOrder, type CartLineInput } from "@/lib/services/orders";
-import { getPaymentProvider } from "@/lib/providers/registry";
+import { getDomainProvider, getPaymentProvider } from "@/lib/providers/registry";
 import { logger } from "@/lib/security/logger";
+
+const DOMAIN_REGISTRATION_YEARS = 1;
 
 export const checkoutSchema = z.object({
   applicationId: z.string().uuid(),
@@ -74,6 +76,22 @@ export async function initiateCheckout(customerId: string, input: CheckoutInput,
     }
   }
 
+  const domainName = input.domainName || null;
+  let domainQuote: { price: number; currency: string } | null = null;
+  if (domainName) {
+    const domainProvider = await getDomainProvider();
+    const available = await domainProvider.checkAvailability(domainName);
+    if (!available) throw new Error(`${domainName} is not available for registration`);
+    domainQuote = await domainProvider.getPricingQuote(domainName, DOMAIN_REGISTRATION_YEARS, "register");
+    lines.push({
+      type: "DOMAIN",
+      description: `Domain registration — ${domainName} (${DOMAIN_REGISTRATION_YEARS} year)`,
+      billingCycle: "ONE_TIME",
+      quantity: 1,
+      unitPrice: domainQuote.price,
+    });
+  }
+
   const order = await createOrder(
     customerId,
     lines,
@@ -100,6 +118,20 @@ export async function initiateCheckout(customerId: string, input: CheckoutInput,
       },
     },
   });
+
+  if (domainName && domainQuote) {
+    await prisma.domainOrder.create({
+      data: {
+        orderId: order.id,
+        domainName,
+        action: "REGISTER",
+        years: DOMAIN_REGISTRATION_YEARS,
+        providerCost: domainQuote.price,
+        customerPrice: domainQuote.price,
+        status: "PENDING",
+      },
+    });
+  }
 
   const provider = await getPaymentProvider();
   const payment = await provider.createPayment({

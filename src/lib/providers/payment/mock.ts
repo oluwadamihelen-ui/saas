@@ -24,13 +24,34 @@ interface MockTransaction {
   paidAt: string | null;
 }
 
+declare global {
+  var __mockPaymentTransactions: Map<string, MockTransaction> | undefined;
+  var __mockPaymentCustomers: Map<string, { email: string; name: string }> | undefined;
+  var __mockPaymentSubscriptions: Map<string, { status: string; currentPeriodStart: string; currentPeriodEnd: string }> | undefined;
+}
+
 // Simulates provider-side state (transactions, customers, subscriptions) so
 // verify/getTransaction calls reflect what was actually initialized instead
 // of a hardcoded stub -- this is what makes the amount/currency validation
 // in OrderService.markOrderPaid exercise real logic in mock mode too.
-const transactions = new Map<string, MockTransaction>();
-const customers = new Map<string, { email: string; name: string }>();
-const subscriptions = new Map<string, { status: string; currentPeriodStart: string; currentPeriodEnd: string }>();
+//
+// Attached to `globalThis` (same pattern as the Prisma client in lib/db.ts):
+// a plain module-level Map is NOT guaranteed to be a true singleton here --
+// Next.js compiles Server Actions and Route Handlers as separate bundles,
+// each re-evaluating this module, so createPayment() (called from a Server
+// Action) and the webhook route's verifyPayment() would otherwise see two
+// different, independently-empty Maps and the payment would never appear
+// confirmed.
+const transactions = global.__mockPaymentTransactions ?? new Map<string, MockTransaction>();
+const customers = global.__mockPaymentCustomers ?? new Map<string, { email: string; name: string }>();
+const subscriptions =
+  global.__mockPaymentSubscriptions ?? new Map<string, { status: string; currentPeriodStart: string; currentPeriodEnd: string }>();
+
+if (process.env.NODE_ENV !== "production") {
+  global.__mockPaymentTransactions = transactions;
+  global.__mockPaymentCustomers = customers;
+  global.__mockPaymentSubscriptions = subscriptions;
+}
 
 /**
  * Simulates a hosted-checkout payment provider entirely in-process so the

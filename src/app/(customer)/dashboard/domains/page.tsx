@@ -29,21 +29,23 @@ export default async function DomainsPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {domains.map((domain) => (
-            <Card key={domain.id}>
-              <CardContent>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="font-semibold text-foreground">{domain.name}</p>
-                    <p className="mt-1 text-xs text-muted">Registrar: {domain.registrarProvider}</p>
+            <Link key={domain.id} href={`/dashboard/domains/${domain.id}`}>
+              <Card className="transition-colors hover:border-accent">
+                <CardContent>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-semibold text-foreground">{domain.name}</p>
+                      <p className="mt-1 text-xs text-muted">Registrar: {domain.registrarProvider}</p>
+                    </div>
+                    <StatusBadge status={domain.status} />
                   </div>
-                  <StatusBadge status={domain.status} />
-                </div>
-                <div className="mt-4 flex items-center justify-between text-xs text-muted">
-                  <span>Expires {domain.expiresAt ? formatDate(domain.expiresAt) : "—"}</span>
-                  <span>{domain.autoRenew ? "Auto-renew on" : "Auto-renew off"}</span>
-                </div>
-              </CardContent>
-            </Card>
+                  <div className="mt-4 flex items-center justify-between text-xs text-muted">
+                    <span>Expires {domain.expiresAt ? formatDate(domain.expiresAt) : "—"}</span>
+                    <span>{domain.autoRenew ? "Auto-renew on" : "Auto-renew off"}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
           ))}
         </div>
       )}

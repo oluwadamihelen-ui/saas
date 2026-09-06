@@ -29,8 +29,8 @@ npm run db:seed
 npm run dev                # http://localhost:3000
 ```
 
-In a second terminal, run the deployment pipeline worker (required for
-purchases to progress past "Queued"):
+In a second terminal, run the worker process (required for purchases to
+progress past "Queued", and for domain renewal reminders/auto-renewal):
 
 ```bash
 npm run worker
@@ -77,7 +77,7 @@ external credentials. See Admin → Providers to inspect provider status, and
 
 ```bash
 npm run dev              # start the app
-npm run worker           # start the deployment pipeline worker
+npm run worker           # deployment pipeline worker + domain renewal scheduler
 npm run build             # production build
 npm run lint               # eslint
 npm test                   # vitest — unit tests + DB-backed integration tests

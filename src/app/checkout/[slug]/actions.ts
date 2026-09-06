@@ -45,8 +45,9 @@ export async function submitCheckout(_prev: CheckoutFormState, formData: FormDat
     const result = await initiateCheckout(user.id, parsed.data, appOrigin);
     authorizationUrl = result.authorizationUrl;
   } catch (error) {
-    logger.error("checkout.failed", { error: error instanceof Error ? error.message : "unknown" });
-    return { status: "error", message: "We couldn't start checkout. Please try again." };
+    const message = error instanceof Error ? error.message : "unknown";
+    logger.error("checkout.failed", { error: message });
+    return { status: "error", message: error instanceof Error ? message : "We couldn't start checkout. Please try again." };
   }
 
   if (!authorizationUrl) {

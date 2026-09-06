@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
@@ -32,7 +33,11 @@ export default async function AdminDomainsPage() {
             <tbody className="divide-y divide-border">
               {domains.map((domain) => (
                 <tr key={domain.id} className="hover:bg-muted-surface">
-                  <td className="px-4 py-3 font-medium text-foreground">{domain.name}</td>
+                  <td className="px-4 py-3 font-medium text-foreground">
+                    <Link href={`/admin/domains/${domain.id}`} className="hover:text-accent hover:underline">
+                      {domain.name}
+                    </Link>
+                  </td>
                   <td className="px-4 py-3 text-muted">{domain.customer.name}</td>
                   <td className="px-4 py-3 text-muted">{domain.registrarProvider}</td>
                   <td className="px-4 py-3 text-muted">{domain.expiresAt ? formatDate(domain.expiresAt) : "—"}</td>

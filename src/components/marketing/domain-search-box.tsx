@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Search, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -80,9 +81,15 @@ export function DomainSearchBox() {
                 <span className="text-sm font-semibold text-foreground">
                   {formatCurrency(r.registrationPrice, r.currency)}
                 </span>
-                <Button size="sm" variant={r.available ? "primary" : "secondary"} disabled={!r.available}>
-                  {r.available ? "Select" : "Unavailable"}
-                </Button>
+                {r.available ? (
+                  <Button asChild size="sm" variant="primary">
+                    <Link href={`/dashboard/domains/register?domain=${encodeURIComponent(r.domain)}`}>Select</Link>
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="secondary" disabled>
+                    Unavailable
+                  </Button>
+                )}
               </div>
             </div>
           ))}

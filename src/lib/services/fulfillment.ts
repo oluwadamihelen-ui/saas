@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/db";
 import { getDomainProvider, getHostingProvider } from "@/lib/providers/registry";
 import { createDeployment } from "@/lib/services/deployments";
+import { notifyUser } from "@/lib/services/notifications";
+import { recordAuditLog } from "@/lib/security/audit";
 import { logger } from "@/lib/security/logger";
 
 interface FulfillmentIntent {
@@ -12,12 +14,93 @@ interface FulfillmentIntent {
   hostingPlanId: string | null;
 }
 
+interface DomainOrderResult {
+  domainOrderId: string;
+  domainName: string;
+  status: "COMPLETED" | "FAILED";
+  domainId?: string;
+}
+
 /**
- * Runs after a payment is confirmed: provisions the hosting account/domain
- * the customer selected at checkout (via the relevant provider), creates the
- * DeploymentTarget the customer described, and enqueues the deployment
- * pipeline. Never runs inline with the payment webhook response -- only
- * kicks off the async work.
+ * Processes every still-pending DomainOrder row attached to a paid order --
+ * registering or renewing the underlying domain via the registrar adapter
+ * and updating the ledger. Runs for every order (not just ones with an
+ * application license) since a domain-only purchase/renewal is a valid order
+ * on its own, and always before the license/deployment logic below so a
+ * combined "app + domain" order has its domain ready when the deployment
+ * target is built.
+ */
+async function processDomainOrders(orderId: string, customerId: string): Promise<DomainOrderResult[]> {
+  const pending = await prisma.domainOrder.findMany({ where: { orderId, status: "PENDING" }, include: { domain: true } });
+  if (pending.length === 0) return [];
+
+  const domainProvider = await getDomainProvider();
+  const customer = await prisma.user.findUniqueOrThrow({ where: { id: customerId } });
+  const results: DomainOrderResult[] = [];
+
+  for (const domainOrder of pending) {
+    try {
+      if (domainOrder.action === "REGISTER") {
+        const available = await domainProvider.checkAvailability(domainOrder.domainName);
+        if (!available) throw new Error(`${domainOrder.domainName} is no longer available`);
+
+        const result = await domainProvider.registerDomain({
+          domain: domainOrder.domainName,
+          years: domainOrder.years,
+          customerEmail: customer.email,
+          customerName: customer.name ?? customer.email,
+        });
+        const domain = await prisma.domain.create({
+          data: {
+            name: domainOrder.domainName,
+            tld: domainOrder.domainName.split(".").slice(1).join("."),
+            customerId,
+            registrarProvider: domainProvider.key,
+            providerRef: result.providerRef,
+            status: "ACTIVE",
+            registeredAt: new Date(result.registeredAt),
+            expiresAt: new Date(result.expiresAt),
+            nameservers: result.nameservers,
+          },
+        });
+        await prisma.domainOrder.update({ where: { id: domainOrder.id }, data: { status: "COMPLETED", domainId: domain.id } });
+        await recordAuditLog({ actorId: customerId, action: "domain.registered", resourceType: "Domain", resourceId: domain.id, newValue: { name: domain.name, years: domainOrder.years } });
+        await notifyUser(customerId, { type: "domain.registered", title: "Domain registered", message: `${domain.name} has been registered and is ready to use.` });
+        results.push({ domainOrderId: domainOrder.id, domainName: domainOrder.domainName, status: "COMPLETED", domainId: domain.id });
+      } else if (domainOrder.action === "RENEW") {
+        if (!domainOrder.domain) throw new Error("Renewal order has no linked domain");
+        const { expiresAt } = await domainProvider.renewDomain(domainOrder.domain.name, domainOrder.years, domainOrder.domain.expiresAt?.toISOString());
+        await prisma.domain.update({ where: { id: domainOrder.domain.id }, data: { status: "ACTIVE", expiresAt: new Date(expiresAt) } });
+        await prisma.domainOrder.update({ where: { id: domainOrder.id }, data: { status: "COMPLETED" } });
+        await recordAuditLog({ actorId: customerId, action: "domain.renewed", resourceType: "Domain", resourceId: domainOrder.domain.id, newValue: { years: domainOrder.years, expiresAt } });
+        await notifyUser(customerId, { type: "domain.renewed", title: "Domain renewed", message: `${domainOrder.domain.name} has been renewed through ${new Date(expiresAt).toDateString()}.` });
+        results.push({ domainOrderId: domainOrder.id, domainName: domainOrder.domainName, status: "COMPLETED", domainId: domainOrder.domain.id });
+      } else {
+        // TRANSFER is modeled but not yet a purchasable flow -- nothing enqueues one today.
+        continue;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      await prisma.domainOrder.update({ where: { id: domainOrder.id }, data: { status: "FAILED" } });
+      await notifyUser(customerId, {
+        type: "domain.order_failed",
+        title: `Domain ${domainOrder.action === "REGISTER" ? "registration" : "renewal"} failed`,
+        message: `We couldn't complete this for ${domainOrder.domainName}: ${message}. Please contact support.`,
+      });
+      logger.error("fulfillment.domain_order_failed", { orderId, domainOrderId: domainOrder.id, error: message });
+      results.push({ domainOrderId: domainOrder.id, domainName: domainOrder.domainName, status: "FAILED" });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Runs after a payment is confirmed: processes any domain order (register or
+ * renew), provisions the hosting account the customer selected at checkout,
+ * creates the DeploymentTarget the customer described, and enqueues the
+ * deployment pipeline. Never runs inline with the payment webhook response --
+ * only kicks off the async work.
  */
 export async function fulfillOrder(orderId: string) {
   const order = await prisma.order.findUniqueOrThrow({
@@ -25,10 +108,12 @@ export async function fulfillOrder(orderId: string) {
     include: { items: true },
   });
 
+  const domainOrderResults = await processDomainOrders(order.id, order.customerId);
+
   const intent = order.fulfillmentIntent as unknown as FulfillmentIntent | null;
   const licenseItem = order.items.find((i) => i.type === "APPLICATION_LICENSE" && i.applicationId);
   if (!intent || !licenseItem?.applicationId) {
-    logger.warn("fulfillment.skipped_no_intent", { orderId });
+    logger.warn("fulfillment.skipped_no_intent", { orderId, domainOrdersProcessed: domainOrderResults.length });
     return;
   }
 
@@ -56,39 +141,9 @@ export async function fulfillOrder(orderId: string) {
     }
   }
 
-  let domainId: string | undefined;
-  if (intent.domainName) {
-    const domainProvider = await getDomainProvider();
-    try {
-      const available = await domainProvider.checkAvailability(intent.domainName);
-      if (available) {
-        const result = await domainProvider.registerDomain({
-          domain: intent.domainName,
-          years: 1,
-          customerEmail: order.billingEmail ?? "",
-          customerName: order.billingName ?? "",
-        });
-        const domain = await prisma.domain.create({
-          data: {
-            name: intent.domainName,
-            tld: intent.domainName.split(".").slice(1).join("."),
-            customerId: order.customerId,
-            registrarProvider: domainProvider.key,
-            providerRef: result.providerRef,
-            status: "ACTIVE",
-            registeredAt: new Date(result.registeredAt),
-            expiresAt: new Date(result.expiresAt),
-            nameservers: result.nameservers,
-          },
-        });
-        domainId = domain.id;
-      } else {
-        logger.warn("fulfillment.domain_unavailable", { orderId, domain: intent.domainName });
-      }
-    } catch (error) {
-      logger.error("fulfillment.domain_registration_failed", { orderId, error: error instanceof Error ? error.message : "unknown" });
-    }
-  }
+  const domainId = intent.domainName
+    ? domainOrderResults.find((r) => r.domainName === intent.domainName && r.status === "COMPLETED")?.domainId
+    : undefined;
 
   // Build the DeploymentTarget the customer described at checkout. Left
   // unvalidated-but-recorded for CUSTOMER_SERVER (the pipeline's own

@@ -13,10 +13,10 @@ Customer → Platform (Next.js) → Provider Adapter Interface → Third-party A
 ```
 
 This document describes the system as implemented through **Phase 1
-(Foundation)**, **Phase 2 (Payments, Billing & Commercial Foundation)**, and
-**Phase 3 (Application Versioning & Deployment Foundation)**. Phases 4–7
-build on this foundation without architectural changes — see
-[Phased Plan](#phased-plan).
+(Foundation)**, **Phase 2 (Payments, Billing & Commercial Foundation)**,
+**Phase 3 (Application Versioning & Deployment Foundation)**, and
+**Phase 4 (Domains)**. Phases 5–7 build on this foundation without
+architectural changes — see [Phased Plan](#phased-plan).
 
 ## 1. Recommended Architecture
 
@@ -306,8 +306,14 @@ subscription support it doesn't have.
 transactions/customers/subscriptions so `verifyPayment`/`getTransaction`
 return the amount/currency actually recorded at `createPayment` time — not
 a hardcoded stand-in — which is what lets the webhook route's amount/
-currency validation (§8) be exercised meaningfully in tests without a real
-provider.
+currency validation (§9) be exercised meaningfully in tests without a real
+provider. Those Maps are attached to `globalThis` (the same pattern
+`lib/db.ts` uses for the Prisma client), not left as plain module-level
+`const`s: Next.js compiles Server Actions and Route Handlers as separate
+bundles, each re-evaluating this module, so a plain module-level Map would
+mean `createPayment()` (called from checkout's Server Action) and the
+webhook route's `verifyPayment()` silently saw two different, independently
+empty Maps — the payment would be created but never found as confirmed.
 
 ## 6. Authentication & RBAC Architecture
 
@@ -431,7 +437,103 @@ failure kinds so a broken customer server config is never retried forever:
 calls the adapter's `rollback()` against the last known-good deployment for
 the same target rather than attempting to reconstruct one from scratch.
 
-## 8. Security Architecture
+## 8. Domain Architecture
+
+Domain registration and renewal are purchases like any other, not a
+special-cased side effect of checkout — both flow through the same
+Order → Payment → `fulfillOrder()` pipeline described in §7, keyed off a
+`DomainOrder` ledger row rather than acting on the registrar immediately.
+
+```
+Customer requests REGISTER or RENEW
+  → initiateDomainOrder()       checks availability (REGISTER) or ownership
+                                 (RENEW), gets a price quote from the
+                                 registrar adapter, creates an Order +
+                                 OrderItem(DOMAIN) + DomainOrder (PENDING)
+  → payment provider checkout    same createPayment()/authorizationUrl flow
+                                 as an application purchase
+  → payment confirmed            markOrderPaid() (idempotent, validated)
+  → fulfillOrder()
+      → processDomainOrders()    for every PENDING DomainOrder on this
+                                 order: calls registerDomain()/renewDomain()
+                                 on the registrar adapter, creates/updates
+                                 the Domain row, marks the DomainOrder
+                                 COMPLETED or FAILED, notifies the customer
+                                 either way — never silently drops a failure
+```
+
+`processDomainOrders()` runs unconditionally at the top of `fulfillOrder()`
+(before the application-license/deployment logic), so a domain-only order
+(a standalone registration or a renewal) is fulfilled correctly even though
+it has no associated application — and a combined "app + domain" checkout
+still gets its `Domain` row created before the `DeploymentTarget` that
+references it is built.
+
+### 8.1 DomainProvider pricing and statefulness
+
+`DomainProvider.getPricingQuote(domain, years, action)` (added alongside the
+interface's existing search/register/renew/transfer/DNS methods) is what
+`initiateDomainOrder()` calls to price an order before creating it — pricing
+is never hardcoded at the call site.
+
+`MockDomainProvider` keeps in-memory state (module-level `Map`s, the same
+pattern as `MockPaymentProvider`'s transaction store) so a domain it has
+registered is reported unavailable on a later `checkAvailability()` call and
+`getDomainDetails()` reflects what was actually registered, instead of fixed
+canned data. That state is per-process, though — the web server and the
+worker process each get their own instance — so `renewDomain(domain, years,
+currentExpiresAt?)` accepts the domain's current expiry as an optional third
+argument; callers always pass what our own `Domain.expiresAt` column says
+(the real source of truth for "when does this expire"), so a renewal
+triggered from the worker process still extends from the correct date even
+though the worker's mock instance never saw the original registration.
+
+### 8.2 DNS record management
+
+`lib/services/dns-records.ts` validates a record's shape against its `type`
+(`dnsRecordSchema`, a zod `superRefine` — an `A` record's value must be an
+IPv4 address, `MX`/`SRV` require a priority, etc.) before it's ever sent to
+`DomainProvider.createDNSRecord()` or persisted as a `DNSRecord` row. Both
+the admin domain detail page and the customer's own domain detail page use
+the same service and the same add/delete UI, scoped by ownership
+(`requireUser()` + `customerId` check) on the customer side and by
+`PERMISSIONS.DOMAINS_MANAGE` on the admin side.
+
+### 8.3 Renewal notification scheduler
+
+`runDomainRenewalSweep()` (`lib/services/domain-renewal-scheduler.ts`) is
+the first *repeating* job in the codebase — every other queue (the
+deployment pipeline) is triggered once per event, never on a schedule. It's
+driven by a BullMQ job scheduler (`lib/queue/domainRenewalQueue.ts`,
+`Queue.upsertJobScheduler`, daily) processed by a dedicated worker
+(`lib/queue/domainRenewalWorker.ts`), both started from `scripts/worker.ts`
+alongside the deployment worker. The sweep function itself is exported
+standalone — callable directly (a test, a manual admin trigger) the same way
+`processDeploymentPipeline` is, not only reachable through the queue.
+
+Each run:
+
+1. Reads the configurable threshold days from `NotificationSchedule`
+   (key `"domain.expiry"`, e.g. `[30, 14, 7, 3, 1]`), falling back to that
+   same default if the row is missing.
+2. Scans `Domain` rows expiring within the widest configured window.
+3. A domain past its expiry with no successful renewal is flipped to
+   `EXPIRED` and the customer is notified.
+4. A domain with `autoRenew: true` inside a short trigger window (3 days)
+   is renewed automatically: the registrar adapter is called, the
+   `Domain`/`DomainOrder`/`RenewalEvent` rows are updated, and the customer
+   is notified either of the successful auto-renewal or (if the registrar
+   call fails) that they need to renew manually — auto-renew failing closed
+   rather than silently doing nothing.
+5. A domain with `autoRenew: false` gets a reminder notification on each
+   day that exactly matches a configured threshold.
+
+`RenewalEvent` (`referenceType: "DOMAIN"`) is the durable record of where a
+given domain is in this cycle (`UPCOMING` → `SUCCEEDED`/`FAILED`), reused
+rather than duplicated once hosting/subscription renewals need the same
+UPCOMING → notify/auto-process → SUCCEEDED lifecycle.
+
+## 9. Security Architecture
 
 - **Passwords**: bcrypt, cost factor 12.
 - **Sessions**: JWT, HttpOnly cookies (Auth.js default), server-side role
@@ -478,7 +580,7 @@ the same target rather than attempting to reconstruct one from scratch.
 - **RBAC enforcement** happens server-side in every server action, not just
   in the UI (`requirePermission`/`requireRole` at the top of each action).
 
-## 9. UI/UX Architecture
+## 10. UI/UX Architecture
 
 - A small token layer in `globals.css` (`--background`, `--surface`,
   `--accent`, status colors) drives every component — one accent color
@@ -495,7 +597,7 @@ the same target rather than attempting to reconstruct one from scratch.
   legitimately empty (no orders yet, no tickets, etc.) instead of a blank
   table.
 
-## 10. Phased Plan
+## 11. Phased Plan
 
 **Phase 1 — Foundation (delivered).** Project setup, full schema, auth +
 RBAC, admin dashboard, customer dashboard, marketplace + detail pages,
@@ -532,10 +634,21 @@ real adapters (`SSHAdapter`, `CPanelAdapter`, `PleskAdapter`,
 to accept them without further changes; scheduled health-check re-runs
 (currently only run once per deployment, at completion).
 
-**Phase 4 — Domains.** Schema, search UI, and `DomainProvider` interface
-exist; remaining is a real registrar adapter, DNS record management UI
-(model exists: `DNSRecord`), and the renewal notification scheduler
-(`NotificationSchedule` model exists, not yet wired to a cron job).
+**Phase 4 — Domains (delivered).** Registration and renewal both flow
+through the same Order/Payment/`fulfillOrder()` pipeline as any other
+purchase via a `DomainOrder` ledger (§8); `DomainProvider` gained a pricing
+quote method and `MockDomainProvider` gained real in-memory state so
+registered domains are reflected in later availability/detail calls; DNS
+record management (add/delete, type-aware validation) on both the admin and
+customer domain detail pages; the renewal notification scheduler
+(`runDomainRenewalSweep`, §8.3) — the first repeating BullMQ job in the
+codebase — reminds customers, auto-renews opted-in domains, and expires
+lapsed ones, using the `NotificationSchedule` and `RenewalEvent` models that
+were previously unused schema. Remaining: a real registrar adapter (the
+`DOMAIN_PROVIDER` env var is wired in `getDomainProvider()`, same shape as
+payments, ready for one) and a purchasable domain transfer flow (the
+`transferDomain` provider method and `DomainAction.TRANSFER` enum value
+exist; nothing enqueues one yet).
 
 **Phase 5 — Hosting.** Plans, `HostingAccount`, and the `HostingProvider`
 interface exist; remaining is a real hosting adapter and
@@ -555,7 +668,7 @@ developer marketplace + revenue share (`RoleKey.DEVELOPER` seeded,
 `Application.createdById` present), uptime monitoring beyond the single
 post-deploy health check.
 
-## 11. Local Development
+## 12. Local Development
 
 ```bash
 cp .env.example .env            # fill in DATABASE_URL / REDIS_URL for local services

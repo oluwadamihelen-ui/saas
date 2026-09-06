@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { markOrderPaid } from "@/lib/services/orders";
 import { fulfillOrder } from "@/lib/services/fulfillment";
-import { MockPaymentProvider } from "@/lib/providers/payment/mock";
+import { getPaymentProvider } from "@/lib/providers/registry";
 import { PaystackPaymentProvider } from "@/lib/providers/payment/paystack";
 import { PaymentProvider } from "@/lib/providers/payment/types";
 import { logger } from "@/lib/security/logger";
@@ -14,7 +14,11 @@ const SIGNATURE_HEADERS: Record<string, string> = {
 };
 
 async function resolveProvider(key: string): Promise<PaymentProvider | null> {
-  if (key === "mock") return new MockPaymentProvider();
+  // Route through the same cached instance checkout uses (getPaymentProvider)
+  // rather than constructing a fresh MockPaymentProvider -- its transaction
+  // state lives in that one instance, and a fresh `new` here would never see
+  // the payment createPayment() just recorded.
+  if (key === "mock") return getPaymentProvider();
   if (key === "paystack") {
     const secretKey = process.env.PAYSTACK_SECRET_KEY;
     if (!secretKey) return null;

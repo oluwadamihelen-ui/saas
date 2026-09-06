@@ -86,6 +86,12 @@ async function seedSettings() {
     create: { key: "general", value: { companyName: "BridgeCodes, Inc.", supportEmail: "support@bridgecodes.example", currency: "USD" } },
   });
 
+  await prisma.notificationSchedule.upsert({
+    where: { key: "domain.expiry" },
+    update: {},
+    create: { key: "domain.expiry", daysBefore: [30, 14, 7, 3, 1], isActive: true },
+  });
+
   const legalDocs = [
     { slug: "terms", title: "Terms of Service", body: "These Terms of Service govern your use of BridgeCodes's marketplace and managed deployment services. By purchasing or deploying an application through the platform, you agree to these terms.\n\nBridgeCodes acts as an orchestration layer connecting you to third-party domain, hosting, and payment providers. Specific provider terms may apply in addition to these terms." },
     { slug: "privacy", title: "Privacy Policy", body: "BridgeCodes collects the information necessary to provide our marketplace, deployment, and hosting services, including account details, billing information, and deployment configuration.\n\nWe do not sell your personal data. Information is shared with third-party providers (domain registrars, hosting providers, payment processors) only as required to fulfill your order." },
@@ -713,6 +719,65 @@ async function seedSupportTickets(customers: { id: string; name: string }[], sta
   }
 }
 
+/**
+ * Two domains specifically shaped to demonstrate the renewal scheduler
+ * (runDomainRenewalSweep) the moment the worker runs, without waiting for
+ * real time to pass: one due soon with auto-renew off (a reminder fires),
+ * one due imminently with auto-renew on (it gets auto-renewed). expiresAt
+ * is recomputed relative to "now" on every seed run so the demo stays
+ * meaningful no matter when the database is (re)seeded.
+ */
+async function seedDomainRenewalDemoScenarios(customer: { id: string }) {
+  const daysFromNow = (days: number) => new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+
+  const reminderDomain = await prisma.domain.upsert({
+    where: { name: "sunrise-consulting.com" },
+    update: { expiresAt: daysFromNow(7), status: "ACTIVE", autoRenew: false },
+    create: {
+      name: "sunrise-consulting.com",
+      tld: "com",
+      customerId: customer.id,
+      registrarProvider: "mock",
+      providerRef: "mock_domain_seed_reminder",
+      status: "ACTIVE",
+      registeredAt: daysFromNow(-358),
+      expiresAt: daysFromNow(7),
+      autoRenew: false,
+      nameservers: ["ns1.mockdns.com", "ns2.mockdns.com"],
+    },
+  });
+
+  const autoRenewDomain = await prisma.domain.upsert({
+    where: { name: "brightretail-shop.com" },
+    update: { expiresAt: daysFromNow(2), status: "ACTIVE", autoRenew: true },
+    create: {
+      name: "brightretail-shop.com",
+      tld: "com",
+      customerId: customer.id,
+      registrarProvider: "mock",
+      providerRef: "mock_domain_seed_autorenew",
+      status: "ACTIVE",
+      registeredAt: daysFromNow(-363),
+      expiresAt: daysFromNow(2),
+      autoRenew: true,
+      nameservers: ["ns1.mockdns.com", "ns2.mockdns.com"],
+    },
+  });
+
+  const existingRecords = await prisma.dNSRecord.count({ where: { domainId: reminderDomain.id } });
+  if (existingRecords === 0) {
+    await prisma.dNSRecord.createMany({
+      data: [
+        { domainId: reminderDomain.id, type: "A", name: "@", value: "203.0.113.10", ttl: 3600 },
+        { domainId: reminderDomain.id, type: "CNAME", name: "www", value: "sunrise-consulting.com.", ttl: 3600 },
+        { domainId: reminderDomain.id, type: "TXT", name: "@", value: "v=spf1 include:_spf.mockmail.example ~all", ttl: 3600 },
+      ],
+    });
+  }
+
+  return { reminderDomain, autoRenewDomain };
+}
+
 async function main() {
   console.log("Seeding roles and permissions...");
   const roles = await seedRolesAndPermissions();
@@ -740,6 +805,9 @@ async function main() {
 
   console.log("Seeding support tickets...");
   await seedSupportTickets(customers, staff.id);
+
+  console.log("Seeding domain renewal demo scenarios...");
+  await seedDomainRenewalDemoScenarios(customers[0]);
 
   console.log("Seed complete.");
 }
