@@ -83,14 +83,14 @@ async function seedSettings() {
   await prisma.setting.upsert({
     where: { key: "general" },
     update: {},
-    create: { key: "general", value: { companyName: "Forgecart, Inc.", supportEmail: "support@forgecart.example", currency: "USD" } },
+    create: { key: "general", value: { companyName: "BridgeCodes, Inc.", supportEmail: "support@bridgecodes.example", currency: "USD" } },
   });
 
   const legalDocs = [
-    { slug: "terms", title: "Terms of Service", body: "These Terms of Service govern your use of Forgecart's marketplace and managed deployment services. By purchasing or deploying an application through the platform, you agree to these terms.\n\nForgecart acts as an orchestration layer connecting you to third-party domain, hosting, and payment providers. Specific provider terms may apply in addition to these terms." },
-    { slug: "privacy", title: "Privacy Policy", body: "Forgecart collects the information necessary to provide our marketplace, deployment, and hosting services, including account details, billing information, and deployment configuration.\n\nWe do not sell your personal data. Information is shared with third-party providers (domain registrars, hosting providers, payment processors) only as required to fulfill your order." },
+    { slug: "terms", title: "Terms of Service", body: "These Terms of Service govern your use of BridgeCodes's marketplace and managed deployment services. By purchasing or deploying an application through the platform, you agree to these terms.\n\nBridgeCodes acts as an orchestration layer connecting you to third-party domain, hosting, and payment providers. Specific provider terms may apply in addition to these terms." },
+    { slug: "privacy", title: "Privacy Policy", body: "BridgeCodes collects the information necessary to provide our marketplace, deployment, and hosting services, including account details, billing information, and deployment configuration.\n\nWe do not sell your personal data. Information is shared with third-party providers (domain registrars, hosting providers, payment processors) only as required to fulfill your order." },
     { slug: "refunds", title: "Refund Policy", body: "Software licenses may be refunded within 14 days of purchase if no deployment has been completed. Installation and customization services are non-refundable once work has begun. Domain registrations are non-refundable once registered with the registry." },
-    { slug: "acceptable-use", title: "Acceptable Use Policy", body: "You may not use applications or infrastructure obtained through Forgecart for unlawful purposes, to distribute malware, or to violate the acceptable use policies of our underlying domain, hosting, or payment providers." },
+    { slug: "acceptable-use", title: "Acceptable Use Policy", body: "You may not use applications or infrastructure obtained through BridgeCodes for unlawful purposes, to distribute malware, or to violate the acceptable use policies of our underlying domain, hosting, or payment providers." },
   ];
 
   for (const doc of legalDocs) {
@@ -300,7 +300,7 @@ async function seedApplications(categories: { id: string }[], adminId: string) {
         currentVersion: "1.0.0",
         status: "PUBLISHED",
         featured: seed.featured,
-        demoUrl: `https://demo.forgecart.example/${slug}`,
+        demoUrl: `https://demo.bridgecodes.example/${slug}`,
         demoUsername: "demo",
         demoPassword: "demo1234",
         whatsIncluded: ["Full source deployment", "Admin dashboard", "Email notifications"],
@@ -350,7 +350,7 @@ async function seedApplications(categories: { id: string }[], adminId: string) {
         environmentVariables: [
           { key: "DATABASE_URL", description: "PostgreSQL connection string", required: true, secret: true },
           { key: "JWT_SECRET", description: "Secret used to sign auth tokens", required: true, secret: true },
-          { key: "NEXT_PUBLIC_APP_URL", description: "Public URL of the deployed application", required: true, secret: false, defaultValue: `https://demo.forgecart.example/${slug}` },
+          { key: "NEXT_PUBLIC_APP_URL", description: "Public URL of the deployed application", required: true, secret: false, defaultValue: `https://demo.bridgecodes.example/${slug}` },
         ],
       };
 
@@ -366,7 +366,7 @@ async function seedApplications(categories: { id: string }[], adminId: string) {
               : { create: specData },
             artifact: {
               upsert: {
-                create: { type: "GIT_REPOSITORY", reference: `https://github.com/forgecart-apps/${slug}` },
+                create: { type: "GIT_REPOSITORY", reference: `https://github.com/bridgecodes-apps/${slug}` },
                 update: {},
               },
             },
@@ -382,7 +382,7 @@ async function seedApplications(categories: { id: string }[], adminId: string) {
             isLatest: true,
             isStable: true,
             deploymentSpecification: { create: specData },
-            artifact: { create: { type: "GIT_REPOSITORY", reference: `https://github.com/forgecart-apps/${slug}` } },
+            artifact: { create: { type: "GIT_REPOSITORY", reference: `https://github.com/bridgecodes-apps/${slug}` } },
           },
         });
       }
@@ -412,15 +412,15 @@ async function seedUsers(roles: Map<string, { id: string }>) {
   const passwordHash = await bcrypt.hash("Passw0rd!", 12);
 
   const admin = await prisma.user.upsert({
-    where: { email: "admin@forgecart.example" },
+    where: { email: "admin@bridgecodes.example" },
     update: {},
-    create: { name: "Ada Admin", email: "admin@forgecart.example", passwordHash, roleId: roles.get("SUPER_ADMIN")!.id, status: "ACTIVE" },
+    create: { name: "Ada Admin", email: "admin@bridgecodes.example", passwordHash, roleId: roles.get("SUPER_ADMIN")!.id, status: "ACTIVE" },
   });
 
   const staff = await prisma.user.upsert({
-    where: { email: "ops@forgecart.example" },
+    where: { email: "ops@bridgecodes.example" },
     update: {},
-    create: { name: "Ops Ola", email: "ops@forgecart.example", passwordHash, roleId: roles.get("STAFF")!.id, status: "ACTIVE" },
+    create: { name: "Ops Ola", email: "ops@bridgecodes.example", passwordHash, roleId: roles.get("STAFF")!.id, status: "ACTIVE" },
   });
 
   const customerDefs = [
@@ -620,7 +620,7 @@ async function seedOrdersAndDeployments(
         domainId,
         hostingAccountId,
         deploymentTargetId: deploymentTarget.id,
-        previewUrl: domainId ? null : `https://${app.slug}-${i}.preview.forgecart.app`,
+        previewUrl: domainId ? null : `https://${app.slug}-${i}.preview.bridgecodes.app`,
         healthStatus: scenario.deploymentStatus === "COMPLETED" ? "HEALTHY" : "UNKNOWN",
       },
     });

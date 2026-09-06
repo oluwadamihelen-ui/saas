@@ -25,7 +25,7 @@ export default function LoginPage() {
         </p>
         <div className="mt-6 rounded-md bg-muted-surface p-3 text-xs text-muted">
           <p className="font-medium text-foreground">Demo accounts</p>
-          <p>Admin: admin@forgecart.example / Passw0rd!</p>
+          <p>Admin: admin@bridgecodes.example / Passw0rd!</p>
           <p>Customer: sarah@brightretail.com / Passw0rd!</p>
         </div>
       </CardContent>

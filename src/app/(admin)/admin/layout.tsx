@@ -21,6 +21,7 @@ import {
 import { auth } from "@/auth";
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
 import { DashboardTopbar } from "@/components/dashboard/dashboard-topbar";
+import { Logo } from "@/components/brand/logo";
 
 const ICON_CLASS = "h-4 w-4";
 const NAV_ITEMS = [
@@ -50,10 +51,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="flex min-h-screen bg-background">
       <aside className="hidden w-64 shrink-0 overflow-y-auto border-r border-border bg-surface p-4 lg:block">
         <Link href="/" className="mb-6 flex items-center gap-2 px-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-accent text-sm font-bold text-accent-foreground">
-            F
+          <Logo height={26} />
+          <span className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+            Admin
           </span>
-          <span className="text-lg font-semibold tracking-tight">Forgecart Admin</span>
         </Link>
         <SidebarNav items={NAV_ITEMS} basePath="/admin" />
       </aside>

@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Forgecart — Ready-to-Launch Software for Modern Businesses",
-    template: "%s | Forgecart",
+    default: "BridgeCodes — Software. Deployed. Managed.",
+    template: "%s | BridgeCodes",
   },
   description:
     "Buy, customize, deploy and manage powerful web applications without the cost and complexity of building everything from scratch.",

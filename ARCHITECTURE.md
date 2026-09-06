@@ -1,6 +1,6 @@
-# Forgecart — Architecture
+# BridgeCodes — Architecture
 
-Forgecart is a software marketplace + managed deployment platform: customers buy
+BridgeCodes is a software marketplace + managed deployment platform: customers buy
 ready-made web applications, choose how they're deployed (their own server,
 platform-provided hosting, or a fully managed setup), optionally register a
 domain, and track the entire lifecycle from a dashboard. The platform never
@@ -569,8 +569,8 @@ npm test                        # vitest — unit tests plus DB-backed integrati
 npm run test:e2e-smoke          # Playwright: full customer journey against a running dev server
 ```
 
-Demo accounts (seeded, password `Passw0rd!` for all): `admin@forgecart.example`
-(Super Admin), `ops@forgecart.example` (Staff), `sarah@brightretail.com` /
+Demo accounts (seeded, password `Passw0rd!` for all): `admin@bridgecodes.example`
+(Super Admin), `ops@bridgecodes.example` (Staff), `sarah@brightretail.com` /
 `david@northgaterealty.com` / `grace@clinicly.example` (Customers).
 
 Everything runs against mock providers out of the box — no real payment,

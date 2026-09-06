@@ -47,7 +47,7 @@ export async function createDeployment(input: CreateDeploymentInput) {
   // target so the pipeline still has a concrete adapter to resolve.
   const deploymentTargetId = input.deploymentTargetId ?? (await getOrCreateMockTarget(input.customerId)).id;
 
-  const previewUrl = input.domainId ? null : `https://${application.slug}-${Math.random().toString(36).slice(2, 8)}.preview.forgecart.app`;
+  const previewUrl = input.domainId ? null : `https://${application.slug}-${Math.random().toString(36).slice(2, 8)}.preview.bridgecodes.app`;
 
   const deployment = await prisma.deployment.create({
     data: {

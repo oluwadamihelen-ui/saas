@@ -6,9 +6,9 @@ export default function AboutPage() {
   return (
     <div className="container-shell py-14">
       <div className="mx-auto max-w-3xl">
-        <h1 className="text-3xl font-semibold tracking-tight">About Forgecart</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">About BridgeCodes</h1>
         <p className="mt-4 text-muted">
-          Forgecart is a software marketplace and managed deployment company. We build production-ready web
+          BridgeCodes is a software marketplace and managed deployment company. We build production-ready web
           applications and help businesses launch them quickly — with deployment, domains, hosting, and support
           handled as one service.
         </p>

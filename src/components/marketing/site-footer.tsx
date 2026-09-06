@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Logo } from "@/components/brand/logo";
 
 const FOOTER_LINKS = {
   Product: [
@@ -28,12 +29,7 @@ export function SiteFooter() {
     <footer className="border-t border-border bg-surface">
       <div className="container-shell grid grid-cols-2 gap-8 py-14 md:grid-cols-5">
         <div className="col-span-2 space-y-3">
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-accent text-sm font-bold text-accent-foreground">
-              F
-            </span>
-            <span className="text-lg font-semibold tracking-tight">Forgecart</span>
-          </div>
+          <Logo height={28} />
           <p className="max-w-xs text-sm text-muted">
             Ready-to-launch software, deployment and infrastructure — delivered as one managed service.
           </p>
@@ -56,7 +52,7 @@ export function SiteFooter() {
       </div>
       <div className="border-t border-border py-6">
         <p className="container-shell text-xs text-muted">
-          © {new Date().getFullYear()} Forgecart, Inc. All rights reserved.
+          © {new Date().getFullYear()} BridgeCodes, Inc. All rights reserved.
         </p>
       </div>
     </footer>

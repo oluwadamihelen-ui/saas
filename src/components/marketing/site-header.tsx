@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/auth";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/brand/logo";
 import { MobileNav } from "./mobile-nav";
 
 const NAV_LINKS = [
@@ -20,11 +21,8 @@ export async function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur">
       <div className="container-shell flex h-16 items-center justify-between">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-accent text-sm font-bold text-accent-foreground">
-            F
-          </span>
-          <span className="text-lg font-semibold tracking-tight">Forgecart</span>
+        <Link href="/" className="flex items-center">
+          <Logo height={30} />
         </Link>
 
         <nav className="hidden items-center gap-7 lg:flex">

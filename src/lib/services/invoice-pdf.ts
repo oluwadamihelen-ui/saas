@@ -1,5 +1,8 @@
 import PDFDocument from "pdfkit";
+import path from "node:path";
 import { prisma } from "@/lib/db";
+
+const LOGO_PATH = path.join(process.cwd(), "public/brand/bridgecodes-logo-on-white.png");
 
 interface GeneralSettings {
   companyName?: string;
@@ -27,8 +30,8 @@ export async function generateInvoicePdfBuffer(invoiceId: string): Promise<Buffe
 
   const generalSetting = await prisma.setting.findUnique({ where: { key: "general" } });
   const general = generalSetting?.value as GeneralSettings | undefined;
-  const companyName = general?.companyName ?? "Forgecart, Inc.";
-  const supportEmail = general?.supportEmail ?? "support@forgecart.example";
+  const companyName = general?.companyName ?? "BridgeCodes, Inc.";
+  const supportEmail = general?.supportEmail ?? "support@bridgecodes.example";
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 50 });
@@ -37,7 +40,14 @@ export async function generateInvoicePdfBuffer(invoiceId: string): Promise<Buffe
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    doc.fontSize(20).font("Helvetica-Bold").text(companyName);
+    try {
+      doc.image(LOGO_PATH, 50, 45, { width: 150 });
+      doc.moveDown(3.5);
+    } catch {
+      // Falls back to a text wordmark if the asset is ever unavailable.
+      doc.fontSize(20).font("Helvetica-Bold").text(companyName);
+      doc.moveDown(0.3);
+    }
     doc.fontSize(9).font("Helvetica").fillColor("#667085").text(supportEmail);
     doc.moveDown(1.5);
 

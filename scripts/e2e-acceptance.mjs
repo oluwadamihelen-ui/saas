@@ -55,7 +55,7 @@ async function main() {
   console.log("4. Log out, log in as admin, open the same deployment...");
   await page.context().clearCookies();
   await page.goto(`${BASE}/login`);
-  await page.fill("#email", "admin@forgecart.example");
+  await page.fill("#email", "admin@bridgecodes.example");
   await page.fill("#password", "Passw0rd!");
   await page.click('button[type="submit"]');
   await page.waitForURL(/\/(dashboard|admin)/, { timeout: 15000 });

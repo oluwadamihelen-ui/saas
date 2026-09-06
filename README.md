@@ -1,4 +1,4 @@
-# Forgecart
+# BridgeCodes
 
 A software marketplace and managed deployment platform: browse production-ready
 web applications, buy a license, choose how it gets deployed (your own server,
@@ -42,8 +42,8 @@ All seeded with password `Passw0rd!`:
 
 | Role | Email |
 |---|---|
-| Super Admin | admin@forgecart.example |
-| Staff | ops@forgecart.example |
+| Super Admin | admin@bridgecodes.example |
+| Staff | ops@bridgecodes.example |
 | Customer | sarah@brightretail.com |
 | Customer | david@northgaterealty.com |
 | Customer | grace@clinicly.example |

@@ -38,11 +38,11 @@ export default async function AdminSettingsPage() {
           <form action={saveGeneralSettings} className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="companyName">Company name</Label>
-              <Input id="companyName" name="companyName" defaultValue={general?.companyName ?? "Forgecart, Inc."} required />
+              <Input id="companyName" name="companyName" defaultValue={general?.companyName ?? "BridgeCodes, Inc."} required />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="supportEmail">Support email</Label>
-              <Input id="supportEmail" name="supportEmail" type="email" defaultValue={general?.supportEmail ?? "support@forgecart.example"} required />
+              <Input id="supportEmail" name="supportEmail" type="email" defaultValue={general?.supportEmail ?? "support@bridgecodes.example"} required />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="currency">Platform currency (ISO 4217)</Label>

@@ -29,7 +29,7 @@ export async function submitContactForm(_prevState: ContactFormState, formData: 
   try {
     const provider = await getEmailProvider();
     await provider.send({
-      to: "sales@forgecart.example",
+      to: "sales@bridgecodes.example",
       subject: `New contact form message from ${parsed.data.name}`,
       html: `<p><strong>From:</strong> ${parsed.data.name} (${parsed.data.email})</p><p>${parsed.data.message}</p>`,
       text: parsed.data.message,

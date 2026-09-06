@@ -142,7 +142,7 @@ export default async function NewVersionPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="artifactReference">Reference</Label>
-              <Input id="artifactReference" name="artifactReference" placeholder="ghcr.io/forgecart/crm:1.1.0" />
+              <Input id="artifactReference" name="artifactReference" placeholder="ghcr.io/bridgecodes/crm:1.1.0" />
             </div>
           </div>
         </section>

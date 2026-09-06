@@ -16,7 +16,7 @@ export default function ContactPage() {
           </p>
           <div className="mt-8 space-y-5">
             <div className="flex items-center gap-3 text-sm">
-              <Mail className="h-5 w-5 text-accent" /> sales@forgecart.example
+              <Mail className="h-5 w-5 text-accent" /> sales@bridgecodes.example
             </div>
             <div className="flex items-center gap-3 text-sm">
               <PhoneCall className="h-5 w-5 text-accent" /> +1 (555) 010-0199

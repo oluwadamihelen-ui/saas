@@ -33,8 +33,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           </div>
 
           <div className="border-t border-border pt-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Forgecart, Inc.</p>
-            <p className="text-sm text-muted">billing@forgecart.example</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">BridgeCodes, Inc.</p>
+            <p className="text-sm text-muted">billing@bridgecodes.example</p>
           </div>
 
           <div className="divide-y divide-border border-y border-border">

@@ -277,7 +277,7 @@ model ApplicationVersion {
   status           ApplicationVersionStatus @default(DRAFT)
   isLatest         Boolean                  @default(false)
   isStable         Boolean                  @default(false)
-  packageReference String? // human-readable pointer, e.g. "ghcr.io/forgecart/crm:1.4.0"
+  packageReference String? // human-readable pointer, e.g. "ghcr.io/bridgecodes/crm:1.4.0"
   rollbackOf       String? // version string this can roll back to
 
   deploymentSpecificationId String?                  @unique
