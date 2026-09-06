@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
+import { Download } from "lucide-react";
 import { requireUser } from "@/lib/auth/require";
 import { prisma } from "@/lib/db";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -20,7 +22,14 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               <p className="text-xl font-semibold text-foreground">Invoice {invoice.invoiceNumber}</p>
               <p className="mt-1 text-sm text-muted">Issued {formatDate(invoice.issuedAt)}</p>
             </div>
-            <StatusBadge status={invoice.status} />
+            <div className="flex items-center gap-2">
+              <StatusBadge status={invoice.status} />
+              <Button asChild size="sm" variant="secondary">
+                <a href={`/api/invoices/${invoice.id}/pdf`} target="_blank" rel="noopener noreferrer">
+                  <Download className="h-4 w-4" /> PDF
+                </a>
+              </Button>
+            </div>
           </div>
 
           <div className="border-t border-border pt-4">

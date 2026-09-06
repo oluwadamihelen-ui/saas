@@ -1,8 +1,8 @@
-import "server-only";
 import { prisma } from "@/lib/db";
 import { generateInvoiceNumber, generateLicenseKey, generateOrderNumber } from "@/lib/utils/ids";
 import { OrderItemType, BillingCycle } from "@/generated/prisma/client";
 import { notifyUser } from "@/lib/services/notifications";
+import { getPlatformCurrency } from "@/lib/services/settings";
 import { logger } from "@/lib/security/logger";
 
 export interface CartLineInput {
@@ -34,6 +34,7 @@ export async function createOrder(customerId: string, lines: CartLineInput[], bi
   const tax = Math.round(subtotal * TAX_RATE * 100) / 100;
   const discount = 0;
   const total = subtotal + tax - discount;
+  const currency = await getPlatformCurrency();
 
   const order = await prisma.order.create({
     data: {
@@ -45,6 +46,7 @@ export async function createOrder(customerId: string, lines: CartLineInput[], bi
       discount,
       tax,
       total,
+      currency,
       ...billing,
       items: {
         create: lines.map((l) => ({
@@ -75,6 +77,17 @@ export async function markOrderPaid(orderId: string, payment: { provider: string
   const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true, customer: true } });
   if (!order) throw new Error(`Order ${orderId} not found`);
   if (order.paymentStatus === "PAID") return order; // idempotent
+
+  // Defense in depth: callers (webhook route, callback reconciliation) are
+  // expected to validate amount/currency before invoking this, but never
+  // trust that alone -- the authoritative write path re-checks too.
+  const expectedTotal = Number(order.total);
+  if (Math.abs(payment.amount - expectedTotal) >= 0.01) {
+    throw new Error(`Payment amount ${payment.amount} ${payment.currency} does not match order total ${expectedTotal} ${order.currency}`);
+  }
+  if (payment.currency.toUpperCase() !== order.currency.toUpperCase()) {
+    throw new Error(`Payment currency ${payment.currency} does not match order currency ${order.currency}`);
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.payment.create({

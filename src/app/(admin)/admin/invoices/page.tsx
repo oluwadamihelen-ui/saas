@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Download } from "lucide-react";
 import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
@@ -27,6 +28,7 @@ export default async function AdminInvoicesPage() {
                 <th className="px-4 py-3">Issued</th>
                 <th className="px-4 py-3">Total</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Download</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -38,6 +40,16 @@ export default async function AdminInvoicesPage() {
                   <td className="px-4 py-3">{formatCurrency(Number(invoice.total), invoice.currency)}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={invoice.status} />
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <a
+                      href={`/api/invoices/${invoice.id}/pdf`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-medium text-accent"
+                    >
+                      <Download className="h-3.5 w-3.5" /> PDF
+                    </a>
                   </td>
                 </tr>
               ))}

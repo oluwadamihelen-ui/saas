@@ -1,4 +1,3 @@
-import "server-only";
 import { prisma } from "@/lib/db";
 
 export async function getAdminOverviewMetrics() {
@@ -22,7 +21,7 @@ export async function getAdminOverviewMetrics() {
     prisma.deployment.count({ where: { status: { notIn: ["FAILED"] } } }),
     prisma.domain.count({ where: { status: "ACTIVE" } }),
     prisma.hostingAccount.count({ where: { status: "ACTIVE" } }),
-    prisma.deployment.count({ where: { status: { in: ["QUEUED", "PREPARING", "CONNECTING", "INSTALLING", "CONFIGURING", "DNS_SETUP", "SSL_SETUP", "TESTING"] } } }),
+    prisma.deployment.count({ where: { status: { in: ["QUEUED", "PREPARING", "CONNECTING", "INSTALLING", "CONFIGURING", "DATABASE_SETUP", "MIGRATING", "DNS_SETUP", "SSL_SETUP", "HEALTH_CHECK"] } } }),
     prisma.deployment.count({ where: { status: "FAILED" } }),
     prisma.supportTicket.count({ where: { status: { in: ["OPEN", "IN_PROGRESS", "WAITING_FOR_CUSTOMER"] } } }),
     prisma.subscription.aggregate({ _sum: { amount: true }, where: { status: "ACTIVE", billingCycle: "MONTHLY" } }),

@@ -1,4 +1,4 @@
-import { CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { CheckCircle2, XCircle, AlertCircle, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STEPS: { key: string; label: string }[] = [
@@ -9,12 +9,20 @@ const STEPS: { key: string; label: string }[] = [
   { key: "CONFIGURING", label: "Environment configured" },
   { key: "DNS_SETUP", label: "DNS configuration" },
   { key: "SSL_SETUP", label: "SSL certificate" },
-  { key: "TESTING", label: "Final testing" },
+  { key: "HEALTH_CHECK", label: "Running health checks" },
   { key: "COMPLETED", label: "Live" },
 ];
 
+// Technical sub-steps not shown as their own row on the customer-facing
+// timeline are folded into the nearest milestone so progress still advances
+// visually instead of appearing stuck.
+const STATUS_MILESTONE: Record<string, string> = {
+  DATABASE_SETUP: "CONFIGURING",
+  MIGRATING: "CONFIGURING",
+};
+
 export function DeploymentTimeline({ status }: { status: string }) {
-  if (status === "FAILED") {
+  if (status === "FAILED" || status === "CANCELLED") {
     const lastIndex = STEPS.length - 1;
     return (
       <div className="space-y-3">
@@ -24,13 +32,24 @@ export function DeploymentTimeline({ status }: { status: string }) {
           </div>
         ))}
         <div className="flex items-center gap-3 text-sm font-medium text-danger">
-          <XCircle className="h-4 w-4" /> Deployment failed — our team has been notified
+          <XCircle className="h-4 w-4" />
+          {status === "CANCELLED" ? "Deployment cancelled" : "Deployment failed — our team has been notified"}
         </div>
       </div>
     );
   }
 
-  const currentIndex = STEPS.findIndex((s) => s.key === status);
+  if (status === "ROLLING_BACK" || status === "ROLLED_BACK") {
+    return (
+      <div className="flex items-center gap-3 rounded-md bg-warning-soft px-3 py-2 text-sm text-warning">
+        <RotateCcw className="h-4 w-4" />
+        {status === "ROLLING_BACK" ? "Rolling back to the previous version…" : "Rolled back to the previous version."}
+      </div>
+    );
+  }
+
+  const effectiveStatus = STATUS_MILESTONE[status] ?? status;
+  const currentIndex = STEPS.findIndex((s) => s.key === effectiveStatus);
 
   return (
     <div className="space-y-3">

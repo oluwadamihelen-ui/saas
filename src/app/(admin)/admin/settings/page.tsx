@@ -24,7 +24,7 @@ export default async function AdminSettingsPage() {
     ...LEGAL_DOCS.map((doc) => prisma.setting.findUnique({ where: { key: `legal.${doc.slug}` } })),
   ]);
 
-  const general = generalSetting?.value as { companyName?: string; supportEmail?: string } | undefined;
+  const general = generalSetting?.value as { companyName?: string; supportEmail?: string; currency?: string } | undefined;
 
   return (
     <div className="space-y-8">
@@ -43,6 +43,11 @@ export default async function AdminSettingsPage() {
             <div className="space-y-1.5">
               <Label htmlFor="supportEmail">Support email</Label>
               <Input id="supportEmail" name="supportEmail" type="email" defaultValue={general?.supportEmail ?? "support@forgecart.example"} required />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="currency">Platform currency (ISO 4217)</Label>
+              <Input id="currency" name="currency" maxLength={3} minLength={3} className="uppercase" defaultValue={general?.currency ?? "USD"} required />
+              <p className="text-xs text-muted">Applies to new pricing and orders. Existing orders keep the currency they were placed in.</p>
             </div>
             <div className="sm:col-span-2">
               <Button type="submit" size="sm">

@@ -42,12 +42,69 @@ export interface WebhookVerificationInput {
   signatureHeader: string | null;
 }
 
+export interface CreateCustomerInput {
+  email: string;
+  name: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CreateCustomerResult {
+  providerCustomerId: string;
+}
+
+export interface CreateSubscriptionInput {
+  providerCustomerId: string;
+  /** Provider-side plan/price identifier, or a description for providers without pre-defined plans. */
+  planReference: string;
+  amount: number;
+  currency: string;
+  billingCycle: "MONTHLY" | "YEARLY";
+  trialDays?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CreateSubscriptionResult {
+  providerSubscriptionId: string;
+  status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "CANCELLED" | "EXPIRED";
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+}
+
+export interface CancelSubscriptionResult {
+  status: "CANCELLED";
+  cancelledAt: string;
+}
+
+/**
+ * Not every payment provider supports every capability (e.g. a simple
+ * checkout-only provider may not support recurring subscriptions or a
+ * customer object). Declared explicitly so calling code can check before
+ * calling an optional method instead of discovering a missing feature at
+ * runtime via a thrown error.
+ */
+export interface PaymentProviderCapabilities {
+  supportsSubscriptions: boolean;
+  supportsRefunds: boolean;
+  supportsCustomers: boolean;
+  supportsWebhooks: boolean;
+}
+
 export interface PaymentProvider extends ProviderAdapterBase {
-  initializePayment(input: InitializePaymentInput): Promise<InitializePaymentResult>;
+  readonly capabilities: PaymentProviderCapabilities;
+
+  createPayment(input: InitializePaymentInput): Promise<InitializePaymentResult>;
   verifyPayment(providerReference: string): Promise<VerifyPaymentResult>;
-  refund(input: RefundInput): Promise<RefundResult>;
+  /** Alias of verifyPayment kept distinct for callers that just want transaction lookup, not a re-verify side effect. */
+  getTransaction(providerReference: string): Promise<VerifyPaymentResult>;
+  refundPayment(input: RefundInput): Promise<RefundResult>;
+
   /** Verifies an inbound webhook's signature before its payload is trusted. */
   verifyWebhookSignature(input: WebhookVerificationInput): boolean;
   /** Parses a verified webhook body into a normalized event. */
-  parseWebhookEvent(rawBody: string): { type: string; providerReference: string; raw: unknown };
+  handleWebhook(rawBody: string): { type: string; providerReference: string; raw: unknown };
+
+  // Optional -- only present when capabilities.supportsCustomers / supportsSubscriptions are true.
+  createCustomer?(input: CreateCustomerInput): Promise<CreateCustomerResult>;
+  createSubscription?(input: CreateSubscriptionInput): Promise<CreateSubscriptionResult>;
+  cancelSubscription?(providerSubscriptionId: string): Promise<CancelSubscriptionResult>;
 }

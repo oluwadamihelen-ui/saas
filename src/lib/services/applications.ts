@@ -64,7 +64,7 @@ export async function getApplicationBySlug(slug: string) {
       features: { orderBy: { sortOrder: "asc" } },
       pricing: { where: { isActive: true }, orderBy: { sortOrder: "asc" } },
       reviews: { orderBy: { createdAt: "desc" }, take: 10 },
-      versions: { where: { isCurrent: true }, take: 1 },
+      versions: { where: { isLatest: true }, take: 1, include: { deploymentSpecification: true, artifact: true } },
     },
   });
 }

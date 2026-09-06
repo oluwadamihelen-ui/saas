@@ -54,7 +54,7 @@ export default async function DeploymentDetailPage({ params }: { params: Promise
         </Card>
       </div>
 
-      {deployment.domain && (
+      {deployment.domain ? (
         <Card>
           <CardContent className="flex items-center justify-between">
             <div>
@@ -66,7 +66,19 @@ export default async function DeploymentDetailPage({ params }: { params: Promise
             </a>
           </CardContent>
         </Card>
-      )}
+      ) : deployment.previewUrl && deployment.status === "COMPLETED" ? (
+        <Card>
+          <CardContent className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Application URL</p>
+              <p className="text-sm text-muted">No custom domain connected yet — using a preview URL.</p>
+            </div>
+            <a href={deployment.previewUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-accent">
+              Visit site
+            </a>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

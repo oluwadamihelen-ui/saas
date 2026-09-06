@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { markOrderPaid } from "@/lib/services/orders";
@@ -22,10 +23,20 @@ async function resolveProvider(key: string): Promise<PaymentProvider | null> {
   return null;
 }
 
+/** Best-effort dedup key: the provider's own event/transaction id if present, else a hash of the body. */
+function extractEventId(rawBody: string, parsed: unknown): string {
+  const payload = parsed as { id?: unknown; data?: { id?: unknown } };
+  const providerId = payload?.data?.id ?? payload?.id;
+  if (providerId !== undefined && providerId !== null) return String(providerId);
+  return crypto.createHash("sha256").update(rawBody).digest("hex");
+}
+
 /**
  * Payment providers call this URL, not the browser. We never trust a
  * frontend-reported "payment successful" state -- every order is only
- * marked paid after the signature on this webhook body is verified.
+ * marked paid after the signature on this webhook body is verified, and
+ * every event is processed at most once (a provider retrying delivery of
+ * the same event must not double-apply a payment).
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ provider: string }> }) {
   const { provider: providerKey } = await params;
@@ -43,8 +54,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pro
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
-  const event = provider.parseWebhookEvent(rawBody);
-  const verified = await provider.verifyPayment(event.providerReference);
+  const event = provider.handleWebhook(rawBody);
+  const eventId = extractEventId(rawBody, event.raw);
 
   const order = await prisma.order.findFirst({ where: { transactionRef: event.providerReference } });
   if (!order) {
@@ -52,17 +63,56 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pro
     return NextResponse.json({ error: "Order not found" }, { status: 404 });
   }
 
-  if (verified.status === "PAID") {
-    await markOrderPaid(order.id, {
-      provider: providerKey,
-      providerRef: event.providerReference,
-      amount: verified.amount || Number(order.total),
-      currency: verified.currency || order.currency,
+  // Idempotency: record this (provider, eventId) pair before doing any work.
+  // A unique-constraint violation means we've already processed this exact
+  // event (a provider retry), so we acknowledge and stop -- never re-apply.
+  try {
+    await prisma.paymentWebhookEvent.create({
+      data: { provider: providerKey, eventId, eventType: event.type, orderId: order.id, payload: event.raw as never },
     });
-    await fulfillOrder(order.id);
-  } else {
-    logger.warn("webhook.payment_not_confirmed", { orderId: order.id, status: verified.status });
+  } catch (err) {
+    const isDuplicate = err instanceof Error && "code" in err && (err as { code?: string }).code === "P2002";
+    if (isDuplicate) {
+      logger.info("webhook.duplicate_event_ignored", { providerKey, eventId, orderId: order.id });
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+    throw err;
   }
+
+  const verified = await provider.verifyPayment(event.providerReference);
+
+  if (verified.status !== "PAID") {
+    logger.warn("webhook.payment_not_confirmed", { orderId: order.id, status: verified.status });
+    return NextResponse.json({ received: true });
+  }
+
+  // Amount/currency validation: the webhook (or the verified transaction it
+  // points to) must match what the order actually expects. A mismatch means
+  // something is wrong -- a tampered reference, a provider bug, or an
+  // attempted underpayment -- and must never silently mark the order paid.
+  const expectedAmount = Number(order.total);
+  const paidAmount = verified.amount || expectedAmount;
+  const amountMatches = Math.abs(paidAmount - expectedAmount) < 0.01;
+  const currencyMatches = !verified.currency || verified.currency.toUpperCase() === order.currency.toUpperCase();
+
+  if (!amountMatches || !currencyMatches) {
+    logger.error("webhook.amount_currency_mismatch", {
+      orderId: order.id,
+      expectedAmount,
+      paidAmount,
+      expectedCurrency: order.currency,
+      paidCurrency: verified.currency,
+    });
+    return NextResponse.json({ error: "Amount or currency mismatch" }, { status: 409 });
+  }
+
+  await markOrderPaid(order.id, {
+    provider: providerKey,
+    providerRef: event.providerReference,
+    amount: paidAmount,
+    currency: verified.currency || order.currency,
+  });
+  await fulfillOrder(order.id);
 
   return NextResponse.json({ received: true });
 }

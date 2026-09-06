@@ -24,11 +24,23 @@ export async function saveLegalDocument(slug: string, formData: FormData) {
   revalidatePath(`/legal/${slug}`);
 }
 
-const generalSchema = z.object({ companyName: z.string().trim().min(1).max(200), supportEmail: z.string().trim().email() });
+const generalSchema = z.object({
+  companyName: z.string().trim().min(1).max(200),
+  supportEmail: z.string().trim().email(),
+  currency: z
+    .string()
+    .trim()
+    .length(3)
+    .transform((v) => v.toUpperCase()),
+});
 
 export async function saveGeneralSettings(formData: FormData) {
   const user = await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
-  const parsed = generalSchema.parse({ companyName: formData.get("companyName"), supportEmail: formData.get("supportEmail") });
+  const parsed = generalSchema.parse({
+    companyName: formData.get("companyName"),
+    supportEmail: formData.get("supportEmail"),
+    currency: formData.get("currency"),
+  });
 
   await prisma.setting.upsert({ where: { key: "general" }, update: { value: parsed }, create: { key: "general", value: parsed } });
 

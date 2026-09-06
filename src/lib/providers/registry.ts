@@ -6,7 +6,7 @@ import { MockDomainProvider } from "./domain/mock";
 import { HostingProvider } from "./hosting/types";
 import { MockHostingProvider } from "./hosting/mock";
 import { DeploymentProviderAdapter } from "./deployment/types";
-import { MockDeploymentProvider } from "./deployment/mock";
+import { deploymentAdapterRegistry } from "./deployment/registry";
 import { EmailProvider } from "./email/types";
 import { MockEmailProvider } from "./email/mock";
 import { prisma } from "@/lib/db";
@@ -54,10 +54,9 @@ export async function getHostingProvider(): Promise<HostingProvider> {
   return cachedHostingProvider;
 }
 
-let cachedDeploymentProvider: DeploymentProviderAdapter | null = null;
+/** Default/system-wide deployment adapter (used for the admin "test connection" check). Per-deployment resolution goes through deploymentAdapterRegistry keyed by DeploymentTarget.provider. */
 export async function getDeploymentProvider(): Promise<DeploymentProviderAdapter> {
-  if (!cachedDeploymentProvider) cachedDeploymentProvider = new MockDeploymentProvider();
-  return cachedDeploymentProvider;
+  return deploymentAdapterRegistry.resolve(process.env.DEPLOYMENT_PROVIDER ?? "mock");
 }
 
 let cachedEmailProvider: EmailProvider | null = null;

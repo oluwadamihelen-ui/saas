@@ -12,7 +12,12 @@ export default async function EditApplicationPage({ params }: { params: Promise<
   const [application, categories] = await Promise.all([
     prisma.application.findUnique({
       where: { id },
-      include: { images: true, features: true, pricing: true, versions: { where: { isCurrent: true }, take: 1 } },
+      include: {
+        images: true,
+        features: true,
+        pricing: true,
+        versions: { where: { isLatest: true }, take: 1, include: { deploymentSpecification: true } },
+      },
     }),
     prisma.category.findMany({ orderBy: { name: "asc" } }),
   ]);
@@ -51,10 +56,10 @@ export default async function EditApplicationPage({ params }: { params: Promise<
           installationPrice: pricingByType.INSTALLATION ?? 0,
           customizationPrice: pricingByType.CUSTOMIZATION ?? 0,
           maintenancePrice: pricingByType.MAINTENANCE ?? 0,
-          runtime: version?.runtime ?? "",
-          databaseType: version?.databaseType ?? "",
-          buildCommand: version?.buildCommand ?? "",
-          startCommand: version?.startCommand ?? "",
+          runtime: version?.deploymentSpecification?.runtime ?? "",
+          databaseType: version?.deploymentSpecification?.databaseType ?? "",
+          buildCommand: version?.deploymentSpecification?.buildCommand ?? "",
+          startCommand: version?.deploymentSpecification?.startCommand ?? "",
           imageUrls: application.images.map((i) => i.url).join("\n"),
           features: application.features.map((f) => (f.description ? `${f.title}: ${f.description}` : f.title)).join("\n"),
         }}

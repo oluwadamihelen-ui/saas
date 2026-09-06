@@ -2,9 +2,15 @@ import crypto from "crypto";
 import { logger } from "@/lib/security/logger";
 import { ProviderTestResult } from "../types";
 import {
+  CancelSubscriptionResult,
+  CreateCustomerInput,
+  CreateCustomerResult,
+  CreateSubscriptionInput,
+  CreateSubscriptionResult,
   InitializePaymentInput,
   InitializePaymentResult,
   PaymentProvider,
+  PaymentProviderCapabilities,
   RefundInput,
   RefundResult,
   VerifyPaymentResult,
@@ -21,6 +27,12 @@ const PAYSTACK_BASE_URL = "https://api.paystack.co";
 export class PaystackPaymentProvider implements PaymentProvider {
   readonly key = "paystack";
   readonly label = "Paystack";
+  readonly capabilities: PaymentProviderCapabilities = {
+    supportsSubscriptions: true,
+    supportsRefunds: true,
+    supportsCustomers: true,
+    supportsWebhooks: true,
+  };
 
   constructor(private readonly secretKey: string) {}
 
@@ -54,7 +66,7 @@ export class PaystackPaymentProvider implements PaymentProvider {
     }
   }
 
-  async initializePayment(input: InitializePaymentInput): Promise<InitializePaymentResult> {
+  async createPayment(input: InitializePaymentInput): Promise<InitializePaymentResult> {
     const data = await this.request<{ authorization_url: string; reference: string }>("/transaction/initialize", {
       method: "POST",
       body: JSON.stringify({
@@ -87,7 +99,11 @@ export class PaystackPaymentProvider implements PaymentProvider {
     };
   }
 
-  async refund(input: RefundInput): Promise<RefundResult> {
+  async getTransaction(providerReference: string): Promise<VerifyPaymentResult> {
+    return this.verifyPayment(providerReference);
+  }
+
+  async refundPayment(input: RefundInput): Promise<RefundResult> {
     const data = await this.request<{ status: string }>("/refund", {
       method: "POST",
       body: JSON.stringify({ transaction: input.providerReference, amount: Math.round(input.amount * 100) }),
@@ -103,8 +119,43 @@ export class PaystackPaymentProvider implements PaymentProvider {
     return input.signatureHeader === expected;
   }
 
-  parseWebhookEvent(rawBody: string) {
+  handleWebhook(rawBody: string) {
     const payload = JSON.parse(rawBody);
     return { type: payload.event, providerReference: payload.data?.reference, raw: payload };
+  }
+
+  async createCustomer(input: CreateCustomerInput): Promise<CreateCustomerResult> {
+    const [firstName, ...rest] = input.name.split(" ");
+    const data = await this.request<{ customer_code: string }>("/customer", {
+      method: "POST",
+      body: JSON.stringify({ email: input.email, first_name: firstName, last_name: rest.join(" ") || firstName }),
+    });
+    return { providerCustomerId: data.customer_code };
+  }
+
+  async createSubscription(input: CreateSubscriptionInput): Promise<CreateSubscriptionResult> {
+    const data = await this.request<{
+      subscription_code: string;
+      status: string;
+      next_payment_date: string;
+    }>("/subscription", {
+      method: "POST",
+      body: JSON.stringify({ customer: input.providerCustomerId, plan: input.planReference }),
+    });
+    const now = new Date().toISOString();
+    return {
+      providerSubscriptionId: data.subscription_code,
+      status: data.status === "active" ? "ACTIVE" : "TRIAL",
+      currentPeriodStart: now,
+      currentPeriodEnd: data.next_payment_date ?? now,
+    };
+  }
+
+  async cancelSubscription(providerSubscriptionId: string): Promise<CancelSubscriptionResult> {
+    await this.request("/subscription/disable", {
+      method: "POST",
+      body: JSON.stringify({ code: providerSubscriptionId, token: providerSubscriptionId }),
+    });
+    return { status: "CANCELLED", cancelledAt: new Date().toISOString() };
   }
 }

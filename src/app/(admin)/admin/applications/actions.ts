@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { requirePermission, requireUser } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { recordAuditLog } from "@/lib/security/audit";
+import { createApplicationVersion, getLatestVersion } from "@/lib/services/application-versions";
 
 function splitLines(value: FormDataEntryValue | null): string[] {
   return String(value ?? "")
@@ -135,18 +136,23 @@ export async function createApplication(formData: FormData) {
           return { title: title.trim(), description: rest.join(":").trim() || null, sortOrder: i };
         }),
       },
-      versions: {
-        create: {
-          version: data.currentVersion,
-          runtime: data.runtime,
-          databaseType: data.databaseType || null,
-          buildCommand: data.buildCommand || null,
-          startCommand: data.startCommand || null,
-          requiredServices: data.databaseType ? [data.databaseType] : [],
-          envVarsSchema: [],
-          isCurrent: true,
-        },
-      },
+    },
+  });
+
+  await createApplicationVersion({
+    applicationId: application.id,
+    version: data.currentVersion,
+    status: "STABLE",
+    isLatest: true,
+    isStable: true,
+    actorId: user.id,
+    spec: {
+      runtime: data.runtime,
+      databaseType: data.databaseType || undefined,
+      buildCommand: data.buildCommand || undefined,
+      startCommand: data.startCommand || undefined,
+      requiredServices: data.databaseType ? [data.databaseType] : [],
+      environmentVariables: [],
     },
   });
 
@@ -202,20 +208,38 @@ export async function updateApplication(applicationId: string, formData: FormDat
       }),
     });
 
-    const currentVersionRow = await tx.applicationVersion.findFirst({ where: { applicationId, isCurrent: true } });
-    if (currentVersionRow) {
-      await tx.applicationVersion.update({
-        where: { id: currentVersionRow.id },
-        data: {
-          version: data.currentVersion,
-          runtime: data.runtime,
-          databaseType: data.databaseType || null,
-          buildCommand: data.buildCommand || null,
-          startCommand: data.startCommand || null,
-        },
-      });
-    }
   });
+
+  const latestVersion = await getLatestVersion(applicationId);
+  if (latestVersion?.deploymentSpecificationId) {
+    await prisma.applicationVersion.update({ where: { id: latestVersion.id }, data: { version: data.currentVersion } });
+    await prisma.deploymentSpecification.update({
+      where: { id: latestVersion.deploymentSpecificationId },
+      data: {
+        runtime: data.runtime,
+        databaseType: data.databaseType || null,
+        buildCommand: data.buildCommand || null,
+        startCommand: data.startCommand || null,
+      },
+    });
+  } else {
+    await createApplicationVersion({
+      applicationId,
+      version: data.currentVersion,
+      status: "STABLE",
+      isLatest: true,
+      isStable: true,
+      actorId: user.id,
+      spec: {
+        runtime: data.runtime,
+        databaseType: data.databaseType || undefined,
+        buildCommand: data.buildCommand || undefined,
+        startCommand: data.startCommand || undefined,
+        requiredServices: data.databaseType ? [data.databaseType] : [],
+        environmentVariables: [],
+      },
+    });
+  }
 
   await syncPricing(applicationId, data);
   await recordAuditLog({

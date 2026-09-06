@@ -1,4 +1,3 @@
-import "server-only";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { createOrder, type CartLineInput } from "@/lib/services/orders";
@@ -103,7 +102,7 @@ export async function initiateCheckout(customerId: string, input: CheckoutInput,
   });
 
   const provider = await getPaymentProvider();
-  const payment = await provider.initializePayment({
+  const payment = await provider.createPayment({
     orderId: order.id,
     orderNumber: order.orderNumber,
     amount: Number(order.total),

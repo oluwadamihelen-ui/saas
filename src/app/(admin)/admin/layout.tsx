@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   LayoutDashboard,
   Package,
+  GitBranch,
   ShoppingBag,
   Users,
   Rocket,
@@ -25,6 +26,7 @@ const ICON_CLASS = "h-4 w-4";
 const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard", icon: <LayoutDashboard className={ICON_CLASS} /> },
   { href: "/admin/applications", label: "Applications", icon: <Package className={ICON_CLASS} /> },
+  { href: "/admin/versions", label: "Versions", icon: <GitBranch className={ICON_CLASS} /> },
   { href: "/admin/orders", label: "Orders", icon: <ShoppingBag className={ICON_CLASS} /> },
   { href: "/admin/customers", label: "Customers", icon: <Users className={ICON_CLASS} /> },
   { href: "/admin/deployments", label: "Deployments", icon: <Rocket className={ICON_CLASS} /> },

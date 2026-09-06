@@ -1,4 +1,3 @@
-import "server-only";
 import { prisma } from "@/lib/db";
 import { getDomainProvider, getHostingProvider } from "@/lib/providers/registry";
 import { createDeployment } from "@/lib/services/deployments";
@@ -15,9 +14,10 @@ interface FulfillmentIntent {
 
 /**
  * Runs after a payment is confirmed: provisions the hosting account/domain
- * the customer selected at checkout (via the relevant provider) and enqueues
- * the deployment pipeline. Never runs inline with the payment webhook
- * response -- only kicks off the async work.
+ * the customer selected at checkout (via the relevant provider), creates the
+ * DeploymentTarget the customer described, and enqueues the deployment
+ * pipeline. Never runs inline with the payment webhook response -- only
+ * kicks off the async work.
  */
 export async function fulfillOrder(orderId: string) {
   const order = await prisma.order.findUniqueOrThrow({
@@ -90,6 +90,41 @@ export async function fulfillOrder(orderId: string) {
     }
   }
 
+  // Build the DeploymentTarget the customer described at checkout. Left
+  // unvalidated-but-recorded for CUSTOMER_SERVER (the pipeline's own
+  // validateTarget step is what turns a bad hostname into
+  // NEEDS_CUSTOMER_ACTION, not a hard failure here).
+  let deploymentTargetId: string | undefined;
+  if (intent.deploymentType === "CUSTOMER_SERVER") {
+    const target = await prisma.deploymentTarget.create({
+      data: {
+        customerId: order.customerId,
+        type: "CUSTOMER_SERVER",
+        provider: "ssh",
+        label: "Customer server (from checkout)",
+        hostname: intent.serverHost ?? undefined,
+        port: intent.serverPort ?? undefined,
+        controlPanel: intent.controlPanel ?? undefined,
+        domainId,
+        status: "PENDING",
+      },
+    });
+    deploymentTargetId = target.id;
+  } else if (intent.deploymentType === "PLATFORM_HOSTING" && hostingAccountId) {
+    const target = await prisma.deploymentTarget.create({
+      data: {
+        customerId: order.customerId,
+        type: "PLATFORM_HOSTING",
+        provider: "cloud",
+        label: "Platform-managed hosting",
+        hostingAccountId,
+        domainId,
+        status: "ACTIVE",
+      },
+    });
+    deploymentTargetId = target.id;
+  }
+
   await createDeployment({
     customerId: order.customerId,
     orderId: order.id,
@@ -97,11 +132,7 @@ export async function fulfillOrder(orderId: string) {
     type: intent.deploymentType,
     domainId,
     hostingAccountId,
-    adapter: intent.deploymentType === "CUSTOMER_SERVER" ? "ssh" : "cloud",
-    serverConfig:
-      intent.deploymentType === "CUSTOMER_SERVER"
-        ? { host: intent.serverHost, port: intent.serverPort, controlPanel: intent.controlPanel }
-        : undefined,
+    deploymentTargetId,
   });
 
   await prisma.order.update({ where: { id: order.id }, data: { status: "IN_PROGRESS" } });

@@ -8,7 +8,7 @@ import { PERMISSIONS } from "@/lib/auth/permissions";
 import { recordAuditLog } from "@/lib/security/audit";
 import { getPaymentProvider } from "@/lib/providers/registry";
 
-const ORDER_STATUSES = ["PENDING_PAYMENT", "PAID", "PROCESSING", "AWAITING_CUSTOMER", "IN_PROGRESS", "COMPLETED", "CANCELLED", "REFUNDED"] as const;
+const ORDER_STATUSES = ["PENDING_PAYMENT", "PAID", "PROCESSING", "AWAITING_CUSTOMER", "IN_PROGRESS", "COMPLETED", "CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"] as const;
 
 export async function updateOrderStatus(orderId: string, formData: FormData) {
   const user = await requirePermission(PERMISSIONS.ORDERS_MANAGE);
@@ -43,7 +43,10 @@ export async function refundOrder(orderId: string, formData: FormData) {
   if (!payment) throw new Error("No paid payment found for this order");
 
   const provider = await getPaymentProvider();
-  const result = await provider.refund({ providerReference: payment.providerRef ?? "", amount: parsed.amount, reason: parsed.reason });
+  if (!provider.capabilities.supportsRefunds) {
+    throw new Error(`${provider.label} does not support refunds. Process this refund manually with the provider.`);
+  }
+  const result = await provider.refundPayment({ providerReference: payment.providerRef ?? "", amount: parsed.amount, reason: parsed.reason });
 
   await prisma.$transaction([
     prisma.refund.create({

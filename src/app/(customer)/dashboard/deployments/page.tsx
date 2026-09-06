@@ -1,9 +1,10 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Rocket } from "lucide-react";
+import { Plus, Rocket } from "lucide-react";
 import { requireUser } from "@/lib/auth/require";
 import { listDeploymentsForCustomer } from "@/lib/services/deployments";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatDate } from "@/lib/utils";
@@ -16,10 +17,26 @@ export default async function DeploymentsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Deployments</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight">Deployments</h1>
+        <Button asChild size="sm">
+          <Link href="/dashboard/deployments/new">
+            <Plus className="h-4 w-4" /> Deploy Application
+          </Link>
+        </Button>
+      </div>
 
       {deployments.length === 0 ? (
-        <EmptyState icon={<Rocket className="h-8 w-8" />} title="No deployments yet" description="Deployments appear here once you purchase an application." />
+        <EmptyState
+          icon={<Rocket className="h-8 w-8" />}
+          title="No deployments yet"
+          description="Deployments appear here once you purchase an application."
+          action={
+            <Button asChild size="sm" variant="secondary">
+              <Link href="/dashboard/deployments/new">Deploy an application</Link>
+            </Button>
+          }
+        />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {deployments.map((d) => (

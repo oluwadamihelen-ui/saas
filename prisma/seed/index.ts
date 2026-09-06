@@ -83,7 +83,7 @@ async function seedSettings() {
   await prisma.setting.upsert({
     where: { key: "general" },
     update: {},
-    create: { key: "general", value: { companyName: "Forgecart, Inc.", supportEmail: "support@forgecart.example" } },
+    create: { key: "general", value: { companyName: "Forgecart, Inc.", supportEmail: "support@forgecart.example", currency: "USD" } },
   });
 
   const legalDocs = [
@@ -325,22 +325,6 @@ async function seedApplications(categories: { id: string }[], adminId: string) {
             { type: "MAINTENANCE", name: "Maintenance Plan", amount: seed.maintenancePrice, billingCycle: "MONTHLY", sortOrder: 3 },
           ],
         },
-        versions: {
-          create: {
-            version: "1.0.0",
-            runtime: seed.runtime,
-            databaseType: seed.databaseType,
-            buildCommand: "npm run build",
-            startCommand: "npm start",
-            requiredServices: [seed.databaseType, "redis"].filter(Boolean),
-            envVarsSchema: [
-              { key: "DATABASE_URL", description: "PostgreSQL connection string", required: true, secret: true },
-              { key: "JWT_SECRET", description: "Secret used to sign auth tokens", required: true, secret: true },
-              { key: "NEXT_PUBLIC_APP_URL", description: "Public URL of the deployed application", required: true, secret: false },
-            ],
-            isCurrent: true,
-          },
-        },
         reviews: {
           create: [
             { customerName: "Tunde A.", rating: 5, comment: "Deployed in a day, works great." },
@@ -349,6 +333,61 @@ async function seedApplications(categories: { id: string }[], adminId: string) {
         },
       },
     });
+
+    // Idempotent: on a re-seed of an app that already exists, ensure it
+    // still has a published, isLatest version with a deployment
+    // specification instead of silently leaving it without one.
+    const hasLatestVersion = await prisma.applicationVersion.findFirst({ where: { applicationId: app.id, isLatest: true } });
+    if (!hasLatestVersion) {
+      const existingV1 = await prisma.applicationVersion.findFirst({ where: { applicationId: app.id, version: "1.0.0" } });
+      const specData = {
+        runtime: seed.runtime,
+        databaseType: seed.databaseType,
+        buildCommand: "npm run build",
+        startCommand: "npm start",
+        healthCheckPath: "/api/health",
+        requiredServices: [seed.databaseType, "redis"].filter(Boolean),
+        environmentVariables: [
+          { key: "DATABASE_URL", description: "PostgreSQL connection string", required: true, secret: true },
+          { key: "JWT_SECRET", description: "Secret used to sign auth tokens", required: true, secret: true },
+          { key: "NEXT_PUBLIC_APP_URL", description: "Public URL of the deployed application", required: true, secret: false, defaultValue: `https://demo.forgecart.example/${slug}` },
+        ],
+      };
+
+      if (existingV1) {
+        await prisma.applicationVersion.update({
+          where: { id: existingV1.id },
+          data: {
+            status: "STABLE",
+            isLatest: true,
+            isStable: true,
+            deploymentSpecification: existingV1.deploymentSpecificationId
+              ? { update: specData }
+              : { create: specData },
+            artifact: {
+              upsert: {
+                create: { type: "GIT_REPOSITORY", reference: `https://github.com/forgecart-apps/${slug}` },
+                update: {},
+              },
+            },
+          },
+        });
+      } else {
+        await prisma.applicationVersion.create({
+          data: {
+            application: { connect: { id: app.id } },
+            version: "1.0.0",
+            releaseName: "Initial release",
+            status: "STABLE",
+            isLatest: true,
+            isStable: true,
+            deploymentSpecification: { create: specData },
+            artifact: { create: { type: "GIT_REPOSITORY", reference: `https://github.com/forgecart-apps/${slug}` } },
+          },
+        });
+      }
+    }
+
     apps.push(app);
   }
   return apps;
@@ -407,17 +446,57 @@ function orderNumber(i: number) {
   return `ORD-2601-${String(100 + i).padStart(6, "0")}`;
 }
 
+// Seed data is meant to be re-runnable during development. Rather than
+// upserting every deep relation individually, clear out the previous
+// seed-generated demo scenario (identified by its deterministic prefixes)
+// before recreating it -- catalog data (apps, categories, plans) stays
+// untouched via upsert elsewhere in this script.
+async function clearSeededOrderScenarios() {
+  const staleOrders = await prisma.order.findMany({ where: { orderNumber: { startsWith: "ORD-2601-" } }, select: { id: true } });
+  const staleOrderIds = staleOrders.map((o) => o.id);
+  if (staleOrderIds.length === 0) return;
+
+  const staleDeployments = await prisma.deployment.findMany({ where: { orderId: { in: staleOrderIds } }, select: { id: true, deploymentTargetId: true } });
+  const staleDeploymentIds = staleDeployments.map((d) => d.id);
+  const staleTargetIds = staleDeployments.map((d) => d.deploymentTargetId).filter((id): id is string => Boolean(id));
+
+  await prisma.deploymentLog.deleteMany({ where: { deploymentId: { in: staleDeploymentIds } } });
+  await prisma.deploymentJob.deleteMany({ where: { deploymentId: { in: staleDeploymentIds } } });
+  await prisma.deployment.deleteMany({ where: { id: { in: staleDeploymentIds } } });
+  await prisma.deploymentCredential.deleteMany({ where: { deploymentTargetId: { in: staleTargetIds } } });
+  await prisma.deploymentTarget.deleteMany({ where: { id: { in: staleTargetIds } } });
+  await prisma.applicationLicense.deleteMany({ where: { orderId: { in: staleOrderIds } } });
+  await prisma.invoiceItem.deleteMany({ where: { invoice: { orderId: { in: staleOrderIds } } } });
+  await prisma.invoice.deleteMany({ where: { orderId: { in: staleOrderIds } } });
+  await prisma.payment.deleteMany({ where: { orderId: { in: staleOrderIds } } });
+  const staleHostingAccounts = await prisma.hostingAccount.findMany({ where: { providerAccountId: { startsWith: "mock_hosting_seed_" } }, select: { id: true } });
+  await prisma.subscription.deleteMany({ where: { referenceId: { in: staleHostingAccounts.map((h) => h.id) } } });
+  await prisma.hostingAccount.deleteMany({ where: { id: { in: staleHostingAccounts.map((h) => h.id) } } });
+  await prisma.domain.deleteMany({ where: { providerRef: { startsWith: "mock_domain_seed_" } } });
+  await prisma.orderItem.deleteMany({ where: { orderId: { in: staleOrderIds } } });
+  await prisma.order.deleteMany({ where: { id: { in: staleOrderIds } } });
+}
+
 async function seedOrdersAndDeployments(
   customers: { id: string; name: string; email: string }[],
   apps: { id: string; name: string; slug: string }[],
   hostingPlans: { id: string; name: string; priceMonthly: unknown }[]
 ) {
-  const scenarios: { customerIndex: number; appIndex: number; deploymentStatus: "COMPLETED" | "INSTALLING" | "FAILED" | "QUEUED"; withHosting: boolean; withDomain: boolean }[] = [
-    { customerIndex: 0, appIndex: 3, deploymentStatus: "COMPLETED", withHosting: true, withDomain: true },
-    { customerIndex: 0, appIndex: 0, deploymentStatus: "INSTALLING", withHosting: false, withDomain: false },
-    { customerIndex: 1, appIndex: 7, deploymentStatus: "COMPLETED", withHosting: true, withDomain: true },
-    { customerIndex: 2, appIndex: 5, deploymentStatus: "FAILED", withHosting: false, withDomain: false },
-    { customerIndex: 2, appIndex: 9, deploymentStatus: "QUEUED", withHosting: true, withDomain: false },
+  await clearSeededOrderScenarios();
+
+  const scenarios: {
+    customerIndex: number;
+    appIndex: number;
+    deploymentStatus: "COMPLETED" | "INSTALLING" | "FAILED" | "QUEUED";
+    deploymentType: "MANAGED" | "PLATFORM_HOSTING" | "CUSTOMER_SERVER";
+    withHosting: boolean;
+    withDomain: boolean;
+  }[] = [
+    { customerIndex: 0, appIndex: 3, deploymentStatus: "COMPLETED", deploymentType: "PLATFORM_HOSTING", withHosting: true, withDomain: true },
+    { customerIndex: 0, appIndex: 0, deploymentStatus: "INSTALLING", deploymentType: "MANAGED", withHosting: false, withDomain: false },
+    { customerIndex: 1, appIndex: 7, deploymentStatus: "COMPLETED", deploymentType: "PLATFORM_HOSTING", withHosting: true, withDomain: true },
+    { customerIndex: 2, appIndex: 5, deploymentStatus: "FAILED", deploymentType: "CUSTOMER_SERVER", withHosting: false, withDomain: false },
+    { customerIndex: 2, appIndex: 9, deploymentStatus: "QUEUED", deploymentType: "PLATFORM_HOSTING", withHosting: true, withDomain: false },
   ];
 
   let i = 0;
@@ -426,7 +505,7 @@ async function seedOrdersAndDeployments(
     const customer = customers[scenario.customerIndex];
     const app = apps[scenario.appIndex];
     const appPricing = await prisma.applicationPricing.findFirst({ where: { applicationId: app.id, type: "LICENSE" } });
-    const version = await prisma.applicationVersion.findFirstOrThrow({ where: { applicationId: app.id, isCurrent: true } });
+    const version = await prisma.applicationVersion.findFirstOrThrow({ where: { applicationId: app.id, isLatest: true } });
     const licenseAmount = Number(appPricing?.amount ?? 299);
     const hostingPlan = scenario.withHosting ? hostingPlans[0] : null;
     const hostingAmount = hostingPlan ? Number(hostingPlan.priceMonthly) : 0;
@@ -515,17 +594,33 @@ async function seedOrdersAndDeployments(
       domainId = domain.id;
     }
 
+    const deploymentTarget = await prisma.deploymentTarget.create({
+      data: {
+        customerId: customer.id,
+        type: scenario.deploymentType,
+        provider: scenario.deploymentType === "CUSTOMER_SERVER" ? "ssh" : "cloud",
+        label: scenario.deploymentType === "CUSTOMER_SERVER" ? "Customer server" : scenario.deploymentType === "PLATFORM_HOSTING" ? "Platform-managed hosting" : "Managed deployment",
+        hostname: scenario.deploymentType === "CUSTOMER_SERVER" ? `198.51.100.${10 + i}` : undefined,
+        port: scenario.deploymentType === "CUSTOMER_SERVER" ? 22 : undefined,
+        operatingSystem: scenario.deploymentType === "CUSTOMER_SERVER" ? "Ubuntu 22.04" : undefined,
+        hostingAccountId,
+        domainId,
+        status: "ACTIVE",
+      },
+    });
+
     const deployment = await prisma.deployment.create({
       data: {
         customerId: customer.id,
         orderId: order.id,
         applicationId: app.id,
         applicationVersionId: version.id,
-        type: hostingPlan ? "PLATFORM_HOSTING" : "MANAGED",
+        type: scenario.deploymentType,
         status: scenario.deploymentStatus,
         domainId,
         hostingAccountId,
-        adapter: "cloud",
+        deploymentTargetId: deploymentTarget.id,
+        previewUrl: domainId ? null : `https://${app.slug}-${i}.preview.forgecart.app`,
         healthStatus: scenario.deploymentStatus === "COMPLETED" ? "HEALTHY" : "UNKNOWN",
       },
     });
@@ -586,6 +681,10 @@ async function seedOrdersAndDeployments(
 }
 
 async function seedSupportTickets(customers: { id: string; name: string }[], staffId: string) {
+  const staleTickets = await prisma.supportTicket.findMany({ where: { ticketNumber: { startsWith: "TCK-SEED-" } }, select: { id: true } });
+  await prisma.supportMessage.deleteMany({ where: { ticketId: { in: staleTickets.map((t) => t.id) } } });
+  await prisma.supportTicket.deleteMany({ where: { id: { in: staleTickets.map((t) => t.id) } } });
+
   const ticketDefs = [
     { customerIndex: 0, subject: "Unable to access admin dashboard", category: "Technical", priority: "HIGH" as const, status: "IN_PROGRESS" as const },
     { customerIndex: 1, subject: "Question about renewing my domain", category: "Domain", priority: "MEDIUM" as const, status: "OPEN" as const },
