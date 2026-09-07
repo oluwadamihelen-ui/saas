@@ -23,6 +23,9 @@ Each app has its own `.env` (copy from its `.env.example`) and its own
 Postgres database — point `DATABASE_URL` at two different databases (or two
 different Postgres instances) so the two products stay fully isolated.
 
+**On Windows?** See [`WINDOWS_SETUP.md`](./WINDOWS_SETUP.md) for step-by-step
+Command Prompt instructions.
+
 ---
 
 ## School platform — architecture assessment (Phase 1 kickoff)

@@ -1,22 +1,24 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f6f7f5;
+  /* Winfield Montessori School brand: royal blue crest + magenta wordmark */
+  --background: #f5f7fb;
   --surface: #ffffff;
-  --foreground: #10231c;
-  --muted: #5b6b64;
-  --muted-surface: #eef1ee;
-  --border: #e1e6e1;
-  --accent: #0f6f5c;
+  --foreground: #131a2b;
+  --muted: #5b6478;
+  --muted-surface: #eef1f7;
+  --border: #dfe3ee;
+  --accent: #1a6fba;
   --accent-foreground: #ffffff;
-  --accent-soft: #e4f3ee;
-  --secondary: #b45309;
-  --secondary-soft: #fef3e2;
+  --accent-soft: #e6f1fb;
+  --secondary: #e2007f;
+  --secondary-foreground: #ffffff;
+  --secondary-soft: #fce6f2;
   --success: #0d8a4f;
   --success-soft: #e7f7ee;
   --warning: #b45309;
   --warning-soft: #fef3e2;
-  --danger: #c81e3a;
+  --danger: #d21f3c;
   --danger-soft: #fdeaee;
   --radius: 0.625rem;
 }
@@ -32,6 +34,7 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-accent-soft: var(--accent-soft);
   --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary-soft: var(--secondary-soft);
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
