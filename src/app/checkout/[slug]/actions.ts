@@ -5,6 +5,10 @@ import { headers } from "next/headers";
 import { requireUser } from "@/lib/auth/require";
 import { checkoutSchema, initiateCheckout } from "@/lib/services/checkout";
 import { logger } from "@/lib/security/logger";
+import { checkRateLimit } from "@/lib/security/rate-limit";
+
+const CHECKOUT_LIMIT = 10;
+const CHECKOUT_WINDOW_SECONDS = 60;
 
 export interface CheckoutFormState {
   status: "idle" | "error";
@@ -13,6 +17,15 @@ export interface CheckoutFormState {
 
 export async function submitCheckout(_prev: CheckoutFormState, formData: FormData): Promise<CheckoutFormState> {
   const user = await requireUser();
+
+  // Each successful submit calls the payment provider's createPayment API
+  // and creates an Order -- caps how many a single account can spam in a
+  // minute (accidental double-clicks are well under this; scripted abuse
+  // isn't).
+  const rateLimit = await checkRateLimit(`checkout:${user.id}`, CHECKOUT_LIMIT, CHECKOUT_WINDOW_SECONDS);
+  if (!rateLimit.allowed) {
+    return { status: "error", message: "Too many checkout attempts. Please wait a moment and try again." };
+  }
 
   const parsed = checkoutSchema.safeParse({
     applicationId: formData.get("applicationId"),

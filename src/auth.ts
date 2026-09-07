@@ -4,6 +4,10 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/security/logger";
 import { authConfig } from "@/lib/auth/config";
+import { checkRateLimit } from "@/lib/security/rate-limit";
+
+const LOGIN_ATTEMPT_LIMIT = 10;
+const LOGIN_ATTEMPT_WINDOW_SECONDS = 15 * 60;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -18,6 +22,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const email = String(credentials?.email ?? "").toLowerCase().trim();
         const password = String(credentials?.password ?? "");
         if (!email || !password) return null;
+
+        // Rate limit by email, not IP -- protects a single account from
+        // credential-stuffing/brute force regardless of how distributed the
+        // attempt source is. Checked (and counted) even before the password
+        // is verified, so a flood of guesses against one address is capped
+        // whether or not any of them are close.
+        const rateLimit = await checkRateLimit(`login:${email}`, LOGIN_ATTEMPT_LIMIT, LOGIN_ATTEMPT_WINDOW_SECONDS);
+        if (!rateLimit.allowed) {
+          logger.warn("auth.login_rate_limited", { email, count: rateLimit.count });
+          return null;
+        }
 
         const user = await prisma.user.findUnique({
           where: { email },

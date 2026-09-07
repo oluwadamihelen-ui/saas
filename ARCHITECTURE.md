@@ -16,7 +16,8 @@ This document describes the system as implemented through **Phase 1
 (Foundation)**, **Phase 2 (Payments, Billing & Commercial Foundation)**,
 **Phase 3 (Application Versioning & Deployment Foundation)**,
 **Phase 4 (Domains)**, **Phase 5 (Hosting)**, **Phase 6 (Business
-Operations)**, and **Phase 7 (Advanced)** — see [Phased Plan](#phased-plan).
+Operations)**, **Phase 7 (Advanced)**, and **Phase 8 (Production
+Readiness)** — see [Phased Plan](#phased-plan).
 
 ## 1. Recommended Architecture
 
@@ -804,6 +805,44 @@ pre-degraded deployment rather than genuine failure detection) and payouts
 consistent with this codebase never faking a third-party integration);
 per-application commission rate overrides (today it's platform-wide only).
 
+**Phase 8 — Production Readiness (delivered, not in the original 7-phase
+roadmap).** Requested directly rather than drawn from the Phased Plan above:
+real provider integrations beyond payments, and closing the operational
+gaps no earlier phase covered. `lib/providers/email/resend.ts` is a real
+Resend adapter (same shape as `PaystackPaymentProvider`: env var or DB
+credential, gated behind `EMAIL_PROVIDER=resend`) — email was previously
+100% mock despite `EMAIL_PROVIDER` existing in `.env.example`, since
+`getEmailProvider()` never actually read it. The Paystack payment webhook
+(`api/webhooks/[provider]/route.ts`) now branches on `event.type`: only
+`charge.success` goes through order lookup and verification; every other
+event type (subscription lifecycle, refunds, transfers) is acknowledged and
+recorded for auditability without being forced through a path built for
+charges, where `event.providerReference` isn't reliably an
+`Order.transactionRef` at all. `lib/security/rate-limit.ts` is a
+Redis-backed fixed-window limiter (no new infrastructure — reuses BullMQ's
+connection) applied to login (by email), `/api/licenses/verify` and
+`/api/domains/search` (by IP), and both checkout actions (by customer id).
+`GET /api/health` checks Postgres and Redis connectivity for load
+balancers/uptime monitors. `src/instrumentation.ts` uses Next's native
+`onRequestError` hook to catch every uncaught server error in one place for
+the first time, with an optional `ERROR_WEBHOOK_URL` for external alerting.
+`.github/workflows/ci.yml` runs lint, typecheck, tests, and a build on every
+push/PR — there was no CI at all before this. `scripts/backup-db.sh` /
+`restore-db.sh` cover Postgres backup/restore, tested for real against the
+dev database (a genuine `pg_dump`/`pg_restore`-compatible archive, not just
+written and assumed correct). See §14 for operational detail on all of the
+above. Remaining, deliberately: no Sentry SDK (the dependency-free
+`onRequestError` hook already reports everywhere that matters; adding
+Sentry is a drop-in addition to that same hook once there's a real DSN to
+verify it against, not a rewrite) — real domain/hosting/deployment adapters
+are unchanged from Phase 7 (still 100% mock; nothing about this phase's
+audit found a reason to prioritize one over shipping the operational gaps
+that affect every provider equally) — Paystack's `createCustomer` /
+`createSubscription` / `cancelSubscription` are implemented but still
+unused by any application flow (recurring billing today goes through the
+platform's own Order/Subscription/renewal-sweep pattern, not a provider-
+native subscription).
+
 ## 13. Local Development
 
 ```bash
@@ -825,4 +864,52 @@ Demo accounts (seeded, password `Passw0rd!` for all): `admin@bridgecodes.example
 Everything runs against mock providers out of the box — no real payment,
 domain, or hosting credentials required. Setting `PAYMENT_PROVIDER=paystack`
 plus `PAYSTACK_SECRET_KEY` (or saving the credential from Admin → Providers)
-activates the real Paystack adapter without any code change.
+activates the real Paystack adapter without any code change. The same shape
+applies to `EMAIL_PROVIDER=resend` plus `RESEND_API_KEY`.
+
+## 14. Operations
+
+**Database backups.** `scripts/backup-db.sh` runs `pg_dump` (custom format,
+restorable with `pg_restore`) to a timestamped file under `backups/`
+(gitignored):
+
+```bash
+./scripts/backup-db.sh              # backups/saas_platform_<timestamp>.dump
+./scripts/backup-db.sh --keep 7      # also prune older than the 7 most recent
+```
+
+`scripts/restore-db.sh <dump-file>` restores one (destructively — it drops
+existing objects first — so it asks for interactive confirmation unless
+`RESTORE_CONFIRM=yes` is set for scripted use). Both scripts strip the
+`?schema=` query param Prisma's connection string convention adds, since
+plain `pg_dump`/`pg_restore` don't understand it. Wire `backup-db.sh` into a
+cron job for actual production use, and sync `backups/` to remote storage
+(S3, GCS, ...) afterward — this script only handles the local dump; where it
+ends up long-term is a deployment decision, not a platform one.
+
+**Health check.** `GET /api/health` checks Postgres (`SELECT 1` via Prisma)
+and Redis (`PING`) connectivity and returns `200` with
+`{ status: "healthy", checks: {...} }` when both succeed, `503` otherwise —
+point a load balancer, container orchestrator, or uptime monitor at it.
+
+**Rate limiting.** `lib/security/rate-limit.ts` is a fixed-window counter
+backed by the same Redis instance BullMQ already uses (no extra
+infrastructure). Applied to: login (`auth.ts`, keyed by email — 10 attempts /
+15 min), `/api/licenses/verify` and `/api/domains/search` (keyed by
+`x-forwarded-for` — 60/min and 30/min), and both checkout actions (keyed by
+customer id, shared across the app and bundle entry points — 10/min).
+
+**Observability.** `src/instrumentation.ts` uses Next's native
+`onRequestError` hook (stable since 15.0) to catch every uncaught server
+error — Server Components, Route Handlers, and Server Actions alike — in one
+place, logged through the existing structured logger. If `ERROR_WEBHOOK_URL`
+is set, the same payload is also POSTed there (Sentry, a Slack incoming
+webhook, anything that accepts JSON) — best-effort; a failure to deliver
+never affects the response. No Sentry SDK: adding one is the natural next
+step in this same seam, deferred because pulling in a full APM SDK sight
+unseen, against a Next major version this new, without a real DSN to verify
+it against, was a worse trade than a working dependency-free hook.
+
+**CI.** `.github/workflows/ci.yml` runs lint, typecheck, the full test suite
+(against real Postgres/Redis service containers), and a production build on
+every push and pull request.

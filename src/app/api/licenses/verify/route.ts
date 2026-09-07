@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyLicense, verifyLicenseSchema } from "@/lib/services/licenses";
 import { logger } from "@/lib/security/logger";
+import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
+
+const VERIFY_LIMIT = 60;
+const VERIFY_WINDOW_SECONDS = 60;
 
 /**
  * Public license-verification endpoint: a deployed customer application
@@ -10,6 +14,11 @@ import { logger } from "@/lib/security/logger";
  * key verification endpoint.
  */
 export async function POST(req: NextRequest) {
+  const rateLimit = await checkRateLimit(`licenses-verify:${getClientIp(req)}`, VERIFY_LIMIT, VERIFY_WINDOW_SECONDS);
+  if (!rateLimit.allowed) {
+    return NextResponse.json({ valid: false, reason: "Too many verification requests. Please slow down." }, { status: 429 });
+  }
+
   let body: unknown;
   try {
     body = await req.json();

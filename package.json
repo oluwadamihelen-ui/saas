@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "worker": "tsx --tsconfig tsconfig.json scripts/worker.ts",
     "db:seed": "tsx --tsconfig tsconfig.json prisma/seed/index.ts",
     "test": "vitest run",

@@ -71,6 +71,7 @@ async function seedProviders() {
     { name: "Mock Hosting", type: "HOSTING", adapterKey: "mock", isDefault: true },
     { name: "Mock Deployment", type: "DEPLOYMENT", adapterKey: "mock", isDefault: true },
     { name: "Mock Email", type: "EMAIL", adapterKey: "mock", isDefault: true },
+    { name: "Resend", type: "EMAIL", adapterKey: "resend", isDefault: false },
   ];
 
   for (const p of providers) {

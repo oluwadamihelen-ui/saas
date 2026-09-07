@@ -13,6 +13,7 @@ import { MockDomainProvider } from "@/lib/providers/domain/mock";
 import { MockHostingProvider } from "@/lib/providers/hosting/mock";
 import { MockDeploymentProvider } from "@/lib/providers/deployment/mock";
 import { MockEmailProvider } from "@/lib/providers/email/mock";
+import { ResendEmailProvider } from "@/lib/providers/email/resend";
 import type { ProviderAdapterBase } from "@/lib/providers/types";
 
 async function resolveAdapter(providerId: string): Promise<ProviderAdapterBase | null> {
@@ -39,6 +40,12 @@ async function resolveAdapter(providerId: string): Promise<ProviderAdapterBase |
     const secretCred = provider.credentials.find((c) => c.key === "secretKey");
     if (!secretCred) return null;
     return new PaystackPaymentProvider(decryptSecret(secretCred.encryptedValue));
+  }
+
+  if (provider.adapterKey === "resend") {
+    const apiKeyCred = provider.credentials.find((c) => c.key === "apiKey");
+    if (!apiKeyCred) return null;
+    return new ResendEmailProvider(decryptSecret(apiKeyCred.encryptedValue));
   }
 
   return null;

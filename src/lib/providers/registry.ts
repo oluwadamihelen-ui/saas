@@ -9,6 +9,7 @@ import { DeploymentProviderAdapter } from "./deployment/types";
 import { deploymentAdapterRegistry } from "./deployment/registry";
 import { EmailProvider } from "./email/types";
 import { MockEmailProvider } from "./email/mock";
+import { ResendEmailProvider } from "./email/resend";
 import { prisma } from "@/lib/db";
 import { decryptSecret } from "@/lib/security/encryption";
 import { logger } from "@/lib/security/logger";
@@ -86,6 +87,11 @@ export async function getDeploymentProvider(): Promise<DeploymentProviderAdapter
 }
 
 export async function getEmailProvider(): Promise<EmailProvider> {
+  const preferred = process.env.EMAIL_PROVIDER ?? "mock";
+  if (preferred === "resend") {
+    const apiKey = process.env.RESEND_API_KEY || (await getCredential("resend", "EMAIL", "apiKey"));
+    if (apiKey) return new ResendEmailProvider(apiKey);
+  }
   if (!global.__cachedEmailProvider) global.__cachedEmailProvider = new MockEmailProvider();
   return global.__cachedEmailProvider;
 }

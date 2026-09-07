@@ -5,6 +5,10 @@ import { headers } from "next/headers";
 import { requireUser } from "@/lib/auth/require";
 import { bundleCheckoutSchema, initiateBundleCheckout } from "@/lib/services/bundles";
 import { logger } from "@/lib/security/logger";
+import { checkRateLimit } from "@/lib/security/rate-limit";
+
+const CHECKOUT_LIMIT = 10;
+const CHECKOUT_WINDOW_SECONDS = 60;
 
 export interface BundleCheckoutFormState {
   status: "idle" | "error";
@@ -13,6 +17,13 @@ export interface BundleCheckoutFormState {
 
 export async function submitBundleCheckout(_prev: BundleCheckoutFormState, formData: FormData): Promise<BundleCheckoutFormState> {
   const user = await requireUser();
+
+  // Same shared key as the app checkout action -- one counter per customer
+  // across both entry points, not one budget each.
+  const rateLimit = await checkRateLimit(`checkout:${user.id}`, CHECKOUT_LIMIT, CHECKOUT_WINDOW_SECONDS);
+  if (!rateLimit.allowed) {
+    return { status: "error", message: "Too many checkout attempts. Please wait a moment and try again." };
+  }
 
   const parsed = bundleCheckoutSchema.safeParse({
     bundleId: formData.get("bundleId"),

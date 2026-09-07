@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getDomainProvider } from "@/lib/providers/registry";
 import { logger } from "@/lib/security/logger";
+import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
 
 const DEFAULT_TLDS = ["com", "ng", "org", "net", "co", "io", "app"];
+const SEARCH_LIMIT = 30;
+const SEARCH_WINDOW_SECONDS = 60;
 
 const querySchema = z.object({
   q: z
@@ -15,6 +18,11 @@ const querySchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
+  const rateLimit = await checkRateLimit(`domains-search:${getClientIp(req)}`, SEARCH_LIMIT, SEARCH_WINDOW_SECONDS);
+  if (!rateLimit.allowed) {
+    return NextResponse.json({ error: "Too many searches. Please slow down." }, { status: 429 });
+  }
+
   const parsed = querySchema.safeParse({ q: req.nextUrl.searchParams.get("q") ?? "" });
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid query" }, { status: 400 });

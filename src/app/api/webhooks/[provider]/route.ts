@@ -13,6 +13,16 @@ const SIGNATURE_HEADERS: Record<string, string> = {
   paystack: "x-paystack-signature",
 };
 
+// Every provider adapter's handleWebhook() normalizes to this type for a
+// successful charge (see MockPaymentProvider/PaystackPaymentProvider).
+// Anything else -- subscription lifecycle events, refunds, transfers, etc. --
+// isn't handled by this route yet and must never be forced through the
+// charge-verification path below: event.providerReference on those events
+// often isn't an Order.transactionRef at all, so treating it as one risks
+// either a spurious 404 or, worse, an accidental match against an unrelated
+// order.
+const CHARGE_SUCCESS_EVENT_TYPE = "charge.success";
+
 async function resolveProvider(key: string): Promise<PaymentProvider | null> {
   // Route through the same cached instance checkout uses (getPaymentProvider)
   // rather than constructing a fresh MockPaymentProvider -- its transaction
@@ -60,6 +70,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pro
 
   const event = provider.handleWebhook(rawBody);
   const eventId = extractEventId(rawBody, event.raw);
+
+  if (event.type !== CHARGE_SUCCESS_EVENT_TYPE) {
+    logger.info("webhook.event_type_ignored", { providerKey, eventType: event.type });
+    try {
+      await prisma.paymentWebhookEvent.create({
+        data: { provider: providerKey, eventId, eventType: event.type, payload: event.raw as never },
+      });
+    } catch (err) {
+      const isDuplicate = err instanceof Error && "code" in err && (err as { code?: string }).code === "P2002";
+      if (!isDuplicate) throw err;
+    }
+    return NextResponse.json({ received: true, ignored: true, type: event.type });
+  }
 
   const order = await prisma.order.findFirst({ where: { transactionRef: event.providerReference } });
   if (!order) {
