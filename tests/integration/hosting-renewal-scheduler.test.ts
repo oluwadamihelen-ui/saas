@@ -78,6 +78,11 @@ describe("runHostingRenewalSweep", () => {
   });
 
   afterAll(async () => {
+    // Guard against beforeAll having thrown before these ids were assigned --
+    // an unscoped `where: { customerId: undefined }` matches every row in the
+    // table, so without this a setup failure would wipe unrelated data.
+    if (!customerId || !planId || !dueAccountId || !overdueAccountId) return;
+
     const accountIds = [dueAccountId, overdueAccountId];
     await prisma.deploymentTarget.deleteMany({ where: { hostingAccountId: { in: accountIds } } });
     await prisma.subscription.deleteMany({ where: { referenceId: { in: accountIds } } });

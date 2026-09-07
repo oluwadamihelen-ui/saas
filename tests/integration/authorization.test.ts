@@ -29,6 +29,11 @@ describe("effective permission resolution (role + per-user overrides)", () => {
   });
 
   afterAll(async () => {
+    // Guard against beforeAll having thrown before staffUserId was assigned --
+    // an unscoped `where: { userId: undefined }` matches every row in the
+    // table, so without this a setup failure would wipe unrelated data.
+    if (!staffUserId) return;
+
     await prisma.userPermission.deleteMany({ where: { userId: staffUserId } });
     await prisma.user.delete({ where: { id: staffUserId } });
   });

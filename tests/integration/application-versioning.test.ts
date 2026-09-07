@@ -32,6 +32,11 @@ describe("application versioning", () => {
   });
 
   afterAll(async () => {
+    // Guard against beforeAll having thrown before these ids were assigned --
+    // an unscoped `where: { applicationId: undefined }` matches every row in
+    // the table, so without this a setup failure would wipe unrelated data.
+    if (!categoryId || !applicationId || !actorUserId) return;
+
     const versions = await prisma.applicationVersion.findMany({ where: { applicationId }, select: { id: true, deploymentSpecificationId: true } });
     await prisma.applicationArtifact.deleteMany({ where: { applicationVersionId: { in: versions.map((v) => v.id) } } });
     await prisma.applicationVersion.deleteMany({ where: { applicationId } });

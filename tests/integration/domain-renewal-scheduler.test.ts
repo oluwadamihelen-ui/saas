@@ -78,6 +78,11 @@ describe("runDomainRenewalSweep", () => {
   });
 
   afterAll(async () => {
+    // Guard against beforeAll having thrown before these ids were assigned --
+    // an unscoped `where: { userId: undefined }` matches every row in the
+    // table, so without this a setup failure would wipe unrelated data.
+    if (!customerId || !reminderDomainId || !autoRenewDomainId || !expiredDomainId) return;
+
     const domainIds = [reminderDomainId, autoRenewDomainId, expiredDomainId];
     await prisma.renewalEvent.deleteMany({ where: { domainId: { in: domainIds } } });
     await prisma.domainOrder.deleteMany({ where: { domainId: { in: domainIds } } });

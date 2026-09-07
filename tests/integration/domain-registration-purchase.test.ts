@@ -41,6 +41,11 @@ describe("domain registration: order -> payment -> fulfillment", () => {
   });
 
   afterAll(async () => {
+    // Guard against beforeAll having thrown before customerId was assigned --
+    // an unscoped `where: { customerId: undefined }` matches every row in the
+    // table, so without this a setup failure would wipe unrelated data.
+    if (!customerId) return;
+
     const domain = await prisma.domain.findUnique({ where: { name: domainName } });
     if (domain) {
       await prisma.domainOrder.deleteMany({ where: { domainId: domain.id } });

@@ -69,6 +69,11 @@ describe("full purchase -> payment -> deployment flow", () => {
   });
 
   afterAll(async () => {
+    // Guard against beforeAll having thrown before these ids were assigned --
+    // an unscoped `where: { customerId: undefined }` matches every row in the
+    // table, so without this a setup failure would wipe unrelated data.
+    if (!customerId || !applicationId || !categoryId) return;
+
     const deployments = await prisma.deployment.findMany({ where: { customerId }, select: { id: true, deploymentTargetId: true } });
     const deploymentIds = deployments.map((d) => d.id);
     const targetIds = deployments.map((d) => d.deploymentTargetId).filter((id): id is string => Boolean(id));

@@ -44,6 +44,11 @@ describe("hosting account lifecycle service", () => {
   });
 
   afterAll(async () => {
+    // Guard against beforeAll having thrown before these ids were assigned --
+    // an unscoped `where: { hostingAccountId: undefined }` matches every row
+    // in the table, so without this a setup failure would wipe unrelated data.
+    if (!customerId || !accountId || !starterPlanId || !businessPlanId) return;
+
     await prisma.deploymentTarget.deleteMany({ where: { hostingAccountId: accountId } });
     await prisma.subscription.deleteMany({ where: { referenceId: accountId } });
     await prisma.hostingAccount.delete({ where: { id: accountId } });
