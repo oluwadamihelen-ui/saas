@@ -11,6 +11,10 @@ const profileSchema = z.object({
   phone: z.string().trim().max(40).optional().or(z.literal("")),
   company: z.string().trim().max(200).optional().or(z.literal("")),
   country: z.string().trim().max(80).optional().or(z.literal("")),
+  addressLine1: z.string().trim().max(200).optional().or(z.literal("")),
+  city: z.string().trim().max(100).optional().or(z.literal("")),
+  stateProvince: z.string().trim().max(100).optional().or(z.literal("")),
+  postalCode: z.string().trim().max(20).optional().or(z.literal("")),
 });
 
 export interface ProfileState {
@@ -25,6 +29,10 @@ export async function updateProfile(_prev: ProfileState, formData: FormData): Pr
     phone: formData.get("phone") || undefined,
     company: formData.get("company") || undefined,
     country: formData.get("country") || undefined,
+    addressLine1: formData.get("addressLine1") || undefined,
+    city: formData.get("city") || undefined,
+    stateProvince: formData.get("stateProvince") || undefined,
+    postalCode: formData.get("postalCode") || undefined,
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message };
 
@@ -35,6 +43,10 @@ export async function updateProfile(_prev: ProfileState, formData: FormData): Pr
       phone: parsed.data.phone || null,
       company: parsed.data.company || null,
       country: parsed.data.country || null,
+      addressLine1: parsed.data.addressLine1 || null,
+      city: parsed.data.city || null,
+      stateProvince: parsed.data.stateProvince || null,
+      postalCode: parsed.data.postalCode || null,
     },
   });
 

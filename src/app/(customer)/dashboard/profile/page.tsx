@@ -19,7 +19,16 @@ export default async function ProfilePage() {
           <CardTitle>Account Details</CardTitle>
         </CardHeader>
         <CardContent>
-          <ProfileForm name={user.name} phone={user.phone ?? ""} company={user.company ?? ""} country={user.country ?? ""} />
+          <ProfileForm
+            name={user.name}
+            phone={user.phone ?? ""}
+            company={user.company ?? ""}
+            country={user.country ?? ""}
+            addressLine1={user.addressLine1 ?? ""}
+            city={user.city ?? ""}
+            stateProvince={user.stateProvince ?? ""}
+            postalCode={user.postalCode ?? ""}
+          />
         </CardContent>
       </Card>
 

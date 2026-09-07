@@ -44,6 +44,20 @@ export async function initiateDomainOrder(customerId: string, input: DomainOrder
   if (input.action === "REGISTER") {
     const available = await domainProvider.checkAvailability(input.domainName);
     if (!available) throw new Error(`${input.domainName} is not available`);
+
+    // Real registrars require a full WHOIS registrant contact (ICANN
+    // policy) -- check this before creating an order/charging the
+    // customer, not after, so a customer never pays for a registration
+    // that then fails at fulfillment for a missing profile field.
+    if (domainProvider.capabilities.requiresRegistrantContact) {
+      const hasRegistrantContact =
+        customer.addressLine1 && customer.city && customer.stateProvince && customer.postalCode && customer.country && customer.phone;
+      if (!hasRegistrantContact) {
+        throw new Error(
+          "Please complete your profile's address and phone number before registering a domain -- registrars require a full contact on file."
+        );
+      }
+    }
   } else {
     if (!input.domainId) throw new Error("domainId is required to renew a domain");
     existingDomain = await prisma.domain.findFirst({ where: { id: input.domainId, customerId }, select: { id: true, name: true } });

@@ -50,6 +50,12 @@ async function processDomainOrders(orderId: string, customerId: string): Promise
           years: domainOrder.years,
           customerEmail: customer.email,
           customerName: customer.name ?? customer.email,
+          registrantAddress1: customer.addressLine1 ?? undefined,
+          registrantCity: customer.city ?? undefined,
+          registrantStateProvince: customer.stateProvince ?? undefined,
+          registrantPostalCode: customer.postalCode ?? undefined,
+          registrantCountry: customer.country ?? undefined,
+          registrantPhone: customer.phone ?? undefined,
         });
         const domain = await prisma.domain.create({
           data: {

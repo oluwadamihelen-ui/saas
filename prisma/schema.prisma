@@ -79,6 +79,14 @@ model User {
   phone                 String?
   company               String?
   country               String?
+  // Domain-registrant contact details (WHOIS record). Only needed once a
+  // customer registers a domain through a real registrar -- Namecheap and
+  // most other registrars require full name/address/phone/country per
+  // ICANN policy. Left unset for accounts that never buy a domain.
+  addressLine1          String?
+  city                  String?
+  stateProvince         String?
+  postalCode            String?
   image                 String?
   emailVerifiedAt       DateTime?
   status                UserStatus       @default(ACTIVE)

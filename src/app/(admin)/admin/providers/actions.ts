@@ -12,6 +12,7 @@ import { PaystackPaymentProvider } from "@/lib/providers/payment/paystack";
 import { KoraPayPaymentProvider } from "@/lib/providers/payment/korapay";
 import { NowPaymentsPaymentProvider } from "@/lib/providers/payment/nowpayments";
 import { MockDomainProvider } from "@/lib/providers/domain/mock";
+import { NamecheapDomainProvider } from "@/lib/providers/domain/namecheap";
 import { MockHostingProvider } from "@/lib/providers/hosting/mock";
 import { MockDeploymentProvider } from "@/lib/providers/deployment/mock";
 import { MockEmailProvider } from "@/lib/providers/email/mock";
@@ -61,6 +62,22 @@ async function resolveAdapter(providerId: string): Promise<ProviderAdapterBase |
     const ipnSecretCred = provider.credentials.find((c) => c.key === "ipnSecret");
     if (!apiKeyCred || !ipnSecretCred) return null;
     return new NowPaymentsPaymentProvider(decryptSecret(apiKeyCred.encryptedValue), decryptSecret(ipnSecretCred.encryptedValue));
+  }
+
+  if (provider.adapterKey === "namecheap") {
+    const find = (key: string) => provider.credentials.find((c) => c.key === key);
+    const apiUserCred = find("apiUser");
+    const apiKeyCred = find("apiKey");
+    const usernameCred = find("username");
+    const clientIpCred = find("clientIp");
+    if (!apiUserCred || !apiKeyCred || !usernameCred || !clientIpCred) return null;
+    return new NamecheapDomainProvider({
+      apiUser: decryptSecret(apiUserCred.encryptedValue),
+      apiKey: decryptSecret(apiKeyCred.encryptedValue),
+      username: decryptSecret(usernameCred.encryptedValue),
+      clientIp: decryptSecret(clientIpCred.encryptedValue),
+      sandbox: process.env.NAMECHEAP_SANDBOX !== "false",
+    });
   }
 
   return null;

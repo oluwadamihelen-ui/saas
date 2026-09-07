@@ -15,6 +15,19 @@ export interface RegisterDomainInput {
   customerEmail: string;
   customerName: string;
   nameservers?: string[];
+  /**
+   * WHOIS registrant contact -- required by real registrars (ICANN policy),
+   * unused by the mock. Optional here so the interface stays backward
+   * compatible; an adapter that needs them (see
+   * DomainProviderCapabilities.requiresRegistrantContact) throws a clear
+   * error if they're missing rather than silently registering with bad data.
+   */
+  registrantAddress1?: string;
+  registrantCity?: string;
+  registrantStateProvince?: string;
+  registrantPostalCode?: string;
+  registrantCountry?: string;
+  registrantPhone?: string;
 }
 
 export interface RegisterDomainResult {
@@ -53,6 +66,8 @@ export interface DomainProviderCapabilities {
   transfer: boolean;
   dnsManagement: boolean;
   nameserverUpdate: boolean;
+  /** True for any real registrar -- ICANN requires a full WHOIS registrant contact on file. */
+  requiresRegistrantContact: boolean;
 }
 
 export interface PricingQuote {

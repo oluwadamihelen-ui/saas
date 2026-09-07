@@ -62,6 +62,7 @@ export class MockDomainProvider implements DomainProvider {
     transfer: true,
     dnsManagement: true,
     nameserverUpdate: true,
+    requiresRegistrantContact: false,
   };
 
   private domains = new Map<string, MockDomainRecord>();

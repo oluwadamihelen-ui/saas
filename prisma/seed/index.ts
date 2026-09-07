@@ -69,6 +69,7 @@ async function seedProviders() {
     { name: "KoraPay", type: "PAYMENT", adapterKey: "korapay", isDefault: false },
     { name: "NOWPayments", type: "PAYMENT", adapterKey: "nowpayments", isDefault: false },
     { name: "Mock Registrar", type: "DOMAIN", adapterKey: "mock", isDefault: true },
+    { name: "Namecheap", type: "DOMAIN", adapterKey: "namecheap", isDefault: false },
     { name: "Mock DNS", type: "DNS", adapterKey: "mock", isDefault: true },
     { name: "Mock Hosting", type: "HOSTING", adapterKey: "mock", isDefault: true },
     { name: "Mock Deployment", type: "DEPLOYMENT", adapterKey: "mock", isDefault: true },

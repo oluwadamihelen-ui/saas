@@ -5,6 +5,7 @@ import { KoraPayPaymentProvider } from "./payment/korapay";
 import { NowPaymentsPaymentProvider } from "./payment/nowpayments";
 import { DomainProvider } from "./domain/types";
 import { MockDomainProvider } from "./domain/mock";
+import { NamecheapDomainProvider } from "./domain/namecheap";
 import { HostingProvider } from "./hosting/types";
 import { MockHostingProvider } from "./hosting/mock";
 import { DeploymentProviderAdapter } from "./deployment/types";
@@ -70,12 +71,16 @@ export async function getPaymentProvider(): Promise<PaymentProvider> {
 
 export async function getDomainProvider(): Promise<DomainProvider> {
   const preferred = process.env.DOMAIN_PROVIDER ?? "mock";
-  // No real registrar adapter exists yet -- this branch is the seam where one
-  // plugs in later (env credential or DB-stored ProviderCredential, decrypted,
-  // exactly like PaystackPaymentProvider above), so adding it is a config
-  // change here, not a call-site rewrite. Anything other than "mock" today
-  // falls back to mock rather than failing the whole request.
-  if (preferred !== "mock") {
+  if (preferred === "namecheap") {
+    const apiUser = process.env.NAMECHEAP_API_USER || (await getCredential("namecheap", "DOMAIN", "apiUser"));
+    const apiKey = process.env.NAMECHEAP_API_KEY || (await getCredential("namecheap", "DOMAIN", "apiKey"));
+    const username = process.env.NAMECHEAP_USERNAME || (await getCredential("namecheap", "DOMAIN", "username"));
+    const clientIp = process.env.NAMECHEAP_CLIENT_IP || (await getCredential("namecheap", "DOMAIN", "clientIp"));
+    if (apiUser && apiKey && username && clientIp) {
+      const sandbox = process.env.NAMECHEAP_SANDBOX !== "false";
+      return new NamecheapDomainProvider({ apiUser, apiKey, username, clientIp, sandbox });
+    }
+  } else if (preferred !== "mock") {
     logger.warn("domain_provider.unimplemented_adapter_requested", { preferred });
   }
   if (!global.__cachedDomainProvider) global.__cachedDomainProvider = new MockDomainProvider();

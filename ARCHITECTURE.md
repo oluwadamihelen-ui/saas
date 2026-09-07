@@ -249,7 +249,8 @@ implement, so swapping one in later is additive:
 ```
 PaymentProvider      → MockPaymentProvider, PaystackPaymentProvider,
                         KoraPayPaymentProvider, NowPaymentsPaymentProvider
-DomainProvider        → MockDomainProvider          (capabilities-flagged)
+DomainProvider        → MockDomainProvider, NamecheapDomainProvider
+                        (capabilities-flagged)
 HostingProvider       → MockHostingProvider
 DeploymentProviderAdapter → MockDeploymentProvider   (resolved for every
                                                        provider key —
@@ -935,6 +936,63 @@ four service actions, plus the staff/admin guard) and
 `tests/integration/register-account-type.test.ts` (both account types,
 plus the default-omitted case and duplicate-email rejection).
 
+**Go-live phase 1 — real domain registrar (Namecheap).** The first of
+several fixes tracked from a full production-readiness audit (payments
+were real; domains, hosting, DNS and deployment were still 100% mock with
+no real adapter code at all). `lib/providers/domain/namecheap.ts` is a
+real `DomainProvider` implementation against Namecheap's XML API
+(`api.namecheap.com/xml.response`, or the sandbox host with
+`NAMECHEAP_SANDBOX=true`, the default) — every command (`domains.check`,
+`domains.create`, `domains.renew`, `domains.transfer.create`,
+`domains.getInfo`, `domains.dns.getList/setCustom`,
+`domains.dns.getHosts/setHosts`, `users.getPricing`) is a real, verified
+Namecheap API command, parsed with `fast-xml-parser` (upgraded straight to
+v5 rather than the vulnerable-for-XMLBuilder v4 range, even though this
+adapter only ever parses responses, never builds XML). Two things differ
+enough from the payment adapters to note: auth is a 3-part whitelist
+(ApiUser + ApiKey + UserName all valid **and** the calling IP on the
+account's whitelist — `NAMECHEAP_CLIENT_IP` must match), and DNS host
+records aren't managed incrementally — `dns.setHosts` always replaces the
+*entire* record set, so `createDNSRecord`/`deleteDNSRecord` read the full
+set with `dns.getHosts`, splice in the change, and write the whole set
+back. `getPricingQuote`'s response-tree walk (`extractPriceEntries`)
+deliberately doesn't hard-code an assumed nesting depth for
+`users.getPricing`'s response, since that couldn't be fully verified
+without a live sandbox call — it searches the whole parsed tree for
+price-shaped nodes instead, which is correct regardless of exactly how
+deep Namecheap nests `Price` under `ProductType`/`ProductCategory`/
+`Product`. Flagged here rather than silently assumed correct: worth one
+real sandbox smoke test before flipping `NAMECHEAP_SANDBOX=false`.
+
+Registering a domain for real means Namecheap needs a full WHOIS
+registrant contact per ICANN policy, which the platform never collected
+before this — `RegisterDomainInput` gained optional `registrant*` fields
+(address/city/state/postal/country/phone) and
+`DomainProviderCapabilities` gained `requiresRegistrantContact`
+(`false` for the mock, `true` for Namecheap). `User` gained
+`addressLine1`/`city`/`stateProvince`/`postalCode` (phone/country already
+existed), editable on the existing Profile page. `initiateDomainOrder`
+checks `requiresRegistrantContact` **before** creating the order/charging
+the customer, not after — a customer must never pay for a registration
+that then fails at fulfillment for a missing profile field. Namecheap's
+phone format (`+CC.NNNNNNNNNN`) is normalized best-effort from a small
+country→dial-code table (`formatPhone`); an unlisted country falls back to
+guessing a 1–3 digit prefix, which is honestly imperfect and worth
+expanding as real customer countries come in. Wired into every seam the
+payment adapters established: `registry.ts`, `admin/providers`
+`resolveAdapter()`, `seedProviders()`, `.env.example`
+(`NAMECHEAP_API_USER/API_KEY/USERNAME/CLIENT_IP/SANDBOX`). Covered by
+`tests/services/namecheap-provider.test.ts` (every command, XML request
+shape and response parsing, the DNS get-then-set-back merge, the
+registrant-contact guard, error/auth-failure classification) and
+`tests/integration/domain-registrant-guard.test.ts` (the pre-payment
+guard against a stubbed "requires contact" provider, independent of
+Namecheap's actual HTTP behavior). Remaining from the go-live audit,
+tracked for the next phases: hosting/deployment/DNS-management adapters
+are still mock, the background worker still needs its own always-on host,
+the seed script still needs a production guard, and there's still no
+password-recovery flow.
+
 ## 13. Local Development
 
 ```bash
@@ -958,9 +1016,12 @@ domain, or hosting credentials required. Setting `PAYMENT_PROVIDER=paystack`
 plus `PAYSTACK_SECRET_KEY` (or saving the credential from Admin → Providers)
 activates the real Paystack adapter without any code change. The same shape
 applies to `EMAIL_PROVIDER=resend` plus `RESEND_API_KEY`,
-`PAYMENT_PROVIDER=korapay` plus `KORAPAY_SECRET_KEY`, and
+`PAYMENT_PROVIDER=korapay` plus `KORAPAY_SECRET_KEY`,
 `PAYMENT_PROVIDER=nowpayments` plus `NOWPAYMENTS_API_KEY` +
-`NOWPAYMENTS_IPN_SECRET`.
+`NOWPAYMENTS_IPN_SECRET`, and `DOMAIN_PROVIDER=namecheap` plus
+`NAMECHEAP_API_USER` + `NAMECHEAP_API_KEY` + `NAMECHEAP_USERNAME` +
+`NAMECHEAP_CLIENT_IP` (the IP must be whitelisted in the Namecheap account
+first, or every call fails auth regardless of how correct the key is).
 
 ## 14. Operations
 
