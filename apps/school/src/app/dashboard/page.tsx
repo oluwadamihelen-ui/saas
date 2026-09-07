@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { CalendarClock, TrendingUp, Wallet } from "lucide-react";
 import { requireSchoolUser } from "@/lib/auth/require";
+import { getUserPermissions } from "@/lib/auth/permissions-resolve";
+import { PERMISSIONS } from "@/lib/permissions";
 import { getDashboardStats } from "@/lib/services/dashboard";
+import { getTodayAttendanceSummary } from "@/lib/services/attendance";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -11,7 +14,12 @@ import { formatDate } from "@/lib/utils";
 
 export default async function DashboardPage() {
   const user = await requireSchoolUser();
-  const stats = await getDashboardStats(user.schoolId);
+  const perms = await getUserPermissions(user.id);
+  const canViewAttendance = perms.has(PERMISSIONS.ATTENDANCE_VIEW);
+  const [stats, attendanceToday] = await Promise.all([
+    getDashboardStats(user.schoolId),
+    canViewAttendance ? getTodayAttendanceSummary(user.schoolId) : Promise.resolve(null),
+  ]);
 
   return (
     <div className="space-y-8">
@@ -83,7 +91,33 @@ export default async function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <EmptyState title="Coming in Phase 2" description="Attendance tracking and trends will show here once it's built." />
+              {!attendanceToday ? (
+                <EmptyState title="No access" description="You don't have permission to view attendance." />
+              ) : attendanceToday.marked === 0 ? (
+                <EmptyState
+                  title="No attendance marked today"
+                  description={`${attendanceToday.totalActiveStudents} active students. Mark today's attendance to see it here.`}
+                  action={
+                    <Button asChild size="sm">
+                      <Link href="/dashboard/attendance">Mark attendance</Link>
+                    </Button>
+                  }
+                />
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-semibold text-foreground">{attendanceToday.attendanceRate}%</span>
+                    <span className="text-sm text-muted">present today</span>
+                  </div>
+                  <p className="text-sm text-muted">
+                    {attendanceToday.present} present · {attendanceToday.absent} absent ·{" "}
+                    {attendanceToday.marked} of {attendanceToday.totalActiveStudents} marked
+                  </p>
+                  <Button asChild size="sm" variant="secondary">
+                    <Link href="/dashboard/attendance">Mark attendance</Link>
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
           <Card>

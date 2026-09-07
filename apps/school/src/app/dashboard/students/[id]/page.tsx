@@ -10,9 +10,14 @@ import { requireSchoolUser } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getStudent } from "@/lib/services/students";
+import { getStudentAttendanceHistory } from "@/lib/services/attendance";
+import { computeReportCard } from "@/lib/services/results";
+import { getCurrentTerm } from "@/lib/services/academics";
 import { formatDate } from "@/lib/utils";
 import { WithdrawButton } from "./withdraw-button";
 import { AddGuardianForm } from "./add-guardian-form";
+
+const ATTENDANCE_BADGE = { PRESENT: "success", LATE: "warning", EXCUSED: "neutral", ABSENT: "danger" } as const;
 
 const STATUS_VARIANT = { ACTIVE: "success", GRADUATED: "neutral", WITHDRAWN: "warning", SUSPENDED: "danger" } as const;
 
@@ -22,6 +27,13 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
   const [student, perms] = await Promise.all([getStudent(user.schoolId, id), getUserPermissions(user.id)]);
 
   if (!student) notFound();
+
+  const attendance = perms.has(PERMISSIONS.ATTENDANCE_VIEW)
+    ? await getStudentAttendanceHistory(user.schoolId, student.id)
+    : null;
+
+  const currentTerm = perms.has(PERMISSIONS.RESULTS_VIEW) ? await getCurrentTerm(user.schoolId) : null;
+  const currentReportCard = currentTerm ? await computeReportCard(user.schoolId, student.id, currentTerm.id) : null;
 
   const canEdit = perms.has(PERMISSIONS.STUDENTS_EDIT);
   const canDelete = perms.has(PERMISSIONS.STUDENTS_DELETE);
@@ -58,6 +70,8 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
           <TabsTrigger value="personal">Personal</TabsTrigger>
           <TabsTrigger value="academic">Academic</TabsTrigger>
           <TabsTrigger value="guardians">Guardians</TabsTrigger>
+          {attendance && <TabsTrigger value="attendance">Attendance</TabsTrigger>}
+          {currentReportCard && <TabsTrigger value="results">Results</TabsTrigger>}
           <TabsTrigger value="health">Health</TabsTrigger>
         </TabsList>
 
@@ -81,7 +95,7 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
               <Field label="Campus" value={student.campus?.name ?? "Main"} />
             </CardContent>
           </Card>
-          <p className="mt-3 text-xs text-muted">Subjects, results, attendance and assignments will show here once those modules are built.</p>
+          <p className="mt-3 text-xs text-muted">See the Attendance and Results tabs for this student&apos;s records.</p>
         </TabsContent>
 
         <TabsContent value="guardians">
@@ -106,6 +120,68 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
             {canManageGuardians && <AddGuardianForm studentId={student.id} />}
           </div>
         </TabsContent>
+
+        {attendance && (
+          <TabsContent value="attendance">
+            <Card>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-6">
+                  <div>
+                    <p className="text-xs text-muted">Attendance rate</p>
+                    <p className="text-2xl font-semibold text-foreground">
+                      {attendance.attendanceRate === null ? "—" : `${attendance.attendanceRate}%`}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted">Days recorded</p>
+                    <p className="text-2xl font-semibold text-foreground">{attendance.total}</p>
+                  </div>
+                </div>
+                {attendance.records.length === 0 ? (
+                  <EmptyState title="No attendance recorded yet" />
+                ) : (
+                  <ul className="divide-y divide-border rounded-md border border-border">
+                    {attendance.records.map((r) => (
+                      <li key={r.id} className="flex items-center justify-between p-3 text-sm">
+                        <span className="text-foreground">{formatDate(r.date)}</span>
+                        <Badge variant={ATTENDANCE_BADGE[r.status]}>{r.status}</Badge>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {currentReportCard && (
+          <TabsContent value="results">
+            <Card>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted">{currentReportCard.term?.name}</p>
+                  <Button asChild variant="secondary" size="sm">
+                    <Link href={`/dashboard/results/report-cards/${student.id}?termId=${currentReportCard.term?.id}`}>
+                      View full report card
+                    </Link>
+                  </Button>
+                </div>
+                {currentReportCard.subjectRows.length === 0 ? (
+                  <EmptyState title="No scores entered yet this term" />
+                ) : (
+                  <ul className="divide-y divide-border rounded-md border border-border">
+                    {currentReportCard.subjectRows.map((row) => (
+                      <li key={row.subjectId} className="flex items-center justify-between p-3 text-sm">
+                        <span className="text-foreground">{row.subjectName}</span>
+                        <span className="text-muted">{row.total}/{row.maxTotal} · {row.grade ?? "—"}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         <TabsContent value="health">
           <Card>

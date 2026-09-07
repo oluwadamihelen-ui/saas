@@ -100,6 +100,26 @@ export async function createSchoolWithOwner(input: {
       },
     });
 
+    // Sensible defaults so score entry works immediately — editable later
+    // from Results -> Grading setup rather than blocking onboarding on it.
+    await tx.gradeBand.createMany({
+      data: [
+        { schoolId: school.id, grade: "A", minScore: 70, maxScore: 100, remark: "Excellent", order: 0 },
+        { schoolId: school.id, grade: "B", minScore: 60, maxScore: 69, remark: "Very Good", order: 1 },
+        { schoolId: school.id, grade: "C", minScore: 50, maxScore: 59, remark: "Good", order: 2 },
+        { schoolId: school.id, grade: "D", minScore: 45, maxScore: 49, remark: "Pass", order: 3 },
+        { schoolId: school.id, grade: "E", minScore: 40, maxScore: 44, remark: "Weak Pass", order: 4 },
+        { schoolId: school.id, grade: "F", minScore: 0, maxScore: 39, remark: "Fail", order: 5 },
+      ],
+    });
+    await tx.assessmentComponent.createMany({
+      data: [
+        { schoolId: school.id, name: "1st CA", maxScore: 20, order: 0 },
+        { schoolId: school.id, name: "2nd CA", maxScore: 20, order: 1 },
+        { schoolId: school.id, name: "Exam", maxScore: 60, order: 2 },
+      ],
+    });
+
     return { school, owner };
   });
 }

@@ -1,8 +1,8 @@
 # Winfield — Architecture
 
 Winfield is a multi-tenant AI-native school management platform. This document
-describes the system as implemented through **Phase 1 (Foundation)** — see
-the [root README](../../README.md#school-platform--architecture-assessment-phase-1-kickoff)
+describes the system as implemented through **Phase 1 (Foundation)** and
+**Phase 2 (Academics)** — see the [root README](../../README.md#school-platform--architecture-assessment-phase-1-kickoff)
 for the initial assessment this build started from, and the phased roadmap
 below for what comes next.
 
@@ -45,10 +45,10 @@ nothing in Phase 1's UI creates or uses such a user yet.
 - **Auth.js v5**, credentials provider, bcrypt-hashed passwords (`src/auth.ts`).
   Session is a JWT carrying `userId`, `role` (key), `schoolId`.
 - **Permissions** are `module.action` strings (`src/lib/permissions.ts`),
-  e.g. `students.edit`, `staff.invite`, `school_settings.manage`. The
-  catalog only lists permissions for modules that actually exist —
-  finance/results/attendance permissions get added when those modules do,
-  not seeded ahead of time as inert placeholders.
+  e.g. `students.edit`, `staff.invite`, `school_settings.manage`,
+  `attendance.mark`, `results.approve`. The catalog only lists permissions
+  for modules that actually exist — finance permissions, for instance,
+  aren't seeded ahead of time as inert placeholders.
 - **Roles** (`Role` model) are tenant-scoped rows, not a global enum. When a
   school is created, `src/lib/school-provisioning.ts` seeds one `Role` row
   per system role (`SCHOOL_OWNER`, `SCHOOL_ADMIN`, `PRINCIPAL`, `TEACHER`,
@@ -66,20 +66,37 @@ nothing in Phase 1's UI creates or uses such a user yet.
 
 ## Data model
 
-Core Phase 1 entities (`prisma/schema.prisma`):
+Core entities (`prisma/schema.prisma`):
 
 - **Tenancy**: `School`, `Campus`
 - **Identity**: `User`, `Role`, `Permission`, `RolePermission`, `StaffInvite`
 - **Academics**: `AcademicSession`, `Term`, `Department`, `ClassGroup`,
-  `ClassArm`, `Subject`
+  `ClassArm`, `Subject`, `TeacherAssignment`, `TimetableSlot`
 - **Students**: `Student`, `Guardian`, `StudentGuardian`
+- **Attendance**: `AttendanceRecord`
+- **Assignments**: `Assignment`, `AssignmentSubmission`
+- **Results**: `GradeBand`, `AssessmentComponent`, `Score`, `ReportCard`
 - **Audit**: `AuditLog`
 
 `ClassGroup` is a grade level (e.g. "JSS1"); `ClassArm` is the stream
-students actually enroll into (e.g. "JSS1 Blue"). This split exists from day
-one because the brief's academics module needs it later (timetables and
-results are per-arm, not per-grade) — adding it now avoids a painful
-migration when Phase 2 lands.
+students actually enroll into (e.g. "JSS1 Blue"). This split existed from
+Phase 1 specifically because Phase 2's timetable and results are per-arm,
+not per-grade — it paid off without a migration.
+
+`TeacherAssignment` (who teaches which subject to which class arm) is the
+one piece of Phase 2 that everything else leans on: it's not enforced as a
+hard row-level restriction yet (anyone holding `attendance.mark` can mark
+any class, matching how `students.edit` already worked in Phase 1 — a
+role-level permission, not a per-record ownership check), but the data
+exists so a future tightening to "only your own classes" is a query change,
+not a schema change.
+
+`ReportCard` deliberately stores only the human workflow state (`status`,
+`approvedById`/`approvedAt`, `publishedAt`, comments) — subject totals,
+grades, and class position are always recomputed from live `Score` rows at
+read time (`computeReportCard` in `src/lib/services/results.ts`), so a late
+score correction is reflected immediately everywhere the report card is
+shown or downloaded, with nothing to invalidate or go stale.
 
 ## Onboarding
 
@@ -91,6 +108,38 @@ invite staff. `School` carries `*CompletedAt` timestamps per step, so
 onboarded school and the dashboard layout redirects back to onboarding until
 it's done. CSV import and fee/grading configuration are intentionally not
 part of this wizard yet — they're real Phase 2/3 features, not stubbed.
+
+## Phase 2: academics
+
+- **Attendance** — one `AttendanceRecord` per student per calendar day
+  (`@@unique([studentId, date])`), so re-marking a day upserts rather than
+  duplicating. `AttendanceMethod` is an enum with only `MANUAL` implemented
+  (`QR`/`BIOMETRIC` exist as schema-level extensibility per the brief, not
+  as working features) — a school-wide "% present today" figure on the
+  dashboard is a live aggregate, not a cached number.
+- **Timetable** — `TimetableSlot.startTime`/`endTime` are plain `"HH:mm"`
+  strings rather than `DateTime`, since a slot repeats weekly with no fixed
+  calendar date; conflict detection (`createTimetableSlot` in
+  `src/lib/services/timetable.ts`) does a string-range overlap check against
+  both the class and the teacher before allowing a new slot, server-side —
+  there's no drag-and-drop or AI generation yet, just validated CRUD.
+- **Assignments** — creating one seeds an `AssignmentSubmission` row per
+  active student in the class immediately, because there's no student
+  portal yet (Phase 4) for self-service submission; a teacher's gradebook
+  view is really "record what was handed in and grade it," not a real
+  submission inbox. That will change once students can log in themselves.
+- **Results** — `AssessmentComponent` (e.g. "1st CA" /20, "Exam" /60) and
+  `GradeBand` (e.g. 70–100 → "A") are per-school, editable data, seeded with
+  sensible Nigerian-curriculum defaults at school creation
+  (`school-provisioning.ts`) so score entry works immediately without a
+  required setup step. The report card workflow enforces the brief's
+  human-in-the-loop rule at the permission level, not just in the UI: a
+  forged `principalComment` form field from a `TEACHER` session is silently
+  dropped server-side (`updateCommentsAction` checks `results.approve`
+  itself, independent of which fields the UI rendered for that user), and
+  `publishReportCard` refuses to run unless the row is already `APPROVED`.
+  Report card PDFs (`src/lib/services/report-card-pdf.ts`) reuse the same
+  pdfkit pattern the marketplace app uses for invoices.
 
 ## AI architecture (not yet built)
 
@@ -105,17 +154,17 @@ than inventing a parallel authorization path.
 
 ## Testing tenant isolation
 
-Not yet automated (no test suite exists for this app yet — `vitest` is
-wired up in `package.json` but empty). The service-layer pattern above
-(`schoolId` as a mandatory first argument everywhere) is the structural
-mitigation Phase 1 ships with; a "School A cannot read School B's students"
-integration test, per the brief's testing requirements, is the first thing
-that should be added alongside Phase 2.
+Still not automated (no test suite exists for this app yet — `vitest` is
+wired up in `package.json` but empty; Phase 1 and Phase 2 were both verified
+manually end-to-end against a real database instead). The service-layer
+pattern above (`schoolId` as a mandatory first argument everywhere) is the
+structural mitigation in place; a "School A cannot read School B's students"
+integration test, per the brief's testing requirements, is overdue and
+should be the first thing added in Phase 3 rather than deferred again.
 
 ## Phased roadmap
 
-Matches the brief exactly: Phase 1 (this) → Phase 2 Academics
-(attendance/timetable/assignments/exams/results/report cards) → Phase 3
-Finance → Phase 4 Communication/parent & student portals → Phase 5 AI →
-Phase 6 Advanced ERP (payroll/library/transport/hostel) → Phase 7 SaaS
+Matches the brief exactly: Phase 1 Foundation → Phase 2 Academics (this) →
+Phase 3 Finance → Phase 4 Communication/parent & student portals → Phase 5
+AI → Phase 6 Advanced ERP (payroll/library/transport/hostel) → Phase 7 SaaS
 billing & platform admin.

@@ -42,28 +42,36 @@ model School {
 
   // Onboarding wizard progress (brief section 4). Nullable timestamps double
   // as both a "is this step done" flag and a record of when it happened.
-  accountCreatedAt          DateTime  @default(now())
-  schoolInfoCompletedAt     DateTime?
-  academicStructureSetupAt  DateTime?
-  staffInvitedAt            DateTime?
-  onboardingCompletedAt     DateTime?
+  accountCreatedAt         DateTime  @default(now())
+  schoolInfoCompletedAt    DateTime?
+  academicStructureSetupAt DateTime?
+  staffInvitedAt           DateTime?
+  onboardingCompletedAt    DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  campuses         Campus[]
-  users            User[]
-  roles            Role[]
-  invites          StaffInvite[]
-  academicSessions AcademicSession[]
-  terms            Term[]
-  departments      Department[]
-  classGroups      ClassGroup[]
-  classArms        ClassArm[]
-  subjects         Subject[]
-  students         Student[]
-  guardians        Guardian[]
-  auditLogs        AuditLog[]
+  campuses             Campus[]
+  users                User[]
+  roles                Role[]
+  invites              StaffInvite[]
+  academicSessions     AcademicSession[]
+  terms                Term[]
+  departments          Department[]
+  classGroups          ClassGroup[]
+  classArms            ClassArm[]
+  subjects             Subject[]
+  students             Student[]
+  guardians            Guardian[]
+  auditLogs            AuditLog[]
+  teacherAssignments   TeacherAssignment[]
+  attendanceRecords    AttendanceRecord[]
+  timetableSlots       TimetableSlot[]
+  assignments          Assignment[]
+  gradeBands           GradeBand[]
+  assessmentComponents AssessmentComponent[]
+  scores               Score[]
+  reportCards          ReportCard[]
 
   @@index([status])
 }
@@ -100,12 +108,12 @@ enum UserStatus {
 /// to exactly one school in Phase 1 — a staff member working at two schools
 /// is out of scope until multi-membership is needed.
 model User {
-  id           String     @id @default(cuid())
-  schoolId     String?
-  school       School?    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  roleId       String
-  role         Role       @relation(fields: [roleId], references: [id])
-  campusId     String?
+  id       String  @id @default(cuid())
+  schoolId String?
+  school   School? @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  roleId   String
+  role     Role    @relation(fields: [roleId], references: [id])
+  campusId String?
 
   email        String     @unique
   passwordHash String
@@ -116,9 +124,16 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  auditLogs      AuditLog[]
-  classArmsLed   ClassArm[]     @relation("ClassArmTeacher")
-  invitesSent    StaffInvite[]  @relation("InviteSentBy")
+  auditLogs             AuditLog[]
+  classArmsLed          ClassArm[]             @relation("ClassArmTeacher")
+  invitesSent           StaffInvite[]          @relation("InviteSentBy")
+  teacherAssignments    TeacherAssignment[]    @relation("TeacherAssignments")
+  attendanceMarked      AttendanceRecord[]     @relation("AttendanceMarkedBy")
+  teacherTimetableSlots TimetableSlot[]        @relation("TeacherTimetableSlots")
+  assignmentsCreated    Assignment[]           @relation("AssignmentTeacher")
+  submissionsGraded     AssignmentSubmission[] @relation("SubmissionGradedBy")
+  scoresEntered         Score[]                @relation("ScoreEnteredBy")
+  reportCardsApproved   ReportCard[]           @relation("ReportCardApprovedBy")
 
   @@index([schoolId])
 }
@@ -182,19 +197,19 @@ model StaffInvite {
   schoolId String
   school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
-  email      String
-  roleId     String
-  role       Role         @relation(fields: [roleId], references: [id])
-  token      String       @unique
-  status     InviteStatus @default(PENDING)
-  expiresAt  DateTime
+  email       String
+  roleId      String
+  role        Role         @relation(fields: [roleId], references: [id])
+  token       String       @unique
+  status      InviteStatus @default(PENDING)
+  expiresAt   DateTime
   invitedById String
-  invitedBy   User        @relation("InviteSentBy", fields: [invitedById], references: [id])
+  invitedBy   User         @relation("InviteSentBy", fields: [invitedById], references: [id])
 
   createdAt DateTime @default(now())
 
-  @@index([schoolId])
   @@unique([schoolId, email, status])
+  @@index([schoolId])
 }
 
 // ---------------------------------------------------------------------------
@@ -232,6 +247,11 @@ model Term {
   isCurrent Boolean  @default(false)
 
   createdAt DateTime @default(now())
+
+  attendanceRecords AttendanceRecord[]
+  assignments       Assignment[]
+  scores            Score[]
+  reportCards       ReportCard[]
 
   @@unique([academicSessionId, name])
   @@index([schoolId])
@@ -271,20 +291,24 @@ model ClassGroup {
 /// A specific stream within a class group, e.g. "JSS1 Blue" — this is what
 /// students are actually enrolled into.
 model ClassArm {
-  id           String      @id @default(cuid())
+  id           String     @id @default(cuid())
   schoolId     String
-  school       School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  school       School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   classGroupId String
-  classGroup   ClassGroup  @relation(fields: [classGroupId], references: [id], onDelete: Cascade)
+  classGroup   ClassGroup @relation(fields: [classGroupId], references: [id], onDelete: Cascade)
 
-  name             String
-  capacity         Int?
-  classTeacherId   String?
-  classTeacher     User?   @relation("ClassArmTeacher", fields: [classTeacherId], references: [id])
+  name           String
+  capacity       Int?
+  classTeacherId String?
+  classTeacher   User?   @relation("ClassArmTeacher", fields: [classTeacherId], references: [id])
 
   createdAt DateTime @default(now())
 
-  students Student[]
+  students           Student[]
+  teacherAssignments TeacherAssignment[]
+  attendanceRecords  AttendanceRecord[]
+  timetableSlots     TimetableSlot[]
+  assignments        Assignment[]
 
   @@unique([classGroupId, name])
   @@index([schoolId])
@@ -299,6 +323,11 @@ model Subject {
   code String
 
   createdAt DateTime @default(now())
+
+  teacherAssignments TeacherAssignment[]
+  timetableSlots     TimetableSlot[]
+  assignments        Assignment[]
+  scores             Score[]
 
   @@unique([schoolId, code])
   @@index([schoolId])
@@ -336,7 +365,7 @@ model Student {
   dateOfBirth DateTime?
   gender      Gender?
   bloodGroup  String?
-  nationality String? @default("Nigeria")
+  nationality String?   @default("Nigeria")
 
   addressLine String?
   city        String?
@@ -349,13 +378,17 @@ model Student {
   classArmId String?
   classArm   ClassArm? @relation(fields: [classArmId], references: [id])
 
-  status       StudentStatus @default(ACTIVE)
-  admissionDate DateTime     @default(now())
+  status        StudentStatus @default(ACTIVE)
+  admissionDate DateTime      @default(now())
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  guardians StudentGuardian[]
+  guardians         StudentGuardian[]
+  attendanceRecords AttendanceRecord[]
+  submissions       AssignmentSubmission[]
+  scores            Score[]
+  reportCards       ReportCard[]
 
   @@unique([schoolId, admissionNumber])
   @@index([schoolId])
@@ -368,12 +401,12 @@ model Guardian {
   schoolId String
   school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
-  firstName  String
-  lastName   String
-  phone      String
-  email      String?
+  firstName   String
+  lastName    String
+  phone       String
+  email       String?
   addressLine String?
-  occupation String?
+  occupation  String?
 
   createdAt DateTime @default(now())
 
@@ -401,6 +434,264 @@ model StudentGuardian {
 }
 
 // ---------------------------------------------------------------------------
+// Academics: teaching assignments, attendance, timetable, assignments,
+// assessments & results (Phase 2)
+// ---------------------------------------------------------------------------
+
+/// Which teacher teaches which subject to which class arm. Foundation for
+/// scoping attendance/assignment/score-entry actions to "your own class"
+/// later, without another schema change.
+model TeacherAssignment {
+  id         String   @id @default(cuid())
+  schoolId   String
+  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacherId  String
+  teacher    User     @relation("TeacherAssignments", fields: [teacherId], references: [id], onDelete: Cascade)
+  subjectId  String
+  subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  classArmId String
+  classArm   ClassArm @relation(fields: [classArmId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([teacherId, subjectId, classArmId])
+  @@index([schoolId])
+  @@index([schoolId, teacherId])
+  @@index([schoolId, classArmId])
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+/// Extensible on purpose (brief section 8: "start manual, leave room for
+/// QR/biometric"); only MANUAL is actually implemented.
+enum AttendanceMethod {
+  MANUAL
+  QR
+  BIOMETRIC
+}
+
+model AttendanceRecord {
+  id         String   @id @default(cuid())
+  schoolId   String
+  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classArmId String
+  classArm   ClassArm @relation(fields: [classArmId], references: [id], onDelete: Cascade)
+  termId     String
+  term       Term     @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  date       DateTime
+  status     AttendanceStatus
+  method     AttendanceMethod @default(MANUAL)
+  note       String?
+  markedById String
+  markedBy   User             @relation("AttendanceMarkedBy", fields: [markedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, date])
+  @@index([schoolId, date])
+  @@index([schoolId, classArmId, date])
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+}
+
+/// One recurring weekly period. startTime/endTime are "HH:mm" 24h strings —
+/// simpler than DateTime for a slot that repeats every week with no fixed
+/// calendar date, and easy to render/sort/compare as plain strings.
+model TimetableSlot {
+  id         String   @id @default(cuid())
+  schoolId   String
+  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classArmId String
+  classArm   ClassArm @relation(fields: [classArmId], references: [id], onDelete: Cascade)
+  subjectId  String
+  subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  teacherId  String
+  teacher    User     @relation("TeacherTimetableSlots", fields: [teacherId], references: [id], onDelete: Cascade)
+
+  dayOfWeek DayOfWeek
+  startTime String
+  endTime   String
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([schoolId, classArmId, dayOfWeek])
+  @@index([schoolId, teacherId, dayOfWeek])
+}
+
+model Assignment {
+  id         String   @id @default(cuid())
+  schoolId   String
+  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classArmId String
+  classArm   ClassArm @relation(fields: [classArmId], references: [id], onDelete: Cascade)
+  subjectId  String
+  subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  teacherId  String
+  teacher    User     @relation("AssignmentTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+  termId     String
+  term       Term     @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  dueDate     DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  submissions AssignmentSubmission[]
+
+  @@index([schoolId])
+  @@index([schoolId, classArmId])
+}
+
+enum SubmissionStatus {
+  PENDING
+  SUBMITTED
+  GRADED
+}
+
+/// One row per student per assignment, created up front for the whole
+/// class so a teacher gets a gradebook immediately — there's no student
+/// portal yet (Phase 4) for self-service submission, so a teacher records
+/// what was handed in and grades it from here.
+model AssignmentSubmission {
+  id           String     @id @default(cuid())
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  status     SubmissionStatus @default(PENDING)
+  score      Int?
+  feedback   String?
+  gradedAt   DateTime?
+  gradedById String?
+  gradedBy   User?            @relation("SubmissionGradedBy", fields: [gradedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([assignmentId, studentId])
+}
+
+/// Per-school configurable grading scale (brief: "schools must be able to
+/// configure grading systems"), e.g. A=70-100 "Excellent".
+model GradeBand {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  grade    String
+  minScore Int
+  maxScore Int
+  remark   String
+  order    Int    @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@unique([schoolId, grade])
+  @@index([schoolId])
+}
+
+/// Per-school configurable score components for a subject's total, e.g.
+/// "1st CA" (max 20), "2nd CA" (max 20), "Exam" (max 60).
+model AssessmentComponent {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  name     String
+  maxScore Int
+  order    Int    @default(0)
+
+  createdAt DateTime @default(now())
+
+  scores Score[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+model Score {
+  id          String              @id @default(cuid())
+  schoolId    String
+  school      School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subjectId   String
+  subject     Subject             @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  termId      String
+  term        Term                @relation(fields: [termId], references: [id], onDelete: Cascade)
+  componentId String
+  component   AssessmentComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  value       Int
+  enteredById String
+  enteredBy   User   @relation("ScoreEnteredBy", fields: [enteredById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, subjectId, termId, componentId])
+  @@index([schoolId])
+  @@index([schoolId, studentId, termId])
+  @@index([schoolId, subjectId, termId])
+}
+
+enum ReportCardStatus {
+  DRAFT
+  APPROVED
+  PUBLISHED
+}
+
+/// A per-student per-term workflow record (brief section 45's RESULTS
+/// workflow: score entry -> validation -> approval -> report card -> parent
+/// notification). Totals/grades/positions are computed from Score at read
+/// time rather than duplicated here — this row only tracks the human
+/// approval/publish gate and optional comments.
+model ReportCard {
+  id        String  @id @default(cuid())
+  schoolId  String
+  school    School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  termId    String
+  term      Term    @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  status           ReportCardStatus @default(DRAFT)
+  teacherComment   String?
+  principalComment String?
+
+  approvedById String?
+  approvedBy   User?     @relation("ReportCardApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  publishedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, termId])
+  @@index([schoolId])
+}
+
+// ---------------------------------------------------------------------------
 // Audit
 // ---------------------------------------------------------------------------
 
@@ -411,9 +702,9 @@ model AuditLog {
   userId   String?
   user     User?   @relation(fields: [userId], references: [id])
 
-  action       String
-  resourceType String
-  resourceId   String?
+  action        String
+  resourceType  String
+  resourceId    String?
   previousValue Json?
   newValue      Json?
   ipAddress     String?

@@ -36,6 +36,22 @@ function slugify(name: string) {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
 
+function lastWeekdays(count: number): Date[] {
+  const dates: Date[] = [];
+  const cursor = new Date();
+  cursor.setUTCHours(0, 0, 0, 0);
+  while (dates.length < count) {
+    const day = cursor.getUTCDay();
+    if (day !== 0 && day !== 6) dates.push(new Date(cursor));
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  return dates;
+}
+
+function randomScore(max: number) {
+  return Math.round(max * (0.5 + Math.random() * 0.45));
+}
+
 async function main() {
   console.log("Seeding demo school...");
 
@@ -102,13 +118,16 @@ async function main() {
     { name: "Ibrahim Sule", email: "accountant@winfield.demo", role: "ACCOUNTANT" },
     { name: "Blessing Eze", email: "hr@winfield.demo", role: "HR_STAFF" },
   ];
-  await Promise.all(
+  const staffUsers = await Promise.all(
     staffSeeds.map((s) =>
       prisma.user.create({
         data: { schoolId: school.id, roleId: roleByKey.get(s.role)!.id, email: s.email, name: s.name, passwordHash },
       })
     )
   );
+  const userByEmail = new Map(staffUsers.map((u) => [u.email, u]));
+  const teacher1 = userByEmail.get("teacher1@winfield.demo")!;
+  const teacher2 = userByEmail.get("teacher2@winfield.demo")!;
 
   const thisYear = new Date().getFullYear();
   const session = await prisma.academicSession.create({
@@ -134,6 +153,25 @@ async function main() {
       endDate: new Date(end),
       isCurrent,
     })),
+  });
+  const currentTerm = await prisma.term.findFirstOrThrow({ where: { schoolId: school.id, isCurrent: true } });
+
+  await prisma.gradeBand.createMany({
+    data: [
+      { schoolId: school.id, grade: "A", minScore: 70, maxScore: 100, remark: "Excellent", order: 0 },
+      { schoolId: school.id, grade: "B", minScore: 60, maxScore: 69, remark: "Very Good", order: 1 },
+      { schoolId: school.id, grade: "C", minScore: 50, maxScore: 59, remark: "Good", order: 2 },
+      { schoolId: school.id, grade: "D", minScore: 45, maxScore: 49, remark: "Pass", order: 3 },
+      { schoolId: school.id, grade: "E", minScore: 40, maxScore: 44, remark: "Weak Pass", order: 4 },
+      { schoolId: school.id, grade: "F", minScore: 0, maxScore: 39, remark: "Fail", order: 5 },
+    ],
+  });
+  const assessmentComponents = await prisma.assessmentComponent.createManyAndReturn({
+    data: [
+      { schoolId: school.id, name: "1st CA", maxScore: 20, order: 0 },
+      { schoolId: school.id, name: "2nd CA", maxScore: 20, order: 1 },
+      { schoolId: school.id, name: "Exam", maxScore: 60, order: 2 },
+    ],
   });
 
   // Winfield is a Creche, Nursery & Primary school — not secondary classes.
@@ -164,11 +202,14 @@ async function main() {
     "Computer Studies", "French", "Verbal Reasoning", "Quantitative Reasoning",
     "Physical and Health Education", "Handwriting",
   ];
-  await prisma.subject.createMany({
+  const subjectRows = await prisma.subject.createManyAndReturn({
     data: subjects.map((name, i) => ({ schoolId: school.id, name, code: `SUB${String(i + 1).padStart(3, "0")}` })),
   });
+  const numeracy = subjectRows.find((s) => s.name === "Numeracy")!;
+  const literacy = subjectRows.find((s) => s.name === "Literacy")!;
 
   console.log("Enrolling demo students...");
+  const enrolledStudents: { id: string; classArmId: string }[] = [];
   let admissionSeq = 1;
   for (let i = 0; i < 110; i++) {
     const isMale = Math.random() > 0.5;
@@ -194,6 +235,7 @@ async function main() {
         status: "ACTIVE",
       },
     });
+    enrolledStudents.push({ id: student.id, classArmId });
 
     if (Math.random() > 0.2) {
       const guardianFirst = pick(isMale ? FIRST_NAMES_F : FIRST_NAMES_M);
@@ -211,6 +253,92 @@ async function main() {
       });
     }
   }
+
+  console.log("Assigning teachers, timetable, attendance, assignments and scores...");
+
+  await prisma.teacherAssignment.createMany({
+    data: classArms.flatMap((arm) => [
+      { schoolId: school.id, teacherId: teacher1.id, subjectId: numeracy.id, classArmId: arm.id },
+      { schoolId: school.id, teacherId: teacher2.id, subjectId: literacy.id, classArmId: arm.id },
+    ]),
+  });
+
+  await prisma.timetableSlot.createMany({
+    data: (["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"] as const).flatMap((day) =>
+      classArms.flatMap((arm) => [
+        { schoolId: school.id, classArmId: arm.id, subjectId: numeracy.id, teacherId: teacher1.id, dayOfWeek: day, startTime: "08:00", endTime: "08:40" },
+        { schoolId: school.id, classArmId: arm.id, subjectId: literacy.id, teacherId: teacher2.id, dayOfWeek: day, startTime: "08:40", endTime: "09:20" },
+      ])
+    ),
+  });
+
+  await prisma.attendanceRecord.createMany({
+    data: lastWeekdays(10).flatMap((date) =>
+      enrolledStudents.map((s) => ({
+        schoolId: school.id,
+        studentId: s.id,
+        classArmId: s.classArmId,
+        termId: currentTerm.id,
+        date,
+        status: Math.random() > 0.12 ? ("PRESENT" as const) : Math.random() > 0.5 ? ("ABSENT" as const) : ("LATE" as const),
+        markedById: teacher1.id,
+      }))
+    ),
+  });
+
+  const studentsByArm = new Map<string, string[]>();
+  for (const s of enrolledStudents) {
+    if (!studentsByArm.has(s.classArmId)) studentsByArm.set(s.classArmId, []);
+    studentsByArm.get(s.classArmId)!.push(s.id);
+  }
+
+  const dueDate = new Date();
+  dueDate.setUTCDate(dueDate.getUTCDate() + 7);
+  for (const arm of classArms) {
+    const armStudents = studentsByArm.get(arm.id) ?? [];
+    if (armStudents.length === 0) continue;
+    const assignment = await prisma.assignment.create({
+      data: {
+        schoolId: school.id,
+        classArmId: arm.id,
+        subjectId: numeracy.id,
+        teacherId: teacher1.id,
+        termId: currentTerm.id,
+        title: "Counting and number recognition",
+        description: "Practice counting objects from 1 to 20 and writing the matching numeral.",
+        dueDate,
+      },
+    });
+    await prisma.assignmentSubmission.createMany({
+      data: armStudents.map((studentId) => {
+        const graded = Math.random() > 0.4;
+        return {
+          assignmentId: assignment.id,
+          studentId,
+          status: graded ? ("GRADED" as const) : ("PENDING" as const),
+          score: graded ? randomScore(10) : null,
+          gradedAt: graded ? new Date() : null,
+          gradedById: graded ? teacher1.id : null,
+        };
+      }),
+    });
+  }
+
+  await prisma.score.createMany({
+    data: enrolledStudents.flatMap((s) =>
+      [numeracy, literacy].flatMap((subject) =>
+        assessmentComponents.map((component) => ({
+          schoolId: school.id,
+          studentId: s.id,
+          subjectId: subject.id,
+          termId: currentTerm.id,
+          componentId: component.id,
+          value: randomScore(component.maxScore),
+          enteredById: subject.id === numeracy.id ? teacher1.id : teacher2.id,
+        }))
+      )
+    ),
+  });
 
   console.log(`\nSeeded "${schoolName}" with ${classArms.length} class arms and 110 students.`);
   console.log(`All staff accounts use the password: ${DEMO_PASSWORD}\n`);

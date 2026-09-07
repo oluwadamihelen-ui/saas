@@ -2,13 +2,28 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, GraduationCap, Users, Settings } from "lucide-react";
+import {
+  LayoutDashboard,
+  GraduationCap,
+  Users,
+  Settings,
+  BookOpen,
+  ClipboardCheck,
+  CalendarDays,
+  FileText,
+  Award,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/brand/logo";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/students", label: "Students", icon: GraduationCap },
+  { href: "/dashboard/academics", label: "Academics", icon: BookOpen },
+  { href: "/dashboard/attendance", label: "Attendance", icon: ClipboardCheck },
+  { href: "/dashboard/timetable", label: "Timetable", icon: CalendarDays },
+  { href: "/dashboard/assignments", label: "Assignments", icon: FileText },
+  { href: "/dashboard/results", label: "Results", icon: Award },
   { href: "/dashboard/staff", label: "Staff", icon: Users },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];

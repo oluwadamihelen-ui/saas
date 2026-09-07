@@ -111,3 +111,11 @@ export async function listClassArms(schoolId: string) {
 export async function getCurrentSession(schoolId: string) {
   return prisma.academicSession.findFirst({ where: { schoolId, isCurrent: true } });
 }
+
+export async function getCurrentTerm(schoolId: string) {
+  return prisma.term.findFirst({ where: { schoolId, isCurrent: true } });
+}
+
+export async function listSubjects(schoolId: string) {
+  return prisma.subject.findMany({ where: { schoolId }, orderBy: { name: "asc" } });
+}

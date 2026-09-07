@@ -5,8 +5,10 @@ students, staff, academics, attendance, finance, communication and an AI
 assistant, built on a multi-tenant foundation (so other schools can be
 onboarded the same way later). This app is being built in phases (see
 [the root README](../../README.md) for the full architecture assessment and
-roadmap); this commit implements **Phase 1 — Foundation**:
+roadmap); this commit implements **Phase 1 (Foundation)** and **Phase 2
+(Academics)**:
 
+**Phase 1 — Foundation**
 - Multi-tenant data model (every tenant-owned table carries `schoolId`)
 - Auth.js v5 credentials login, bcrypt-hashed passwords
 - A `module.action` permission system (`students.view`, `staff.invite`, ...)
@@ -16,14 +18,29 @@ roadmap); this commit implements **Phase 1 — Foundation**:
 - Staff invites with a real accept-invite flow (no email provider yet, so the
   invite link is shown directly in the UI to copy/share)
 - Dashboard shell (sidebar, topbar) and a main dashboard with real counts —
-  modules that don't exist yet (attendance, finance, AI insights) show an
-  honest "coming in Phase N" empty state rather than fabricated numbers
+  modules that don't exist yet show an honest "coming in Phase N" empty
+  state rather than fabricated numbers
 - Student management: enroll, list (search/filter/paginate), profile
-  (personal/academic/guardians/health tabs), edit, withdraw, guardian linking
-- An audit log for student create/update/withdraw
+  (personal/academic/guardians/health/attendance/results tabs), edit,
+  withdraw, guardian linking
+- An audit log for student/attendance/results/timetable mutations
 
-Not yet built (see the phased roadmap): attendance, timetable, assignments,
-exams/results, finance, payroll, communication, parent/student portals, AI.
+**Phase 2 — Academics**
+- Teacher → subject → class assignments (`/dashboard/academics`), the
+  foundation everything else in this phase authorizes against
+- Attendance: daily roster marking per class, per-student history, and a
+  real "% present today" stat on the dashboard (no more placeholder)
+- Timetable: weekly periods per class with teacher/class double-booking
+  conflict detection, plus a read-only per-teacher view
+- Assignments: teacher-created, due-dated, with a gradebook per class
+  (there's no student portal yet, so a teacher records submissions on the
+  class's behalf rather than students self-submitting)
+- Results: configurable assessment components (e.g. "1st CA"/"Exam") and
+  grade bands, a score-entry grid per class/subject, and report cards with
+  a real approval workflow (draft → approved → published) plus PDF export
+
+Not yet built (see the phased roadmap): finance, payroll, communication,
+parent/student portals, AI.
 
 ## Stack
 
