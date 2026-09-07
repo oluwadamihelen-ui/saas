@@ -6,7 +6,20 @@ import { generateQuoteNumber } from "../../src/lib/utils/ids";
 import { getDeveloperCommissionRate } from "../../src/lib/services/settings";
 import { getOrCreateMockTarget } from "../../src/lib/services/deployment-targets";
 
+import { resolveSeedMode } from "./env";
+
 const prisma = new PrismaClient();
+
+// Everything below main() splits into two tiers:
+//  - "core" data (roles/permissions, provider catalog, settings, categories,
+//    hosting plans): reference data the app needs to function at all, with
+//    no passwords or PII. Always safe to run anywhere, including production.
+//  - "demo" data (seedUsers onward): sample accounts -- ALL sharing one
+//    published password ("Passw0rd!"), including a Super Admin -- plus
+//    fake orders/apps/tickets built on top of them. Fine for local
+//    development, dangerous against a real database. Gated below so a
+//    plain `npm run db:seed` in production can never create them.
+const { nodeEnv: NODE_ENV, isProduction, seedDemoData } = resolveSeedMode();
 
 function slugify(input: string) {
   return input
@@ -1202,8 +1215,36 @@ async function seedPhase7DemoData(roles: Map<string, { id: string }>, categories
   }
 }
 
+/**
+ * Only runs when demo data is skipped (production, without SEED_DEMO_DATA)
+ * -- seedUsers() below already creates a demo Super Admin whenever demo
+ * data does seed. A production deployment still needs exactly one real
+ * admin account to log in and start configuring the platform, but its
+ * credentials must be operator-supplied, never a password shared with
+ * every other BridgeCodes install in the world.
+ */
+async function seedBootstrapAdmin(roles: Map<string, { id: string }>) {
+  const email = process.env.SEED_ADMIN_EMAIL;
+  const password = process.env.SEED_ADMIN_PASSWORD;
+  if (!email || !password) {
+    console.warn(
+      "No SEED_ADMIN_EMAIL/SEED_ADMIN_PASSWORD set -- skipping bootstrap admin creation. " +
+        "Set both and re-run `npm run db:seed` to create your first Super Admin account."
+    );
+    return;
+  }
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) return;
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  await prisma.user.create({
+    data: { name: "Admin", email, passwordHash, roleId: roles.get("SUPER_ADMIN")!.id, status: "ACTIVE" },
+  });
+  console.log(`Created bootstrap Super Admin account: ${email}`);
+}
+
 async function main() {
-  console.log("Seeding roles and permissions...");
+  console.log(`Seeding roles and permissions... (NODE_ENV=${NODE_ENV})`);
   const roles = await seedRolesAndPermissions();
 
   console.log("Seeding providers...");
@@ -1215,14 +1256,28 @@ async function main() {
   console.log("Seeding categories...");
   const categories = await seedCategories();
 
+  console.log("Seeding hosting plans...");
+  const hostingPlans = await seedHostingPlans();
+
+  if (!seedDemoData) {
+    console.log(
+      "Production mode detected -- skipping demo/sample data (accounts with a shared published password, fake orders, apps, tickets, etc)."
+    );
+    console.log("Set SEED_DEMO_DATA=true to force demo data seeding even in production (e.g. for a disposable staging environment).");
+    await seedBootstrapAdmin(roles);
+    console.log("Seed complete (core reference data only).");
+    return;
+  }
+
+  if (isProduction) {
+    console.warn("!! SEED_DEMO_DATA=true in production -- creating demo accounts with a published, world-known password. !!");
+  }
+
   console.log("Seeding users...");
   const { admin, staff, customers } = await seedUsers(roles);
 
   console.log("Seeding applications...");
   const apps = await seedApplications(categories, admin.id);
-
-  console.log("Seeding hosting plans...");
-  const hostingPlans = await seedHostingPlans();
 
   console.log("Seeding orders, deployments, domains, hosting accounts...");
   await seedOrdersAndDeployments(customers, apps, hostingPlans);

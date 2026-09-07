@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PERMISSION_CATALOG } from "@/lib/auth/permissions";
 import { StaffForm } from "./staff-form";
-import { togglePermissionOverride, suspendStaffMember, reactivateStaffMember } from "./actions";
+import { togglePermissionOverride, suspendStaffMember, reactivateStaffMember, sendStaffPasswordResetEmail } from "./actions";
 
 export const metadata: Metadata = { title: "Staff" };
 
@@ -66,6 +66,11 @@ export default async function AdminStaffPage() {
                           </Button>
                         </form>
                       ))}
+                    <form action={sendStaffPasswordResetEmail.bind(null, member.id)}>
+                      <Button type="submit" size="sm" variant="outline">
+                        Send Password Reset Email
+                      </Button>
+                    </form>
                   </div>
                 </div>
 

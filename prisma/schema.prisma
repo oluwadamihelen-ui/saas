@@ -71,6 +71,22 @@ enum UserStatus {
   PENDING_VERIFICATION
 }
 
+// The raw reset token only ever exists in the emailed link -- tokenHash
+// (SHA-256 of the raw token) is what's stored, so a database leak alone
+// never yields a usable reset link. Single-use (usedAt) and short-lived
+// (expiresAt), same pattern as most password-reset implementations.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
 model User {
   id                    String           @id @default(uuid())
   email                 String           @unique
@@ -112,6 +128,7 @@ model User {
   subscriptions         Subscription[]
   createdApplications   Application[]          @relation("AppCreatedBy")
   commissions           Commission[]
+  passwordResetTokens   PasswordResetToken[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

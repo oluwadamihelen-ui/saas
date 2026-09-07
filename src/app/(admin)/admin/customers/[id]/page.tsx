@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { promoteToDeveloper, revertToCustomer, suspendUser, reactivateUser } from "../actions";
+import { promoteToDeveloper, revertToCustomer, suspendUser, reactivateUser, sendPasswordResetEmail } from "../actions";
 
 const ROLE_VARIANT: Record<string, "neutral" | "accent"> = { CUSTOMER: "neutral", DEVELOPER: "accent" };
 const ROLE_LABEL: Record<string, string> = { CUSTOMER: "Buyer", DEVELOPER: "Developer" };
@@ -77,6 +77,11 @@ export default async function AdminCustomerDetailPage({ params }: { params: Prom
                 </Button>
               </form>
             )}
+            <form action={sendPasswordResetEmail.bind(null, customer.id)}>
+              <Button type="submit" size="sm" variant="outline">
+                Send Password Reset Email
+              </Button>
+            </form>
           </div>
         )}
       </div>

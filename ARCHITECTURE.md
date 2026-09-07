@@ -1032,10 +1032,71 @@ header and URL shape, username generation including the leading-digit
 edge case, disk-usage unit conversion including the "unlimited" case,
 and connected/auth-failure/HTTP-error classification).
 
+**Go-live phase 3 — seed script production guard + password recovery.**
+Closes the last two hard blockers from the audit that weren't about a
+missing vendor integration.
+
+`prisma/seed/index.ts` had no notion of "production" at all — a plain
+`npm run db:seed` against a real database would create demo accounts
+sharing one published password ("Passw0rd!"), including a Super Admin.
+The fix splits seeding into two tiers rather than just refusing to run:
+"core" data (roles, permissions, the provider catalog, settings,
+categories, hosting plans — reference data the app needs to function,
+with no passwords or PII) always seeds, everywhere; "demo" data
+(`seedUsers()` onward — the shared-password accounts and every fake
+order/app/ticket built on them) only seeds when `NODE_ENV !== "production"`
+or `SEED_DEMO_DATA="true"` explicitly forces it for a disposable staging
+environment. The decision itself lives in the small, directly unit-tested
+`prisma/seed/env.ts::resolveSeedMode()` rather than inline in the script,
+specifically so it's testable without importing (and thereby executing)
+the seed script itself. A real production deployment still needs exactly
+one real admin account to log in with, though — `seedBootstrapAdmin()`
+creates it from `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD` when demo data is
+skipped, so the operator supplies their own credentials instead of
+inheriting a password shared by every BridgeCodes install in the world.
+Verified live: ran the seed script with `NODE_ENV=production` against the
+dev database and confirmed demo accounts were skipped, core data still
+upserted, and the bootstrap admin path worked end-to-end (created with
+the right role, login functional) before cleaning up the test row.
+
+Password recovery previously didn't exist anywhere, for any role.
+`lib/services/password-reset.ts` is the shared self-service flow behind
+new `/forgot-password` and `/reset-password` pages — deliberately generic
+across every account type (customer, developer, staff, super admin all
+authenticate through the same Credentials provider, so one flow covers
+all of them). `requestPasswordReset()` always resolves the same way
+regardless of whether the email matches a real, active account, so it can
+never become an account-enumeration oracle; only a genuine match creates
+a `PasswordResetToken` and sends an email. Two things worth calling out on
+the token itself: only its SHA-256 hash is ever stored (the raw token
+exists only in the emailed link, so a database leak alone never yields a
+usable reset link), and a successful reset retires every other
+outstanding token for that user, not just the one that got used. The
+`/forgot-password` submission is rate-limited by email (reusing the
+existing `checkRateLimit` helper) — the one public write endpoint that
+wasn't rate-limited before this. `sendPasswordResetEmail()` /
+`sendStaffPasswordResetEmail()` give admins a "Send Password Reset Email"
+fallback on the Users and Staff pages for a customer who can't complete
+the flow themselves (e.g. contacting support directly) — deliberately
+implemented as re-triggering the exact same email flow rather than
+generating and displaying a password, so no plaintext password is ever
+shown or handled admin-side. The login page's demo-credentials hint box
+is now hidden outside development, since those credentials should never
+be advertised on a real deployment. Verified live end-to-end through the
+actual pages (not just the service layer): submitted the real
+`/forgot-password` form, drove `/reset-password` with a genuinely issued
+token through to a successful reset, confirmed login with the new
+password, confirmed a reused token is rejected, and exercised the admin
+"Send Password Reset Email" button. Covered by
+`tests/services/seed-mode.test.ts` (the production/override decision
+matrix) and `tests/integration/password-reset.test.ts` (token issuance,
+the enumeration-safe non-match path, successful reset, reused-token and
+garbage-token rejection, and cross-token invalidation on reset).
+
 Remaining from the go-live audit, tracked for the next phases:
-deployment and DNS-management adapters are still mock, the background
-worker still needs its own always-on host, the seed script still needs a
-production guard, and there's still no password-recovery flow.
+deployment and DNS-management adapters are still mock, and the background
+worker still needs its own always-on host to run in production (an
+infrastructure/deployment decision, not something more code resolves).
 
 ## 13. Local Development
 

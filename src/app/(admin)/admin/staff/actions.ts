@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth/require";
+import { requestPasswordReset } from "@/lib/services/password-reset";
 import { recordAuditLog } from "@/lib/security/audit";
 
 const staffSchema = z.object({
@@ -63,5 +65,20 @@ export async function reactivateStaffMember(userId: string) {
   const actor = await requireRole("SUPER_ADMIN");
   await prisma.user.update({ where: { id: userId }, data: { status: "ACTIVE" } });
   await recordAuditLog({ actorId: actor.id, action: "staff.reactivated", resourceType: "User", resourceId: userId });
+  revalidatePath("/admin/staff");
+}
+
+/** Same support-facing fallback as the Users page's equivalent -- sends the same reset-link email a staff member's self-service /forgot-password would. */
+export async function sendStaffPasswordResetEmail(userId: string) {
+  const actor = await requireRole("SUPER_ADMIN");
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+
+  const headerList = await headers();
+  const host = headerList.get("host");
+  const protocol = host?.includes("localhost") ? "http" : "https";
+  const appOrigin = process.env.APP_URL ?? `${protocol}://${host}`;
+
+  await requestPasswordReset(user.email, appOrigin);
+  await recordAuditLog({ actorId: actor.id, action: "staff.password_reset_email_sent", resourceType: "User", resourceId: userId });
   revalidatePath("/admin/staff");
 }
