@@ -51,7 +51,7 @@ async function main() {
   const permissions = await prisma.permission.findMany();
   const permissionByKey = new Map(permissions.map((p) => [p.key, p.id]));
 
-  const schoolName = "Greenfield Academy";
+  const schoolName = "Winfield Montessori School";
   const slug = slugify(schoolName);
   await prisma.school.deleteMany({ where: { slug } });
 
@@ -60,10 +60,9 @@ async function main() {
       name: schoolName,
       slug,
       status: "ACTIVE",
-      email: "info@greenfield.demo",
+      email: "info@winfield.demo",
       phone: "+234 801 234 5678",
-      website: "https://greenfield.demo",
-      addressLine: "14 Palm Grove Avenue",
+      website: "https://winfield.demo",
       city: "Lagos",
       state: "Lagos",
       country: "Nigeria",
@@ -95,13 +94,13 @@ async function main() {
 
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
   const staffSeeds: { name: string; email: string; role: SystemRoleKey }[] = [
-    { name: "Adaeze Nwankwo", email: "owner@greenfield.demo", role: "SCHOOL_OWNER" },
-    { name: "Emeka Obi", email: "admin@greenfield.demo", role: "SCHOOL_ADMIN" },
-    { name: "Funmilayo Adekunle", email: "principal@greenfield.demo", role: "PRINCIPAL" },
-    { name: "Tunde Bakare", email: "teacher1@greenfield.demo", role: "TEACHER" },
-    { name: "Amaka Chukwu", email: "teacher2@greenfield.demo", role: "TEACHER" },
-    { name: "Ibrahim Sule", email: "accountant@greenfield.demo", role: "ACCOUNTANT" },
-    { name: "Blessing Eze", email: "hr@greenfield.demo", role: "HR_STAFF" },
+    { name: "Adaeze Nwankwo", email: "owner@winfield.demo", role: "SCHOOL_OWNER" },
+    { name: "Emeka Obi", email: "admin@winfield.demo", role: "SCHOOL_ADMIN" },
+    { name: "Funmilayo Adekunle", email: "principal@winfield.demo", role: "PRINCIPAL" },
+    { name: "Tunde Bakare", email: "teacher1@winfield.demo", role: "TEACHER" },
+    { name: "Amaka Chukwu", email: "teacher2@winfield.demo", role: "TEACHER" },
+    { name: "Ibrahim Sule", email: "accountant@winfield.demo", role: "ACCOUNTANT" },
+    { name: "Blessing Eze", email: "hr@winfield.demo", role: "HR_STAFF" },
   ];
   await Promise.all(
     staffSeeds.map((s) =>
@@ -137,27 +136,33 @@ async function main() {
     })),
   });
 
-  const classPlan: { name: string; arms: string[] }[] = [
-    { name: "JSS1", arms: ["A", "B"] },
-    { name: "JSS2", arms: ["A", "B"] },
-    { name: "JSS3", arms: ["A"] },
-    { name: "SS1", arms: ["A", "B"] },
-    { name: "SS2", arms: ["A"] },
-    { name: "SS3", arms: ["A"] },
+  // Winfield is a Creche, Nursery & Primary school — not secondary classes.
+  const classPlan: { name: string; arms: string[]; typicalAge: number }[] = [
+    { name: "Creche", arms: ["A"], typicalAge: 2 },
+    { name: "Pre-Nursery", arms: ["A"], typicalAge: 3 },
+    { name: "Nursery 1", arms: ["A"], typicalAge: 4 },
+    { name: "Nursery 2", arms: ["A", "B"], typicalAge: 5 },
+    { name: "Primary 1", arms: ["A", "B"], typicalAge: 6 },
+    { name: "Primary 2", arms: ["A", "B"], typicalAge: 7 },
+    { name: "Primary 3", arms: ["A", "B"], typicalAge: 8 },
+    { name: "Primary 4", arms: ["A"], typicalAge: 9 },
+    { name: "Primary 5", arms: ["A"], typicalAge: 10 },
+    { name: "Primary 6", arms: ["A"], typicalAge: 11 },
   ];
-  const classArmIds: string[] = [];
+  const classArms: { id: string; typicalAge: number }[] = [];
   for (const [index, group] of classPlan.entries()) {
     const classGroup = await prisma.classGroup.create({ data: { schoolId: school.id, name: group.name, order: index } });
     for (const armName of group.arms) {
       const arm = await prisma.classArm.create({ data: { schoolId: school.id, classGroupId: classGroup.id, name: armName } });
-      classArmIds.push(arm.id);
+      classArms.push({ id: arm.id, typicalAge: group.typicalAge });
     }
   }
 
   const subjects = [
-    "Mathematics", "English Language", "Basic Science", "Social Studies",
-    "Civic Education", "Agricultural Science", "Business Studies", "Computer Studies",
-    "French", "Physical and Health Education",
+    "Numeracy", "Literacy", "Phonics", "Basic Science and Technology", "Social Studies",
+    "Civic Education", "Christian Religious Studies", "Cultural and Creative Arts",
+    "Computer Studies", "French", "Verbal Reasoning", "Quantitative Reasoning",
+    "Physical and Health Education", "Handwriting",
   ];
   await prisma.subject.createMany({
     data: subjects.map((name, i) => ({ schoolId: school.id, name, code: `SUB${String(i + 1).padStart(3, "0")}` })),
@@ -169,9 +174,10 @@ async function main() {
     const isMale = Math.random() > 0.5;
     const firstName = pick(isMale ? FIRST_NAMES_M : FIRST_NAMES_F);
     const lastName = pick(LAST_NAMES);
-    const classArmId = pick(classArmIds);
+    const arm = pick(classArms);
+    const classArmId = arm.id;
     const admissionNumber = `${thisYear}-${String(admissionSeq++).padStart(4, "0")}`;
-    const birthYear = thisYear - (10 + Math.floor(Math.random() * 7));
+    const birthYear = thisYear - arm.typicalAge - Math.floor(Math.random() * 2);
 
     const student = await prisma.student.create({
       data: {
@@ -206,7 +212,7 @@ async function main() {
     }
   }
 
-  console.log(`\nSeeded "${schoolName}" with ${classArmIds.length} class arms and 110 students.`);
+  console.log(`\nSeeded "${schoolName}" with ${classArms.length} class arms and 110 students.`);
   console.log(`All staff accounts use the password: ${DEMO_PASSWORD}\n`);
   for (const s of staffSeeds) console.log(`  ${s.role.padEnd(16)} ${s.email}`);
 }

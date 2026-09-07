@@ -1,6 +1,6 @@
-# Klaso — Architecture
+# Winfield — Architecture
 
-Klaso is a multi-tenant AI-native school management platform. This document
+Winfield is a multi-tenant AI-native school management platform. This document
 describes the system as implemented through **Phase 1 (Foundation)** — see
 the [root README](../../README.md#school-platform--architecture-assessment-phase-1-kickoff)
 for the initial assessment this build started from, and the phased roadmap

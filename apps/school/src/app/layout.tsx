@@ -15,11 +15,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Klaso — School management, run by AI",
-    template: "%s | Klaso",
+    default: "Winfield — School management, run by AI",
+    template: "%s | Winfield",
   },
   description:
-    "An AI-native operating system for schools: students, attendance, academics, finance and communication in one place.",
+    "Winfield Montessori School's AI-native operating system: students, attendance, academics, finance and communication in one place.",
   metadataBase: new URL(process.env.APP_URL ?? "http://localhost:3001"),
 };
 

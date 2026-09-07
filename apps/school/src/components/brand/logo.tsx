@@ -10,9 +10,9 @@ export function Logo({ height = 28, className }: { height?: number; className?: 
         className="flex items-center justify-center rounded-md bg-accent font-bold text-accent-foreground"
         style={{ height, width: height, fontSize: height * 0.5 }}
       >
-        K
+        W
       </span>
-      Klaso
+      Winfield
     </span>
   );
 }

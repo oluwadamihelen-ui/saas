@@ -2,7 +2,7 @@
 
 These steps use `cmd.exe` (Command Prompt) — not PowerShell, not Git Bash.
 Click Start, type `cmd`, press Enter, and run everything below in that
-window. This walks through running the school platform (**Klaso**, in
+window. This walks through running the school platform (**Winfield**, in
 `apps\school`). The other app in this repo (`apps\marketplace`) follows the
 same pattern — swap the folder name.
 
@@ -99,7 +99,7 @@ npx prisma migrate dev
 npm run db:seed
 ```
 
-The seed command creates a demo school ("Greenfield Academy") with staff
+The seed command creates a demo school ("Winfield Montessori School") with staff
 logins and 110 students, and prints the login credentials to the screen —
 scroll up in the window to see them (all use password `Passw0rd!23`).
 
@@ -115,7 +115,7 @@ Leave this window open — it's your local server. Open a browser and go to:
 http://localhost:3001
 ```
 
-Sign in with one of the seeded accounts (e.g. `owner@greenfield.demo` /
+Sign in with one of the seeded accounts (e.g. `owner@winfield.demo` /
 `Passw0rd!23`), or click **Set up your school** to run through the real
 onboarding wizard and create a brand-new school.
 

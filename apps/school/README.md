@@ -1,8 +1,9 @@
-# Klaso
+# Winfield
 
-An AI-native, multi-tenant school management platform — students, staff,
-academics, attendance, finance, communication and an AI assistant, built for
-Nigerian and African schools first. This app is being built in phases (see
+Winfield Montessori School's AI-native school management platform —
+students, staff, academics, attendance, finance, communication and an AI
+assistant, built on a multi-tenant foundation (so other schools can be
+onboarded the same way later). This app is being built in phases (see
 [the root README](../../README.md) for the full architecture assessment and
 roadmap); this commit implements **Phase 1 — Foundation**:
 
@@ -44,17 +45,18 @@ npm run dev                # http://localhost:3001
 
 ### Demo accounts
 
-The seed script creates **Greenfield Academy** with 9 class arms, 110
-students, and these staff accounts — all with password `Passw0rd!23`:
+The seed script creates **Winfield Montessori School** (Creche, Nursery &
+Primary) with 14 class arms, 110 students, and these staff accounts — all
+with password `Passw0rd!23`:
 
 | Role | Email |
 |---|---|
-| School Owner | owner@greenfield.demo |
-| School Administrator | admin@greenfield.demo |
-| Principal | principal@greenfield.demo |
-| Teacher | teacher1@greenfield.demo / teacher2@greenfield.demo |
-| Accountant | accountant@greenfield.demo |
-| HR Staff | hr@greenfield.demo |
+| School Owner | owner@winfield.demo |
+| School Administrator | admin@winfield.demo |
+| Principal | principal@winfield.demo |
+| Teacher | teacher1@winfield.demo / teacher2@winfield.demo |
+| Accountant | accountant@winfield.demo |
+| HR Staff | hr@winfield.demo |
 
 Or go to `/register` to walk through the real onboarding wizard and create a
 brand-new school from scratch.
