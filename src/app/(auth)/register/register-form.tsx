@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Input, Label } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { registerCustomer, type RegisterState } from "./actions";
@@ -19,12 +20,14 @@ export function RegisterForm() {
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(registerCustomer, initialState);
   const [accountType, setAccountType] = useState<(typeof ACCOUNT_TYPES)[number]["value"]>("CUSTOMER");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const passwordsMismatch = useMemo(() => confirmPassword.length > 0 && password !== confirmPassword, [password, confirmPassword]);
 
   useEffect(() => {
     if (state.status === "success") {
       const form = document.getElementById("register-form") as HTMLFormElement | null;
       const email = (form?.elements.namedItem("email") as HTMLInputElement | null)?.value;
-      const password = (form?.elements.namedItem("password") as HTMLInputElement | null)?.value;
       if (email && password) {
         signIn("credentials", { email, password, redirect: false }).then(() => {
           router.push("/dashboard");
@@ -32,6 +35,7 @@ export function RegisterForm() {
         });
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status, router]);
 
   return (
@@ -70,9 +74,31 @@ export function RegisterForm() {
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="password">Password</Label>
-        <Input id="password" name="password" type="password" required minLength={8} placeholder="At least 8 characters" />
+        <PasswordInput
+          id="password"
+          name="password"
+          required
+          minLength={8}
+          placeholder="At least 8 characters"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
       </div>
-      <Button type="submit" disabled={isPending} className="w-full">
+      <div className="space-y-1.5">
+        <Label htmlFor="confirmPassword">Confirm password</Label>
+        <PasswordInput
+          id="confirmPassword"
+          name="confirmPassword"
+          required
+          minLength={8}
+          placeholder="Re-enter your password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          aria-invalid={passwordsMismatch}
+        />
+        {passwordsMismatch && <p className="text-sm text-danger">Passwords don&apos;t match.</p>}
+      </div>
+      <Button type="submit" disabled={isPending || passwordsMismatch} className="w-full">
         {isPending ? "Creating account..." : "Create account"}
       </Button>
       {state.status === "error" && <p className="text-sm text-danger">{state.message}</p>}

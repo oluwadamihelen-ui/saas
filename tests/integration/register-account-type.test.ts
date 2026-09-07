@@ -23,7 +23,7 @@ describe("registerCustomer: account type selection", () => {
 
     const result = await registerCustomer(
       { status: "idle" },
-      buildFormData({ name: "Buyer Default", email, password: "Passw0rd!" })
+      buildFormData({ name: "Buyer Default", email, password: "Passw0rd!", confirmPassword: "Passw0rd!" })
     );
 
     expect(result.status).toBe("success");
@@ -37,7 +37,7 @@ describe("registerCustomer: account type selection", () => {
 
     const result = await registerCustomer(
       { status: "idle" },
-      buildFormData({ name: "Buyer Explicit", email, password: "Passw0rd!", accountType: "CUSTOMER" })
+      buildFormData({ name: "Buyer Explicit", email, password: "Passw0rd!", confirmPassword: "Passw0rd!", accountType: "CUSTOMER" })
     );
 
     expect(result.status).toBe("success");
@@ -51,7 +51,7 @@ describe("registerCustomer: account type selection", () => {
 
     const result = await registerCustomer(
       { status: "idle" },
-      buildFormData({ name: "New Developer", email, password: "Passw0rd!", accountType: "DEVELOPER" })
+      buildFormData({ name: "New Developer", email, password: "Passw0rd!", confirmPassword: "Passw0rd!", accountType: "DEVELOPER" })
     );
 
     expect(result.status).toBe("success");
@@ -63,16 +63,33 @@ describe("registerCustomer: account type selection", () => {
     const email = `dupe-${SUFFIX}@example.com`;
     createdEmails.push(email);
 
-    const first = await registerCustomer({ status: "idle" }, buildFormData({ name: "First", email, password: "Passw0rd!" }));
+    const first = await registerCustomer(
+      { status: "idle" },
+      buildFormData({ name: "First", email, password: "Passw0rd!", confirmPassword: "Passw0rd!" })
+    );
     expect(first.status).toBe("success");
 
     const second = await registerCustomer(
       { status: "idle" },
-      buildFormData({ name: "Second", email, password: "Passw0rd!", accountType: "DEVELOPER" })
+      buildFormData({ name: "Second", email, password: "Passw0rd!", confirmPassword: "Passw0rd!", accountType: "DEVELOPER" })
     );
     expect(second.status).toBe("error");
 
     const count = await prisma.user.count({ where: { email } });
     expect(count).toBe(1);
+  });
+
+  it("rejects a mismatched confirmPassword and creates no account", async () => {
+    const email = `mismatch-${SUFFIX}@example.com`;
+
+    const result = await registerCustomer(
+      { status: "idle" },
+      buildFormData({ name: "Mismatch", email, password: "Passw0rd!", confirmPassword: "Different1!" })
+    );
+
+    expect(result.status).toBe("error");
+    expect(result.message).toBe("Passwords don't match.");
+    const count = await prisma.user.count({ where: { email } });
+    expect(count).toBe(0);
   });
 });

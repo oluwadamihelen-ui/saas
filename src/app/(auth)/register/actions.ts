@@ -5,13 +5,16 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/security/logger";
 
-const registerSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(120),
-  email: z.string().trim().toLowerCase().email("Enter a valid email"),
-  password: z.string().min(8, "Password must be at least 8 characters").max(200),
-  company: z.string().trim().max(200).optional(),
-  accountType: z.enum(["CUSTOMER", "DEVELOPER"]).default("CUSTOMER"),
-});
+const registerSchema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required").max(120),
+    email: z.string().trim().toLowerCase().email("Enter a valid email"),
+    password: z.string().min(8, "Password must be at least 8 characters").max(200),
+    confirmPassword: z.string(),
+    company: z.string().trim().max(200).optional(),
+    accountType: z.enum(["CUSTOMER", "DEVELOPER"]).default("CUSTOMER"),
+  })
+  .refine((data) => data.password === data.confirmPassword, { message: "Passwords don't match.", path: ["confirmPassword"] });
 
 export interface RegisterState {
   status: "idle" | "error" | "success";
@@ -23,6 +26,7 @@ export async function registerCustomer(_prev: RegisterState, formData: FormData)
     name: formData.get("name"),
     email: formData.get("email"),
     password: formData.get("password"),
+    confirmPassword: formData.get("confirmPassword"),
     company: formData.get("company") || undefined,
     accountType: formData.get("accountType") || undefined,
   });

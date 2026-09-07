@@ -54,6 +54,28 @@ providers by default — the full purchase → deployment journey works with no
 external credentials. See Admin → Providers to inspect provider status, and
 `.env.example` for how to switch a category to a real adapter.
 
+### Going live: your own Super Admin, and dropping the demo data
+
+```bash
+# Grant Super Admin to a real email -- promotes it if the account already
+# exists, or creates it (password required only in that case):
+npx tsx scripts/make-super-admin.ts you@example.com "a-real-password"
+
+# Remove every seeded demo account, the demo marketplace listings, and
+# everything reachable from them (orders, deployments, domains, hosting
+# accounts, tickets, coupons, the sample bundle, quotes) -- leaves core
+# reference data (roles, permissions, the provider catalog, settings,
+# categories, hosting plans) untouched. Safe to run more than once.
+npx tsx scripts/purge-demo-data.ts
+```
+
+Run the purge *after* you've promoted your own account (or created it
+through `/register`) — it only ever touches the six seeded demo emails
+(`admin@bridgecodes.example`, `ops@bridgecodes.example`,
+`sarah@brightretail.com`, `david@northgaterealty.com`,
+`grace@clinicly.example`, `femi@devstudio.example`) plus the demo
+marketplace listings by their fixed slugs, never anything else.
+
 ### The purchase → deployment journey
 
 1. **Admin** creates an application, adds a version (e.g. `1.0.0`) with a
