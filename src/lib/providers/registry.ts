@@ -31,7 +31,20 @@ async function getCredential(adapterKey: string, type: string, key: string): Pro
   return decryptSecret(cred.encryptedValue);
 }
 
-let cachedPaymentProvider: PaymentProvider | null = null;
+// Cached mock provider instances are attached to `globalThis` (same pattern
+// as the Prisma client in lib/db.ts, and MockPaymentProvider's own
+// transaction Maps): Next.js compiles Server Actions and Route Handlers as
+// separate bundles, each re-evaluating this module, so a plain module-level
+// `let` would mean a mock provider created while handling a Server Action
+// (e.g. checkout) and one created while handling a Route Handler (e.g. the
+// payment webhook) could silently be two different instances with two
+// different in-memory states.
+declare global {
+  var __cachedPaymentProvider: PaymentProvider | undefined;
+  var __cachedDomainProvider: DomainProvider | undefined;
+  var __cachedHostingProvider: HostingProvider | undefined;
+  var __cachedEmailProvider: EmailProvider | undefined;
+}
 
 export async function getPaymentProvider(): Promise<PaymentProvider> {
   const preferred = process.env.PAYMENT_PROVIDER ?? "mock";
@@ -39,11 +52,10 @@ export async function getPaymentProvider(): Promise<PaymentProvider> {
     const secretKey = process.env.PAYSTACK_SECRET_KEY || (await getCredential("paystack", "PAYMENT", "secretKey"));
     if (secretKey) return new PaystackPaymentProvider(secretKey);
   }
-  if (!cachedPaymentProvider) cachedPaymentProvider = new MockPaymentProvider();
-  return cachedPaymentProvider;
+  if (!global.__cachedPaymentProvider) global.__cachedPaymentProvider = new MockPaymentProvider();
+  return global.__cachedPaymentProvider;
 }
 
-let cachedDomainProvider: DomainProvider | null = null;
 export async function getDomainProvider(): Promise<DomainProvider> {
   const preferred = process.env.DOMAIN_PROVIDER ?? "mock";
   // No real registrar adapter exists yet -- this branch is the seam where one
@@ -54,14 +66,18 @@ export async function getDomainProvider(): Promise<DomainProvider> {
   if (preferred !== "mock") {
     logger.warn("domain_provider.unimplemented_adapter_requested", { preferred });
   }
-  if (!cachedDomainProvider) cachedDomainProvider = new MockDomainProvider();
-  return cachedDomainProvider;
+  if (!global.__cachedDomainProvider) global.__cachedDomainProvider = new MockDomainProvider();
+  return global.__cachedDomainProvider;
 }
 
-let cachedHostingProvider: HostingProvider | null = null;
 export async function getHostingProvider(): Promise<HostingProvider> {
-  if (!cachedHostingProvider) cachedHostingProvider = new MockHostingProvider();
-  return cachedHostingProvider;
+  const preferred = process.env.HOSTING_PROVIDER ?? "mock";
+  // Same seam as getDomainProvider -- no real hosting adapter exists yet.
+  if (preferred !== "mock") {
+    logger.warn("hosting_provider.unimplemented_adapter_requested", { preferred });
+  }
+  if (!global.__cachedHostingProvider) global.__cachedHostingProvider = new MockHostingProvider();
+  return global.__cachedHostingProvider;
 }
 
 /** Default/system-wide deployment adapter (used for the admin "test connection" check). Per-deployment resolution goes through deploymentAdapterRegistry keyed by DeploymentTarget.provider. */
@@ -69,8 +85,7 @@ export async function getDeploymentProvider(): Promise<DeploymentProviderAdapter
   return deploymentAdapterRegistry.resolve(process.env.DEPLOYMENT_PROVIDER ?? "mock");
 }
 
-let cachedEmailProvider: EmailProvider | null = null;
 export async function getEmailProvider(): Promise<EmailProvider> {
-  if (!cachedEmailProvider) cachedEmailProvider = new MockEmailProvider();
-  return cachedEmailProvider;
+  if (!global.__cachedEmailProvider) global.__cachedEmailProvider = new MockEmailProvider();
+  return global.__cachedEmailProvider;
 }

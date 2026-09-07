@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
@@ -58,7 +59,11 @@ export default async function AdminHostingPage() {
               <tbody className="divide-y divide-border">
                 {accounts.map((account) => (
                   <tr key={account.id} className="hover:bg-muted-surface">
-                    <td className="px-4 py-3 text-muted">{account.customer.name}</td>
+                    <td className="px-4 py-3 text-muted">
+                      <Link href={`/admin/hosting/${account.id}`} className="hover:text-accent hover:underline">
+                        {account.customer.name}
+                      </Link>
+                    </td>
                     <td className="px-4 py-3 font-medium text-foreground">{account.hostingPlan.name}</td>
                     <td className="px-4 py-3 text-muted">{account.primaryDomain ?? "—"}</td>
                     <td className="px-4 py-3">

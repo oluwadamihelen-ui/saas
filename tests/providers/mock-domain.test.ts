@@ -4,10 +4,18 @@ import { MockDomainProvider } from "@/lib/providers/domain/mock";
 describe("MockDomainProvider", () => {
   it("reports a domain as unavailable once registered through this instance", async () => {
     const provider = new MockDomainProvider();
-    const domain = `test-${Date.now()}.com`;
-
-    const availableBefore = await provider.checkAvailability(domain);
-    expect(availableBefore).toBe(true);
+    // The mock's availability check is a deterministic hash of the domain
+    // string (so demos behave consistently) -- about 1 in 3 candidate names
+    // comes back "taken" by chance. Probe a few so this test isn't flaky.
+    let domain = "";
+    for (let i = 0; i < 10; i++) {
+      const candidate = `test-${Date.now()}-${i}.com`;
+      if (await provider.checkAvailability(candidate)) {
+        domain = candidate;
+        break;
+      }
+    }
+    expect(domain).not.toBe("");
 
     await provider.registerDomain({ domain, years: 1, customerEmail: "a@example.com", customerName: "A" });
 

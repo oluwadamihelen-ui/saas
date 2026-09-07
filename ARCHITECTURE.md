@@ -14,9 +14,9 @@ Customer → Platform (Next.js) → Provider Adapter Interface → Third-party A
 
 This document describes the system as implemented through **Phase 1
 (Foundation)**, **Phase 2 (Payments, Billing & Commercial Foundation)**,
-**Phase 3 (Application Versioning & Deployment Foundation)**, and
-**Phase 4 (Domains)**. Phases 5–7 build on this foundation without
-architectural changes — see [Phased Plan](#phased-plan).
+**Phase 3 (Application Versioning & Deployment Foundation)**,
+**Phase 4 (Domains)**, and **Phase 5 (Hosting)**. Phases 6–7 build on this
+foundation without architectural changes — see [Phased Plan](#phased-plan).
 
 ## 1. Recommended Architecture
 
@@ -306,7 +306,7 @@ subscription support it doesn't have.
 transactions/customers/subscriptions so `verifyPayment`/`getTransaction`
 return the amount/currency actually recorded at `createPayment` time — not
 a hardcoded stand-in — which is what lets the webhook route's amount/
-currency validation (§9) be exercised meaningfully in tests without a real
+currency validation (§10) be exercised meaningfully in tests without a real
 provider. Those Maps are attached to `globalThis` (the same pattern
 `lib/db.ts` uses for the Prisma client), not left as plain module-level
 `const`s: Next.js compiles Server Actions and Route Handlers as separate
@@ -314,6 +314,13 @@ bundles, each re-evaluating this module, so a plain module-level Map would
 mean `createPayment()` (called from checkout's Server Action) and the
 webhook route's `verifyPayment()` silently saw two different, independently
 empty Maps — the payment would be created but never found as confirmed.
+The same risk applies to *any* cached provider singleton, not just payments'
+own Maps, so `registry.ts`'s `cachedPaymentProvider`/`cachedDomainProvider`/
+`cachedHostingProvider`/`cachedEmailProvider` variables are all `globalThis`-
+backed too — otherwise a `MockDomainProvider` or `MockHostingProvider`
+constructed while handling a Route Handler would be a different instance,
+with different in-memory state, than one constructed while handling a
+Server Action.
 
 ## 6. Authentication & RBAC Architecture
 
@@ -529,11 +536,70 @@ Each run:
    day that exactly matches a configured threshold.
 
 `RenewalEvent` (`referenceType: "DOMAIN"`) is the durable record of where a
-given domain is in this cycle (`UPCOMING` → `SUCCEEDED`/`FAILED`), reused
-rather than duplicated once hosting/subscription renewals need the same
-UPCOMING → notify/auto-process → SUCCEEDED lifecycle.
+given domain is in this cycle (`UPCOMING` → `SUCCEEDED`/`FAILED`). The model
+is generalized (`referenceType: DOMAIN | HOSTING | SUBSCRIPTION`) for exactly
+this reuse; hosting's own renewal (§9) ended up not needing it, since
+`Subscription.status` alone already carries the state a hosting renewal
+cares about — see §9 for why.
 
-## 9. Security Architecture
+## 9. Hosting Architecture
+
+Hosting bills differently from domains: there's no "opt in to auto-renew"
+choice to make, because there's nothing to remind the customer to do — an
+`ACTIVE` `Subscription` simply bills every cycle until the customer cancels
+it. So where domain renewal (§8.3) branches on a reminder-vs-auto-renew
+decision, hosting renewal is one path: charge, and roll the period forward.
+
+```
+Customer requests an upgrade/downgrade or cancellation
+  → changeHostingPlan() / terminateHostingAccount()  (lib/services/hosting-accounts.ts)
+      calls the adapter's upgradePlan()/downgradePlan()/deleteAccount(),
+      updates HostingAccount, re-prices or cancels the linked Subscription,
+      audit-logs and notifies the customer -- takes effect immediately, at
+      the new price starting the next billing cycle (no proration)
+
+runHostingRenewalSweep()   (the platform's own daily job, not customer-initiated)
+  → finds HOSTING Subscriptions whose nextBillingDate has arrived
+  → ACTIVE, due now         charges through the same createOrder() +
+                             markOrderPaid() any other purchase uses (so a
+                             hosting renewal gets a real Order, Payment, and
+                             Invoice, not a synthetic side effect), then
+                             rolls currentPeriodStart/End and
+                             nextBillingDate forward one month
+  → PAST_DUE, still fresh   retried the same way -- recovers to ACTIVE if
+                             the charge now succeeds
+  → PAST_DUE, > 7 days      given up on: HostingAccount is suspended via
+                             the adapter and the Subscription is marked
+                             EXPIRED, rather than retried forever
+```
+
+`fulfillOrder()` creates the `Subscription` row at initial purchase time
+(alongside the `HostingAccount` it's for) — this was a real gap fixed in
+this phase: previously only seed data created that row, so a real
+`PLATFORM_HOSTING` purchase would provision a working hosting account that
+was then never billed again after the first month.
+
+Since mock billing has no real gateway to fail, `runHostingRenewalSweep`'s
+failure path (mark `PAST_DUE`, notify) exists for correctness and is
+exercised by tests, but isn't reachable through normal mock operation —
+matching how deployment health checks and domain renewals also default to
+"always succeeds" in mock mode. The PAST_DUE → suspend escalation *is*
+reachable and demonstrated: a subscription seeded already `PAST_DUE` and
+overdue gets suspended on the very first sweep.
+
+`getHostingProvider()` has the same env-var/DB-credential resolution shape
+as `getPaymentProvider()`/`getDomainProvider()` (§5, §8.1) — a real hosting
+adapter is a config change away, not a call-site rewrite. `MockHostingProvider`
+lazily registers an account it's asked to act on but never saw `createAccount()`
+called for (seed data, and any account created before this instance existed) —
+the alternative, throwing "unknown account," would make upgrade/suspend/
+downgrade fail for every seeded or cross-process account, which defeats the
+point of a demo environment. `getUsage()` is deterministic per account (a
+hash of its ID) rather than random noise on every call, so two reads of the
+same account agree, and grows slowly with account age rather than jumping
+around.
+
+## 10. Security Architecture
 
 - **Passwords**: bcrypt, cost factor 12.
 - **Sessions**: JWT, HttpOnly cookies (Auth.js default), server-side role
@@ -580,7 +646,7 @@ UPCOMING → notify/auto-process → SUCCEEDED lifecycle.
 - **RBAC enforcement** happens server-side in every server action, not just
   in the UI (`requirePermission`/`requireRole` at the top of each action).
 
-## 10. UI/UX Architecture
+## 11. UI/UX Architecture
 
 - A small token layer in `globals.css` (`--background`, `--surface`,
   `--accent`, status colors) drives every component — one accent color
@@ -597,7 +663,7 @@ UPCOMING → notify/auto-process → SUCCEEDED lifecycle.
   legitimately empty (no orders yet, no tickets, etc.) instead of a blank
   table.
 
-## 11. Phased Plan
+## 12. Phased Plan
 
 **Phase 1 — Foundation (delivered).** Project setup, full schema, auth +
 RBAC, admin dashboard, customer dashboard, marketplace + detail pages,
@@ -650,10 +716,23 @@ payments, ready for one) and a purchasable domain transfer flow (the
 `transferDomain` provider method and `DomainAction.TRANSFER` enum value
 exist; nothing enqueues one yet).
 
-**Phase 5 — Hosting.** Plans, `HostingAccount`, and the `HostingProvider`
-interface exist; remaining is a real hosting adapter and
-upgrade/downgrade/suspend UI beyond what the admin hosting page currently
-shows read-only.
+**Phase 5 — Hosting (delivered).** Upgrade/downgrade/suspend/terminate on
+both the admin and customer hosting detail pages, backed by
+`lib/services/hosting-accounts.ts`; `MockHostingProvider` gained real
+per-account state (upgrade/downgrade persist, usage is deterministic
+instead of random); `getHostingProvider()` has the same env-var/DB-credential
+resolution shape as payments/domains. `fulfillOrder()` now creates the
+`Subscription` row a hosting purchase needs for recurring billing (a real
+gap — previously only seed data created it). `runHostingRenewalSweep`
+(§9) — the second repeating job in the codebase — bills due subscriptions
+through the normal Order/Payment/Invoice pipeline and suspends accounts
+whose billing has been failing too long. Remaining: a real hosting adapter
+(the seam is wired, same as domains); admin plan CRUD (plans are still
+seed-only — no create/edit UI); a standalone "buy hosting without an app"
+purchase flow (today a `HostingPlan` is only purchasable as part of an
+application checkout with `PLATFORM_HOSTING` selected, so the marketing
+hosting page's plan cards link to the app catalog rather than a direct
+purchase).
 
 **Phase 6 — Business Operations.** Support ticketing, coupons, and settings
 are delivered. Remaining: quote-to-order conversion UI (`Quote`/`QuoteItem`
@@ -668,7 +747,7 @@ developer marketplace + revenue share (`RoleKey.DEVELOPER` seeded,
 `Application.createdById` present), uptime monitoring beyond the single
 post-deploy health check.
 
-## 12. Local Development
+## 13. Local Development
 
 ```bash
 cp .env.example .env            # fill in DATABASE_URL / REDIS_URL for local services

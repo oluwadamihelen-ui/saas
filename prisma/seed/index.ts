@@ -778,6 +778,91 @@ async function seedDomainRenewalDemoScenarios(customer: { id: string }) {
   return { reminderDomain, autoRenewDomain };
 }
 
+/**
+ * Two HostingAccount/Subscription pairs shaped to demonstrate
+ * runHostingRenewalSweep immediately on the next sweep, mirroring
+ * seedDomainRenewalDemoScenarios: one due right now with an ACTIVE
+ * subscription (sweep bills it and rolls the period forward), one long
+ * overdue with a PAST_DUE subscription (sweep suspends the account instead
+ * of retrying forever). Billing dates are recomputed relative to "now" on
+ * every seed run, and the overdue account's status is reset to ACTIVE so
+ * re-seeding after a sweep has already suspended it demonstrates the
+ * escalation path again.
+ */
+async function seedHostingRenewalDemoScenarios(customer: { id: string }, starterPlan: { id: string; priceMonthly: unknown }) {
+  let dueAccount = await prisma.hostingAccount.findFirst({ where: { providerAccountId: "mock_hosting_seed_due" } });
+  if (!dueAccount) {
+    dueAccount = await prisma.hostingAccount.create({
+      data: {
+        customerId: customer.id,
+        hostingPlanId: starterPlan.id,
+        provider: "mock",
+        providerAccountId: "mock_hosting_seed_due",
+        status: "ACTIVE",
+        primaryDomain: "due-renewal-demo.example.com",
+        usage: { storageUsedGB: 3.2, bandwidthUsedGB: 12.5, websitesUsed: 1 },
+      },
+    });
+  } else if (dueAccount.status !== "ACTIVE") {
+    dueAccount = await prisma.hostingAccount.update({ where: { id: dueAccount.id }, data: { status: "ACTIVE" } });
+  }
+
+  const duePeriodStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const dueNextBilling = new Date(Date.now() - 60 * 60 * 1000); // 1 hour ago
+  const dueSubscriptionData = {
+    status: "ACTIVE" as const,
+    amount: starterPlan.priceMonthly as never,
+    billingCycle: "MONTHLY" as const,
+    currentPeriodStart: duePeriodStart,
+    currentPeriodEnd: dueNextBilling,
+    nextBillingDate: dueNextBilling,
+  };
+  const dueSubscription = await prisma.subscription.findFirst({ where: { type: "HOSTING", referenceId: dueAccount.id } });
+  if (dueSubscription) {
+    await prisma.subscription.update({ where: { id: dueSubscription.id }, data: dueSubscriptionData });
+  } else {
+    await prisma.subscription.create({ data: { customerId: customer.id, type: "HOSTING", referenceId: dueAccount.id, ...dueSubscriptionData } });
+  }
+
+  let overdueAccount = await prisma.hostingAccount.findFirst({ where: { providerAccountId: "mock_hosting_seed_overdue" } });
+  if (!overdueAccount) {
+    overdueAccount = await prisma.hostingAccount.create({
+      data: {
+        customerId: customer.id,
+        hostingPlanId: starterPlan.id,
+        provider: "mock",
+        providerAccountId: "mock_hosting_seed_overdue",
+        status: "ACTIVE",
+        primaryDomain: "overdue-demo.example.com",
+        usage: { storageUsedGB: 1.1, bandwidthUsedGB: 4.0, websitesUsed: 1 },
+      },
+    });
+  } else if (overdueAccount.status !== "ACTIVE") {
+    // Reset so re-seeding after a sweep has already suspended it
+    // demonstrates the escalation path again.
+    overdueAccount = await prisma.hostingAccount.update({ where: { id: overdueAccount.id }, data: { status: "ACTIVE" } });
+  }
+
+  const overduePeriodStart = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+  const overdueNextBilling = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000); // 10 days ago
+  const overdueSubscriptionData = {
+    status: "PAST_DUE" as const,
+    amount: starterPlan.priceMonthly as never,
+    billingCycle: "MONTHLY" as const,
+    currentPeriodStart: overduePeriodStart,
+    currentPeriodEnd: overdueNextBilling,
+    nextBillingDate: overdueNextBilling,
+  };
+  const overdueSubscription = await prisma.subscription.findFirst({ where: { type: "HOSTING", referenceId: overdueAccount.id } });
+  if (overdueSubscription) {
+    await prisma.subscription.update({ where: { id: overdueSubscription.id }, data: overdueSubscriptionData });
+  } else {
+    await prisma.subscription.create({ data: { customerId: customer.id, type: "HOSTING", referenceId: overdueAccount.id, ...overdueSubscriptionData } });
+  }
+
+  return { dueAccount, overdueAccount };
+}
+
 async function main() {
   console.log("Seeding roles and permissions...");
   const roles = await seedRolesAndPermissions();
@@ -808,6 +893,9 @@ async function main() {
 
   console.log("Seeding domain renewal demo scenarios...");
   await seedDomainRenewalDemoScenarios(customers[0]);
+
+  console.log("Seeding hosting renewal demo scenarios...");
+  await seedHostingRenewalDemoScenarios(customers[0], hostingPlans[0]);
 
   console.log("Seed complete.");
 }

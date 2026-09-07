@@ -138,6 +138,30 @@ export async function fulfillOrder(orderId: string) {
         },
       });
       hostingAccountId = hostingAccount.id;
+
+      // Hosting bills monthly for as long as the account is active -- this
+      // Subscription row is what the renewal scheduler (runHostingRenewalSweep)
+      // finds and charges each cycle. Without it, hosting would only ever be
+      // billed once, at this initial purchase.
+      if (hostingAccount.status === "ACTIVE") {
+        const periodStart = new Date();
+        const periodEnd = new Date(periodStart);
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+        await prisma.subscription.create({
+          data: {
+            customerId: order.customerId,
+            type: "HOSTING",
+            referenceId: hostingAccount.id,
+            status: "ACTIVE",
+            amount: plan.priceMonthly,
+            currency: order.currency,
+            billingCycle: "MONTHLY",
+            currentPeriodStart: periodStart,
+            currentPeriodEnd: periodEnd,
+            nextBillingDate: periodEnd,
+          },
+        });
+      }
     }
   }
 

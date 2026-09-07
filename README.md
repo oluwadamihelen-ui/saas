@@ -30,7 +30,8 @@ npm run dev                # http://localhost:3000
 ```
 
 In a second terminal, run the worker process (required for purchases to
-progress past "Queued", and for domain renewal reminders/auto-renewal):
+progress past "Queued", and for domain renewal reminders/auto-renewal and
+recurring hosting billing):
 
 ```bash
 npm run worker
@@ -77,7 +78,7 @@ external credentials. See Admin → Providers to inspect provider status, and
 
 ```bash
 npm run dev              # start the app
-npm run worker           # deployment pipeline worker + domain renewal scheduler
+npm run worker           # deployment pipeline + domain renewal + hosting billing schedulers
 npm run build             # production build
 npm run lint               # eslint
 npm test                   # vitest — unit tests + DB-backed integration tests
