@@ -886,6 +886,55 @@ adapters ship with unit tests (`tests/services/korapay-provider.test.ts`,
 signature verification, plus an integration test confirming the webhook
 route fails safely (404, not a crash) while no credentials are configured.
 
+**Phase 8 follow-up — user role management + buyer/developer signup
+(requested directly).** Before this, there was no admin surface at all for
+the `DEVELOPER` role: Admin → Customers only ever queried `role.key ===
+"CUSTOMER"`, and the only way a user became a developer was a direct
+database/seed edit (`prisma/seed/index.ts` creating one with
+`roles.get("DEVELOPER")` — never a code path reachable from the running
+app). Two changes close that gap:
+
+1. **Admin → Users** (`/admin/customers`, renamed from "Customers" in the
+   nav, route kept for URL/link stability) now lists both `CUSTOMER` and
+   `DEVELOPER` accounts together, with role tabs (All/Buyers/Developers)
+   and, per row, a role badge, status badge, and action buttons: "Make
+   Developer"/"Revert to Buyer" and Suspend/Reactivate. The detail page
+   (`/admin/customers/[id]`) carries the same actions, plus — for a
+   developer — their submitted applications and a commission summary
+   (reusing the aggregation `getCommissionSummaryForDeveloper` in
+   `developer-applications.ts` already computes, inlined here rather than
+   imported since the page needed it alongside other includes in one
+   query). `src/lib/services/users.ts` is the new service backing all four
+   actions (`promoteToDeveloper`, `revertToCustomer`,
+   `suspendPlatformUser`, `reactivatePlatformUser`), each audit-logged.
+   Staff and Super Admin accounts are deliberately out of reach of every
+   one of these — `requireManageableTarget()` throws if the target user's
+   role isn't `CUSTOMER` or `DEVELOPER` — because that role tier already
+   has its own dedicated management surface (Admin → Staff, with
+   per-permission overrides) and mixing the two paths would let a lesser
+   permission accidentally touch a staff account. Wired in via
+   `PERMISSIONS.CUSTOMERS_MANAGE` (STAFF doesn't hold this by default,
+   matching the pre-existing view/manage split on the Customers page).
+2. **`/register`** now asks "I'm signing up as" with two options — Buyer
+   (`CUSTOMER`, the previous and still the default) or Developer / Seller
+   (`DEVELOPER`) — before the rest of the form. `registerCustomer()` looks
+   up whichever role was chosen instead of always hardcoding `CUSTOMER`.
+   No other checkout/dashboard code needed to change: `middleware.ts`
+   already treats `/dashboard` as open to any authenticated role, and
+   checkout's server actions already call `requireUser()` rather than
+   `requireRole("CUSTOMER")`, so a self-registered developer can buy just
+   like a buyer, and the Developer-role dashboard nav item from Phase 7
+   picks them up immediately with no change needed there either.
+
+Remaining, deliberately: a self-registered developer's marketplace
+submissions still go through the same moderation queue every developer
+account does (Phase 7's `submitApplication` — DRAFT until an admin
+reviews and publishes it), so opening signup doesn't bypass any review
+step. Covered by `tests/integration/user-role-management.test.ts` (all
+four service actions, plus the staff/admin guard) and
+`tests/integration/register-account-type.test.ts` (both account types,
+plus the default-omitted case and duplicate-email rejection).
+
 ## 13. Local Development
 
 ```bash
