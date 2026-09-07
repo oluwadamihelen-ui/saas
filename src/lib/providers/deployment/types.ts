@@ -13,7 +13,15 @@ export interface DeploymentConnectionTarget {
   adapter: "ssh" | "cpanel" | "plesk" | "docker" | "cloud" | "mock";
   host?: string;
   port?: number;
+  /** Login user for adapters that connect over SSH (distinct from any control-panel login). */
+  username?: string;
   controlPanelUrl?: string;
+}
+
+/** Where the deployable code for this version actually comes from -- see ApplicationArtifact. Adapters interpret `reference` per `type`. */
+export interface DeploymentArtifact {
+  type: "DOCKER_IMAGE" | "GIT_REPOSITORY" | "GIT_COMMIT" | "ARCHIVE" | "OTHER";
+  reference: string;
 }
 
 export interface DeploymentStepInput {
@@ -26,6 +34,8 @@ export interface DeploymentStepInput {
   installCommand?: string | null;
   migrationCommand?: string | null;
   envVars: Record<string, string>;
+  /** Absent when the application version has no artifact configured yet. */
+  artifact?: DeploymentArtifact;
 }
 
 export interface DeploymentStepResult {

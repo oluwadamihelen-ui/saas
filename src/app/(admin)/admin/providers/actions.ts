@@ -16,6 +16,7 @@ import { NamecheapDomainProvider } from "@/lib/providers/domain/namecheap";
 import { MockHostingProvider } from "@/lib/providers/hosting/mock";
 import { CPanelHostingProvider } from "@/lib/providers/hosting/cpanel";
 import { MockDeploymentProvider } from "@/lib/providers/deployment/mock";
+import { SSHDeploymentAdapter } from "@/lib/providers/deployment/ssh";
 import { MockEmailProvider } from "@/lib/providers/email/mock";
 import { ResendEmailProvider } from "@/lib/providers/email/resend";
 import type { ProviderAdapterBase } from "@/lib/providers/types";
@@ -78,6 +79,16 @@ async function resolveAdapter(providerId: string): Promise<ProviderAdapterBase |
       apiToken: decryptSecret(apiTokenCred.encryptedValue),
       port: portCred ? Number(decryptSecret(portCred.encryptedValue)) : undefined,
     });
+  }
+
+  if (provider.adapterKey === "ssh") {
+    // Unlike the other real adapters, this one takes no credentials at
+    // construction -- one shared instance serves every customer's SSH
+    // target, resolving that target's own stored key at call time. There's
+    // nothing here for "Test Connection" to check beyond that the adapter
+    // is wired up; per-target connectivity is validated when a deployment
+    // to that target actually runs.
+    return new SSHDeploymentAdapter();
   }
 
   if (provider.adapterKey === "namecheap") {

@@ -21,6 +21,7 @@ export const deploymentTargetSchema = z.object({
     .regex(/^[a-zA-Z0-9]([a-zA-Z0-9-.]*[a-zA-Z0-9])?$/, "Enter a valid hostname or IP address (no protocol, no path)")
     .optional(),
   port: z.coerce.number().int().min(1).max(65535).optional(),
+  sshUsername: z.string().trim().max(80).optional(),
   operatingSystem: z.string().trim().max(80).optional(),
   controlPanel: z.string().trim().max(80).optional(),
   region: z.string().trim().max(80).optional(),
@@ -46,6 +47,7 @@ export async function createDeploymentTarget(customerId: string, input: Deployme
       label: input.label,
       hostname: input.hostname,
       port: input.port,
+      sshUsername: input.sshUsername,
       operatingSystem: input.operatingSystem,
       controlPanel: input.controlPanel,
       region: input.region,

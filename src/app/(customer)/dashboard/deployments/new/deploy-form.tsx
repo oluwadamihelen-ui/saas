@@ -103,6 +103,10 @@ export function DeployApplicationForm({ applications, hostingAccounts }: { appli
             <Input id="port" name="port" type="number" defaultValue={22} />
           </div>
           <div className="space-y-1.5">
+            <Label htmlFor="sshUsername">SSH username</Label>
+            <Input id="sshUsername" name="sshUsername" placeholder="root, ubuntu, deploy..." required />
+          </div>
+          <div className="space-y-1.5">
             <Label htmlFor="operatingSystem">Operating system</Label>
             <Input id="operatingSystem" name="operatingSystem" placeholder="Ubuntu 22.04" />
           </div>
@@ -111,10 +115,12 @@ export function DeployApplicationForm({ applications, hostingAccounts }: { appli
             <Input id="controlPanel" name="controlPanel" placeholder="cPanel, Plesk, none..." />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="sshKey">SSH public key (recommended over a password)</Label>
-            <Textarea id="sshKey" name="sshKey" rows={3} placeholder="ssh-ed25519 AAAA... (demo mode — stored encrypted)" />
+            <Label htmlFor="sshKey">SSH private key</Label>
+            <Textarea id="sshKey" name="sshKey" rows={5} placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----" required />
             <p className="text-xs text-muted">
-              For demo/mock deployments this value is stored encrypted but never actually used to connect anywhere.
+              Stored encrypted, used only to connect to this server for deployments. We recommend creating a
+              dedicated deploy key (rather than reusing your personal key) and adding it to this server&apos;s
+              <code className="mx-1 rounded bg-muted-surface px-1 py-0.5">authorized_keys</code> for the SSH username above.
             </p>
           </div>
         </div>

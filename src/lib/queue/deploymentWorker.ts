@@ -55,7 +55,7 @@ export async function processDeploymentPipeline(bullJob: Job<RunDeploymentPipeli
     where: { id: deploymentId },
     include: {
       application: true,
-      applicationVersion: { include: { deploymentSpecification: true } },
+      applicationVersion: { include: { deploymentSpecification: true, artifact: true } },
       domain: true,
       deploymentTarget: true,
     },
@@ -80,13 +80,17 @@ export async function processDeploymentPipeline(bullJob: Job<RunDeploymentPipeli
     adapter: adapterKey as DeploymentConnectionTarget["adapter"],
     host: deployment.deploymentTarget?.hostname ?? undefined,
     port: deployment.deploymentTarget?.port ?? undefined,
+    username: deployment.deploymentTarget?.sshUsername ?? undefined,
   };
+
+  const artifact = deployment.applicationVersion.artifact;
 
   const stepInput = {
     target,
     applicationSlug: deployment.application.slug,
     version: deployment.applicationVersion.version,
     runtime: spec.runtime,
+    artifact: artifact ? { type: artifact.type, reference: artifact.reference } : undefined,
     buildCommand: spec.buildCommand,
     startCommand: spec.startCommand,
     installCommand: spec.installCommand,

@@ -87,6 +87,7 @@ async function seedProviders() {
     { name: "Mock Hosting", type: "HOSTING", adapterKey: "mock", isDefault: true },
     { name: "cPanel/WHM", type: "HOSTING", adapterKey: "cpanel", isDefault: false },
     { name: "Mock Deployment", type: "DEPLOYMENT", adapterKey: "mock", isDefault: true },
+    { name: "SSH (Customer Server)", type: "DEPLOYMENT", adapterKey: "ssh", isDefault: false },
     { name: "Mock Email", type: "EMAIL", adapterKey: "mock", isDefault: true },
     { name: "Resend", type: "EMAIL", adapterKey: "resend", isDefault: false },
   ];

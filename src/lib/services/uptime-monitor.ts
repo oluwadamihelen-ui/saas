@@ -44,6 +44,7 @@ export async function runUptimeSweep(now: Date = new Date()): Promise<UptimeSwee
       adapter: adapterKey as DeploymentConnectionTarget["adapter"],
       host: deployment.deploymentTarget?.hostname ?? undefined,
       port: deployment.deploymentTarget?.port ?? undefined,
+      username: deployment.deploymentTarget?.sshUsername ?? undefined,
     };
     const healthUrl = deployment.domain ? `https://${deployment.domain.name}` : (deployment.previewUrl ?? "https://staging.internal");
 

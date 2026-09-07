@@ -35,6 +35,7 @@
     "lucide-react": "^1.41.0",
     "next": "16.3.4",
     "next-auth": "^5.0.0-beta.32",
+    "node-ssh": "^13.2.1",
     "pdfkit": "^0.20.2",
     "prisma": "^6.19.3",
     "react": "19.2.8",

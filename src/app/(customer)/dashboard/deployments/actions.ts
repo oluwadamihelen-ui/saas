@@ -15,6 +15,7 @@ const requestDeploymentSchema = z.object({
   hostingAccountId: z.string().uuid().optional().or(z.literal("")),
   hostname: z.string().trim().max(255).optional().or(z.literal("")),
   port: z.coerce.number().int().min(1).max(65535).optional(),
+  sshUsername: z.string().trim().max(80).optional().or(z.literal("")),
   operatingSystem: z.string().trim().max(80).optional().or(z.literal("")),
   controlPanel: z.string().trim().max(80).optional().or(z.literal("")),
   sshKey: z.string().trim().max(8000).optional().or(z.literal("")),
@@ -48,11 +49,15 @@ export async function requestDeployment(_prev: RequestDeploymentState, formData:
       type: "CUSTOMER_SERVER",
       hostname: data.hostname || undefined,
       port: data.port,
+      sshUsername: data.sshUsername || undefined,
       operatingSystem: data.operatingSystem || undefined,
       controlPanel: data.controlPanel || undefined,
     });
     if (!targetInput.success) {
       return { status: "error", message: targetInput.error.issues[0]?.message ?? "Invalid server details." };
+    }
+    if (!data.sshKey) {
+      return { status: "error", message: "An SSH private key is required to deploy to your own server." };
     }
     const target = await prisma.deploymentTarget.create({
       data: {
@@ -62,16 +67,15 @@ export async function requestDeployment(_prev: RequestDeploymentState, formData:
         label: "Customer server",
         hostname: targetInput.data.hostname,
         port: targetInput.data.port,
+        sshUsername: targetInput.data.sshUsername,
         operatingSystem: targetInput.data.operatingSystem,
         controlPanel: targetInput.data.controlPanel,
         status: "PENDING",
       },
     });
-    if (data.sshKey) {
-      await prisma.deploymentCredential.create({
-        data: { deploymentTargetId: target.id, type: "SSH_KEY", label: "Deployment SSH key", encryptedValue: encryptSecret(data.sshKey) },
-      });
-    }
+    await prisma.deploymentCredential.create({
+      data: { deploymentTargetId: target.id, type: "SSH_KEY", label: "Deployment SSH key", encryptedValue: encryptSecret(data.sshKey) },
+    });
     deploymentTargetId = target.id;
   } else if (data.deploymentType === "PLATFORM_HOSTING") {
     if (!data.hostingAccountId) {

@@ -1093,10 +1093,99 @@ matrix) and `tests/integration/password-reset.test.ts` (token issuance,
 the enumeration-safe non-match path, successful reset, reused-token and
 garbage-token rejection, and cross-token invalidation on reset).
 
-Remaining from the go-live audit, tracked for the next phases:
-deployment and DNS-management adapters are still mock, and the background
-worker still needs its own always-on host to run in production (an
-infrastructure/deployment decision, not something more code resolves).
+**Go-live phase 4 — real deployment adapter (SSH) + DNS-management
+clarification.** `lib/providers/deployment/ssh.ts` (`SSHDeploymentAdapter`)
+is a real `DeploymentProviderAdapter` for a customer's own Linux server,
+built on `node-ssh` (wrapping ssh2). It differs structurally from every
+adapter before it: the payment/domain/hosting adapters are each
+constructed once per provider with that provider's one set of
+credentials, but one shared `SSHDeploymentAdapter` instance serves *every*
+customer's distinct server, so every method resolves its target's own
+`DeploymentCredential` (`SSH_KEY`, encrypted, looked up by
+`target.deploymentTargetId`) and opens a fresh connection for that one
+step (`withConnection()`), rather than holding a persistent connection or
+taking credentials at construction time like `CPanelHostingProvider` does.
+
+Two real gaps surfaced while wiring this in, both closed as part of the
+same phase rather than left inert: the CUSTOMER_SERVER deploy form
+already collected an SSH key and saved it as a `DeploymentCredential`, but
+no adapter had ever read it back, and the field was mislabeled ("SSH
+public key" when a private key is what the platform actually needs to
+authenticate) — both fixed in `deploy-form.tsx`/`deployments/actions.ts`,
+which now also requires an `sshUsername` (new `DeploymentTarget` column;
+there's no user to open a session as without one). Separately,
+`DeploymentStepInput` never carried the application's actual source —
+`ApplicationArtifact` existed in the schema from Phase 2 but the worker
+never queried it — so `deploymentWorker.ts` now includes it and passes
+`{type, reference}` through as `input.artifact`; `deploy()` switches on
+its type (`GIT_REPOSITORY` → `git clone`, `GIT_COMMIT` → clone then
+`git checkout <sha>` from a `<repo-url>#<sha>` reference, `ARCHIVE` → curl
++ `tar -xzf`; `DOCKER_IMAGE`/`OTHER` throw a clear "use a Docker or cloud
+target instead" error rather than silently no-opping).
+
+The adapter assumes tools a customer's server would reasonably have —
+pm2 to supervise the process, nginx + certbot for the domain and TLS —
+but never hard-fails when one is missing: `configureDomain`/`configureSSL`
+check `command -v nginx`/`command -v certbot` first and degrade to a
+clear non-fatal result (app still runs, just reachable by IP:port instead
+of the domain) rather than failing the whole deployment or silently
+pretending to succeed. Two design compromises worth flagging: the shared
+`DeploymentProviderAdapter` interface has no dedicated "start the
+process" step, so the app is (re)started at the end of `runMigrations()`
+— the last content-mutating step before the health check, and
+deliberately after migrations rather than before, in case the database
+isn't ready yet; and `configureDomain`/`configureSSL` don't receive the
+app's listen port as an argument, so the adapter resolves it itself via
+`loadDeploymentContext(target.deploymentId)` (a `Deployment →
+ApplicationVersion → DeploymentSpecification.port` lookup) rather than
+widening the shared interface signature for every adapter and both call
+sites (`deploymentWorker.ts`, `uptime-monitor.ts`) over one adapter's
+need. Remote commands that embed values (branch/commit refs, the `.env`
+file, the nginx server block) are either shell-quoted (`shellQuote()`,
+POSIX single-quote escaping) or written via a base64-encode-then-pipe
+(`echo <b64> | base64 -d > file`) rather than ever interpolated raw into
+a shell string. `destroy()` deliberately only stops the pm2 process and
+leaves release files on disk — silently deleting a customer's own files
+is a much higher-risk default than a few unused directories. Wired into
+`deploymentAdapterRegistry` (alongside the mock, keyed `"ssh"`),
+`admin/providers` `resolveAdapter()` (this one constructs with no
+credentials — there's nothing target-independent for "Test Connection" to
+check), and `seedProviders()`. Covered by
+`tests/integration/ssh-deployment-adapter.test.ts` against real
+Postgres-backed fixtures (Application/ApplicationVersion/
+DeploymentSpecification/ApplicationArtifact/DeploymentTarget/
+DeploymentCredential/Deployment) with `node-ssh`'s `NodeSSH` class mocked
+at the module level: `validateTarget` success/failure/missing-credential,
+`deploy` for every artifact type including the malformed-`GIT_COMMIT`
+and unsupported-type rejections, the `configureEnvironment` base64
+command shape, `configureDomain`/`configureSSL`'s
+tool-present/tool-absent branches and unsafe-domain rejection,
+`runMigrations`'s pm2-vs-nohup-fallback branches, `getStatus`'s `pm2
+jlist` parsing, `rollback`'s release-exists/doesn't-exist branches,
+`destroy`, and `runHealthCheck` (confirmed to probe over plain `fetch`,
+never opening an SSH connection at all). Live SSH connectivity itself
+isn't verified here — there's no real SSH-reachable server in this
+environment — consistent with the "build now, activate later" approach
+used for every real adapter this project has added without live vendor
+credentials to test against.
+
+Investigating this phase also resolved what looked like a fourth
+mock-adapter gap but wasn't one: the original audit listed "DNS-management"
+as mock alongside deployment, but DNS record management
+(`createDNSRecord`/`deleteDNSRecord`/`updateNameservers`) has been real
+since go-live phase 1 — it's part of `DomainProvider`
+(`NamecheapDomainProvider` implements it via `domains.dns.getHosts`/
+`setHosts`), not a separate provider category. The `Provider` catalog
+does still carry a vestigial `type: "DNS"` row ("Mock DNS") seeded in an
+earlier phase, with no corresponding adapter interface or registry
+anywhere in the codebase to resolve it against — left in place as inert,
+unused catalog data rather than removed, since deleting a `Provider` row
+outside a migration risks orphaning any `ProviderCredential` a real
+deployment might have already attached to it.
+
+Remaining from the go-live audit: the background worker still needs its
+own always-on host to run in production (an infrastructure/deployment
+decision, not something more code resolves).
 
 ## 13. Local Development
 

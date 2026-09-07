@@ -906,6 +906,9 @@ model DeploymentTarget {
   provider         String
   hostname         String?
   port             Int?
+  // The user to SSH in as (e.g. "root", "ubuntu", "deploy") -- required for
+  // a real ssh-adapter connection, distinct from any control panel login.
+  sshUsername      String?
   operatingSystem  String?
   controlPanel     String?
   region           String?

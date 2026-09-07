@@ -1,11 +1,12 @@
 import { DeploymentProviderAdapter } from "./types";
 import { MockDeploymentProvider } from "./mock";
+import { SSHDeploymentAdapter } from "./ssh";
 
 /**
  * Resolves an adapter by key (the same key stored on DeploymentTarget.provider
- * and Provider.adapterKey). Every key currently maps to the mock adapter --
- * adding a real SSHAdapter/CPanelAdapter/DockerAdapter/etc later is just
- * registering it here, nothing else in the deployment pipeline changes.
+ * and Provider.adapterKey). Adding a real adapter for a key that's still
+ * mock is just registering it here -- nothing else in the deployment
+ * pipeline changes.
  */
 class DeploymentAdapterRegistry {
   private readonly adapters = new Map<string, DeploymentProviderAdapter>();
@@ -17,6 +18,7 @@ class DeploymentAdapterRegistry {
     for (const key of ["ssh", "cpanel", "plesk", "docker", "cloud", "mock"]) {
       this.adapters.set(key, this.mock);
     }
+    this.adapters.set("ssh", new SSHDeploymentAdapter());
   }
 
   register(key: string, adapter: DeploymentProviderAdapter) {
