@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LayoutDashboard, ShoppingBag, FileText, Rocket, Globe, Server, RefreshCcw, LifeBuoy, User, MessageSquareText, KeyRound, Code2 } from "lucide-react";
+import { LayoutDashboard, ShoppingBag, FileText, Rocket, Globe, Server, RefreshCcw, LifeBuoy, User, MessageSquareText, KeyRound, Code2, ShieldCheck } from "lucide-react";
 import { auth } from "@/auth";
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
 import { DashboardTopbar } from "@/components/dashboard/dashboard-topbar";
@@ -20,12 +20,17 @@ const NAV_ITEMS = [
   { href: "/dashboard/profile", label: "Profile", icon: <User className={ICON_CLASS} /> },
 ];
 
+const ADMIN_ROLES = new Set(["SUPER_ADMIN", "STAFF"]);
+
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
-  const navItems =
+  let navItems =
     session?.user?.role === "DEVELOPER"
       ? [NAV_ITEMS[0], { href: "/dashboard/developer", label: "Developer", icon: <Code2 className={ICON_CLASS} /> }, ...NAV_ITEMS.slice(1)]
       : NAV_ITEMS;
+  if (session?.user?.role && ADMIN_ROLES.has(session.user.role)) {
+    navItems = [...navItems, { href: "/admin", label: "Admin", icon: <ShieldCheck className={ICON_CLASS} /> }];
+  }
 
   return (
     <div className="flex min-h-screen bg-background">

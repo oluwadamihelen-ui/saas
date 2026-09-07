@@ -9,6 +9,8 @@ import { encryptSecret, decryptSecret } from "@/lib/security/encryption";
 import { recordAuditLog } from "@/lib/security/audit";
 import { MockPaymentProvider } from "@/lib/providers/payment/mock";
 import { PaystackPaymentProvider } from "@/lib/providers/payment/paystack";
+import { KoraPayPaymentProvider } from "@/lib/providers/payment/korapay";
+import { NowPaymentsPaymentProvider } from "@/lib/providers/payment/nowpayments";
 import { MockDomainProvider } from "@/lib/providers/domain/mock";
 import { MockHostingProvider } from "@/lib/providers/hosting/mock";
 import { MockDeploymentProvider } from "@/lib/providers/deployment/mock";
@@ -46,6 +48,19 @@ async function resolveAdapter(providerId: string): Promise<ProviderAdapterBase |
     const apiKeyCred = provider.credentials.find((c) => c.key === "apiKey");
     if (!apiKeyCred) return null;
     return new ResendEmailProvider(decryptSecret(apiKeyCred.encryptedValue));
+  }
+
+  if (provider.adapterKey === "korapay") {
+    const secretCred = provider.credentials.find((c) => c.key === "secretKey");
+    if (!secretCred) return null;
+    return new KoraPayPaymentProvider(decryptSecret(secretCred.encryptedValue));
+  }
+
+  if (provider.adapterKey === "nowpayments") {
+    const apiKeyCred = provider.credentials.find((c) => c.key === "apiKey");
+    const ipnSecretCred = provider.credentials.find((c) => c.key === "ipnSecret");
+    if (!apiKeyCred || !ipnSecretCred) return null;
+    return new NowPaymentsPaymentProvider(decryptSecret(apiKeyCred.encryptedValue), decryptSecret(ipnSecretCred.encryptedValue));
   }
 
   return null;

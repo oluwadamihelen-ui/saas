@@ -1,6 +1,8 @@
 import { PaymentProvider } from "./payment/types";
 import { MockPaymentProvider } from "./payment/mock";
 import { PaystackPaymentProvider } from "./payment/paystack";
+import { KoraPayPaymentProvider } from "./payment/korapay";
+import { NowPaymentsPaymentProvider } from "./payment/nowpayments";
 import { DomainProvider } from "./domain/types";
 import { MockDomainProvider } from "./domain/mock";
 import { HostingProvider } from "./hosting/types";
@@ -52,6 +54,15 @@ export async function getPaymentProvider(): Promise<PaymentProvider> {
   if (preferred === "paystack") {
     const secretKey = process.env.PAYSTACK_SECRET_KEY || (await getCredential("paystack", "PAYMENT", "secretKey"));
     if (secretKey) return new PaystackPaymentProvider(secretKey);
+  }
+  if (preferred === "korapay") {
+    const secretKey = process.env.KORAPAY_SECRET_KEY || (await getCredential("korapay", "PAYMENT", "secretKey"));
+    if (secretKey) return new KoraPayPaymentProvider(secretKey);
+  }
+  if (preferred === "nowpayments") {
+    const apiKey = process.env.NOWPAYMENTS_API_KEY || (await getCredential("nowpayments", "PAYMENT", "apiKey"));
+    const ipnSecret = process.env.NOWPAYMENTS_IPN_SECRET || (await getCredential("nowpayments", "PAYMENT", "ipnSecret"));
+    if (apiKey && ipnSecret) return new NowPaymentsPaymentProvider(apiKey, ipnSecret);
   }
   if (!global.__cachedPaymentProvider) global.__cachedPaymentProvider = new MockPaymentProvider();
   return global.__cachedPaymentProvider;

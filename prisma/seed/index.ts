@@ -66,6 +66,8 @@ async function seedProviders() {
   const providers: { name: string; type: "PAYMENT" | "DOMAIN" | "DNS" | "HOSTING" | "DEPLOYMENT" | "EMAIL"; adapterKey: string; isDefault: boolean }[] = [
     { name: "Mock Payments", type: "PAYMENT", adapterKey: "mock", isDefault: true },
     { name: "Paystack", type: "PAYMENT", adapterKey: "paystack", isDefault: false },
+    { name: "KoraPay", type: "PAYMENT", adapterKey: "korapay", isDefault: false },
+    { name: "NOWPayments", type: "PAYMENT", adapterKey: "nowpayments", isDefault: false },
     { name: "Mock Registrar", type: "DOMAIN", adapterKey: "mock", isDefault: true },
     { name: "Mock DNS", type: "DNS", adapterKey: "mock", isDefault: true },
     { name: "Mock Hosting", type: "HOSTING", adapterKey: "mock", isDefault: true },

@@ -5,12 +5,16 @@ import { markOrderPaid } from "@/lib/services/orders";
 import { fulfillOrder } from "@/lib/services/fulfillment";
 import { getPaymentProvider } from "@/lib/providers/registry";
 import { PaystackPaymentProvider } from "@/lib/providers/payment/paystack";
+import { KoraPayPaymentProvider } from "@/lib/providers/payment/korapay";
+import { NowPaymentsPaymentProvider } from "@/lib/providers/payment/nowpayments";
 import { PaymentProvider } from "@/lib/providers/payment/types";
 import { logger } from "@/lib/security/logger";
 
 const SIGNATURE_HEADERS: Record<string, string> = {
   mock: "x-mock-signature",
   paystack: "x-paystack-signature",
+  korapay: "x-korapay-signature",
+  nowpayments: "x-nowpayments-sig",
 };
 
 // Every provider adapter's handleWebhook() normalizes to this type for a
@@ -33,6 +37,17 @@ async function resolveProvider(key: string): Promise<PaymentProvider | null> {
     const secretKey = process.env.PAYSTACK_SECRET_KEY;
     if (!secretKey) return null;
     return new PaystackPaymentProvider(secretKey);
+  }
+  if (key === "korapay") {
+    const secretKey = process.env.KORAPAY_SECRET_KEY;
+    if (!secretKey) return null;
+    return new KoraPayPaymentProvider(secretKey);
+  }
+  if (key === "nowpayments") {
+    const apiKey = process.env.NOWPAYMENTS_API_KEY;
+    const ipnSecret = process.env.NOWPAYMENTS_IPN_SECRET;
+    if (!apiKey || !ipnSecret) return null;
+    return new NowPaymentsPaymentProvider(apiKey, ipnSecret);
   }
   return null;
 }

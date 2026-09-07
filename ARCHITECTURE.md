@@ -237,14 +237,18 @@ must be reachable by something other than our own browser client.
 
 Every third-party category has a TypeScript interface in
 `src/lib/providers/<category>/types.ts`, a `Mock*` implementation used by
-default, and — for payments — a real `Paystack` implementation, chosen as
-the single "real" V1 integration because it natively supports the NGN
-examples throughout the spec. Everything else (domains, hosting, DNS,
-deployment execution, email) ships as a mock with the same interface a real
-adapter would implement, so swapping one in later is additive:
+default, and — for payments — three real implementations: `Paystack` (the
+original V1 integration, chosen for its NGN support), plus `KoraPay` and
+`NOWPayments`, added later at the user's direct request. All three
+implement the identical `PaymentProvider` interface and are selected purely
+by `PAYMENT_PROVIDER`, so checkout/webhook code has no provider-specific
+branching. Everything else (domains, hosting, DNS, deployment execution,
+email) ships as a mock with the same interface a real adapter would
+implement, so swapping one in later is additive:
 
 ```
-PaymentProvider      → MockPaymentProvider, PaystackPaymentProvider
+PaymentProvider      → MockPaymentProvider, PaystackPaymentProvider,
+                        KoraPayPaymentProvider, NowPaymentsPaymentProvider
 DomainProvider        → MockDomainProvider          (capabilities-flagged)
 HostingProvider       → MockHostingProvider
 DeploymentProviderAdapter → MockDeploymentProvider   (resolved for every
@@ -843,6 +847,45 @@ unused by any application flow (recurring billing today goes through the
 platform's own Order/Subscription/renewal-sweep pattern, not a provider-
 native subscription).
 
+**Phase 8 follow-up — admin nav + KoraPay/NOWPayments (requested directly,
+after Phase 8 shipped).** Two additions: (1) the customer dashboard sidebar
+(`(customer)/dashboard/layout.tsx`) now appends an "Admin" link to `/admin`
+for `SUPER_ADMIN`/`STAFF` sessions, mirroring the existing Developer-role nav
+injection pattern — `middleware.ts` already gated the route itself, this
+only makes it discoverable without typing the URL. (2)
+`lib/providers/payment/korapay.ts` and `.../nowpayments.ts` are two more
+real `PaymentProvider` adapters, built against each vendor's public API docs
+(no live credentials available — same "build it now, activate later"
+approach Paystack was built under). Both slot into every seam Paystack
+already established: `registry.ts` (`PAYMENT_PROVIDER=korapay|nowpayments`),
+`admin/providers/actions.ts`'s `resolveAdapter()`, the webhook route's
+`SIGNATURE_HEADERS`/`resolveProvider()`, `seedProviders()`, and
+`.env.example`. Two integration details differ enough from Paystack to be
+worth recording: KoraPay's webhook signature (`x-korapay-signature`) is an
+HMAC-SHA256 of `JSON.stringify(payload.data)` alone, not the raw body, and
+its `amount` is in the currency's major unit (not kobo). NOWPayments
+authenticates with a flat `x-api-key` header rather than a Bearer secret,
+checkout goes through its hosted Invoice flow (`POST /invoice` →
+`invoice_url`), and its IPN signature (`x-nowpayments-sig`) is an
+HMAC-SHA512 of the callback body with keys sorted recursively before
+stringifying. Both adapters reuse the same `charge.success` event-type
+constant the webhook route already branches on — KoraPay names its success
+event that natively, and the NOWPayments adapter's `handleWebhook()`
+translates a `finished`/`confirmed` `payment_status` into `"charge.success"`
+so no provider-aware branching was needed in the route itself.
+`providerReference` for NOWPayments is deliberately our own generated
+order reference, not NOWPayments' numeric payment id — that id doesn't
+exist yet when `createPayment()` returns (it's allocated once the customer
+starts paying), so the order reference is what's sent as NOWPayments'
+`order_id` and is what comes back unchanged in both the IPN body and a
+`GET /payment/?orderId=` lookup. NOWPayments has no refund API for the same
+reason crypto payments can't be reversed on-chain: `capabilities.
+supportsRefunds` is `false` and `refundPayment()` always throws. Both
+adapters ship with unit tests (`tests/services/korapay-provider.test.ts`,
+`nowpayments-provider.test.ts`) covering request shape, status mapping, and
+signature verification, plus an integration test confirming the webhook
+route fails safely (404, not a crash) while no credentials are configured.
+
 ## 13. Local Development
 
 ```bash
@@ -865,7 +908,10 @@ Everything runs against mock providers out of the box — no real payment,
 domain, or hosting credentials required. Setting `PAYMENT_PROVIDER=paystack`
 plus `PAYSTACK_SECRET_KEY` (or saving the credential from Admin → Providers)
 activates the real Paystack adapter without any code change. The same shape
-applies to `EMAIL_PROVIDER=resend` plus `RESEND_API_KEY`.
+applies to `EMAIL_PROVIDER=resend` plus `RESEND_API_KEY`,
+`PAYMENT_PROVIDER=korapay` plus `KORAPAY_SECRET_KEY`, and
+`PAYMENT_PROVIDER=nowpayments` plus `NOWPAYMENTS_API_KEY` +
+`NOWPAYMENTS_IPN_SECRET`.
 
 ## 14. Operations
 
