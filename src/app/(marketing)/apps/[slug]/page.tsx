@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { CheckCircle2, ExternalLink, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ScreenshotCarousel } from "@/components/marketplace/screenshot-carousel";
 import { getApplicationBySlug } from "@/lib/services/applications";
 import { formatCurrency } from "@/lib/utils";
 
@@ -74,18 +75,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
             <p className="mt-3 max-w-2xl text-lg text-muted">{app.shortDescription}</p>
           </div>
 
-          {app.images.length > 0 && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {app.images.map((img) => (
-                <img
-                  key={img.id}
-                  src={img.url}
-                  alt={img.altText ?? app.name}
-                  className="aspect-video w-full rounded-lg border border-border object-cover"
-                />
-              ))}
-            </div>
-          )}
+          {app.images.length > 0 && <ScreenshotCarousel images={app.images} appName={app.name} />}
 
           <section>
             <h2 className="text-xl font-semibold">Overview</h2>

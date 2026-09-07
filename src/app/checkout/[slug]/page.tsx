@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
+import { ScreenshotCarousel } from "@/components/marketplace/screenshot-carousel";
 import { CheckoutForm } from "./checkout-form";
 
 export const metadata: Metadata = { title: "Checkout" };
@@ -15,7 +16,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ slug:
 
   const application = await prisma.application.findFirst({
     where: { slug, status: "PUBLISHED" },
-    include: { pricing: { where: { isActive: true } } },
+    include: { pricing: { where: { isActive: true } }, images: { orderBy: { sortOrder: "asc" } } },
   });
   if (!application) notFound();
 
@@ -25,6 +26,12 @@ export default async function CheckoutPage({ params }: { params: Promise<{ slug:
     <div className="container-shell py-14">
       <h1 className="text-3xl font-semibold tracking-tight">Checkout</h1>
       <p className="mt-2 text-muted">Complete your purchase of {application.name}.</p>
+
+      {application.images.length > 0 && (
+        <div className="mx-auto mt-8 max-w-2xl">
+          <ScreenshotCarousel images={application.images} appName={application.name} />
+        </div>
+      )}
 
       <div className="mt-10">
         <CheckoutForm

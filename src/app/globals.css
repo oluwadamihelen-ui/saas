@@ -58,3 +58,14 @@ body {
   padding-left: 1.5rem;
   padding-right: 1.5rem;
 }
+
+/* Hides the scrollbar on a scroll-snap track (e.g. ScreenshotCarousel)
+   without hiding scroll functionality -- swipe/drag/arrow-key scrolling
+   all still work, there's just no visible scrollbar chrome. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
