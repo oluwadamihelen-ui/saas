@@ -1183,9 +1183,49 @@ unused catalog data rather than removed, since deleting a `Provider` row
 outside a migration risks orphaning any `ProviderCredential` a real
 deployment might have already attached to it.
 
-Remaining from the go-live audit: the background worker still needs its
-own always-on host to run in production (an infrastructure/deployment
-decision, not something more code resolves).
+**Go-live phase 5 — the worker's own always-on host.** The last item from
+the original audit: `scripts/worker.ts` is a long-running BullMQ consumer
+(deployment pipeline + domain/hosting renewal sweeps + uptime checks) that
+can't run as a one-off request handler the way the web app can on some
+hosts — it needs a process that just stays up. Two ways to do that,
+covered rather than picking one for the user: a `Dockerfile` (one image,
+since the worker runs its TypeScript directly through `tsx` — same as
+`npm run worker` locally — so it needs the same devDependencies and full
+source tree the web build stage already produces; a second "runtime-only"
+image would just duplicate that) with a `docker-compose.yml` reference
+stack (Postgres, Redis, a one-off `migrate` service running
+`prisma migrate deploy` that both `web` and `worker` wait on before
+starting, so neither can race a pending migration), and `deploy/systemd/`
++ `deploy/pm2/ecosystem.config.cjs` for a VPS the operator manages
+directly — the same style of box the SSH deployment adapter (phase 4)
+targets for a *customer's* purchased application, but this is a separate
+concern: hosting the platform itself, not something a customer's purchase
+triggers.
+
+`scripts/worker.ts` only handled `SIGTERM` before this phase (what
+systemd/PM2/Docker send on a stop) — hardened to also catch `SIGINT`
+(Ctrl+C, e.g. running it directly in a terminal) through the same drain
+path, and to log rather than silently die on an `uncaughtException`/
+`unhandledRejection` outside BullMQ's own per-job error handling, since a
+process manager restarting a worker that crashed with no logged reason is
+much harder to debug than one that logged why before exiting non-zero.
+Both the systemd units and the PM2 config give the worker real time
+(30s) to finish draining before escalating to `SIGKILL`.
+
+Honestly flagged rather than claimed as verified: this sandbox's network
+policy blocks Docker Hub image pulls entirely (confirmed with a bare
+`docker pull node:22-alpine`, independent of this Dockerfile — a 403 from
+Docker's own CDN, not a build error), so the Docker image itself was never
+actually built or run here. The Dockerfile and compose file are written
+against documented Node/Prisma/npm-in-Docker practice rather than a live
+test — the same "build now, activate later" position taken with every
+other real integration this project added without live infrastructure to
+verify against. What *was* verified live in this sandbox: both systemd
+unit files pass `systemd-analyze verify` (confirmed unit-file syntax,
+`ExecStart` resolution, and service-hardening directives are all valid,
+independent of Docker), and the worker hardening itself is plain
+TypeScript covered by the existing typecheck/lint/build passes — no new
+adapter code, so no new gap in what's testable.
 
 ## 13. Local Development
 

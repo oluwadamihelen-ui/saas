@@ -1,0 +1,31 @@
+# Companion to bridgecodes-worker.service: runs the Next.js web app
+# (`npm run start`, after `npm run build`) always-on on the same VPS. Not
+# strictly part of "the worker's always-on host" ask, but included since a
+# real deployment needs both, and it's the same five lines either way.
+#
+# Install:
+#   sudo cp deploy/systemd/bridgecodes-web.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now bridgecodes-web
+# Logs:
+#   journalctl -u bridgecodes-web -f
+[Unit]
+Description=BridgeCodes web app (Next.js)
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bridgecodes
+WorkingDirectory=/opt/bridgecodes
+EnvironmentFile=/opt/bridgecodes/.env
+ExecStart=/usr/bin/env npm run start
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bridgecodes-web
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

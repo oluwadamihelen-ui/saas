@@ -92,3 +92,66 @@ npm run test:e2e-acceptance # Playwright walkthrough of purchase -> deployment
                             # `npm run dev` and `npm run worker` running)
 npm run db:seed            # (re)seed the database
 ```
+
+## Production deployment
+
+`npm run dev`/`npm run worker` are fine for local development, but in
+production the worker (`scripts/worker.ts` — deployment pipeline, domain
+and hosting renewal sweeps, uptime checks) is a long-running process that
+has to stay up independently of however the web app is hosted; it can't run
+as a one-off request handler. Two ways to run both processes always-on,
+pick whichever fits your infrastructure:
+
+**Docker** — `Dockerfile` builds one image (Next.js build + full source,
+since the worker runs its TypeScript directly through `tsx`, same as
+`npm run worker` locally) used for both processes; `docker-compose.yml` is
+a reference stack wiring it up with Postgres, Redis, and a one-off
+`migrate` service that runs `prisma migrate deploy` before either `web` or
+`worker` starts:
+
+```bash
+cp .env.example .env   # fill in AUTH_SECRET, CREDENTIALS_ENCRYPTION_KEY,
+                        # and any provider credentials -- leave
+                        # DATABASE_URL/REDIS_URL as-is, docker-compose.yml
+                        # points them at the postgres/redis services
+docker compose up --build
+```
+
+Most container platforms (Railway, Render, Fly.io, ECS, etc.) ignore the
+compose file and instead run `web` and `worker` as two separate services
+from the same built image with different start commands (`npm run start`
+and `npm run worker`) — the Dockerfile alone covers that case.
+
+**VPS (systemd or PM2)** — for running directly on a Linux server you
+manage yourself (the same kind of box the SSH deployment adapter targets
+for a *customer's* purchased application — this is for the platform
+itself, a separate concern):
+
+```bash
+# one-time setup
+git clone <this repo> /opt/bridgecodes && cd /opt/bridgecodes
+npm ci && npx prisma generate && npm run build
+cp .env.example .env   # fill in real production values
+npx prisma migrate deploy
+```
+
+Then either:
+
+```bash
+# systemd (recommended for a dedicated VPS)
+sudo cp deploy/systemd/bridgecodes-worker.service deploy/systemd/bridgecodes-web.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now bridgecodes-worker bridgecodes-web
+journalctl -u bridgecodes-worker -f     # logs
+
+# or PM2
+pm2 start deploy/pm2/ecosystem.config.cjs
+pm2 save && pm2 startup
+```
+
+Both restart the worker automatically if it exits (crash, uncaught error,
+`RESTART` from a redeploy) and give it real time to drain in-flight
+BullMQ jobs on a stop before force-killing it — `scripts/worker.ts` handles
+`SIGTERM`/`SIGINT` for exactly that, and also now logs (rather than
+silently dying on) any uncaught exception or unhandled rejection outside
+BullMQ's own per-job error handling.

@@ -1,0 +1,44 @@
+# Runs BridgeCodes' background worker (deployment pipeline + domain/hosting
+# renewal + uptime sweeps -- everything started by `npm run worker`,
+# scripts/worker.ts) as an always-on systemd service on a Linux VPS.
+#
+# Install:
+#   sudo cp deploy/systemd/bridgecodes-worker.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now bridgecodes-worker
+# Logs:
+#   journalctl -u bridgecodes-worker -f
+#
+# Adjust User/WorkingDirectory/EnvironmentFile below to match your install
+# path and the unprivileged user you run the app as (never root). This is
+# for the platform's own worker process -- unrelated to the SSH deployment
+# adapter, which deploys a *customer's* purchased application to *their*
+# server; this unit is for BridgeCodes itself.
+[Unit]
+Description=BridgeCodes background worker
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bridgecodes
+WorkingDirectory=/opt/bridgecodes
+EnvironmentFile=/opt/bridgecodes/.env
+ExecStart=/usr/bin/env npm run worker
+Restart=always
+RestartSec=5
+# Gives scripts/worker.ts's SIGTERM handler (drains BullMQ connections, lets
+# an in-flight pipeline step finish) real time before systemd escalates to
+# SIGKILL on a stop/restart.
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bridgecodes-worker
+# Refuses to write anywhere on disk except what the app explicitly needs
+# (nothing, currently -- it only talks to Postgres/Redis over the network).
+# Loosen this if a future change needs local file access.
+ProtectSystem=strict
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

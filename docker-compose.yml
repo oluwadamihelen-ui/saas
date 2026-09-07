@@ -1,0 +1,89 @@
+# Reference production-shaped stack: Postgres + Redis + the web app + the
+# always-on background worker, all from one built image (see Dockerfile).
+# `migrate` is a one-off service that runs `prisma migrate deploy` and exits
+# -- both `web` and `worker` wait for it to succeed before starting, so
+# neither can race ahead of an un-migrated database.
+#
+# Usage:
+#   cp .env.example .env   # fill in AUTH_SECRET, CREDENTIALS_ENCRYPTION_KEY,
+#                           # and any provider credentials you're using --
+#                           # leave DATABASE_URL/REDIS_URL as-is, they're
+#                           # overridden below to point at the postgres/redis
+#                           # services by name
+#   docker compose up --build
+#
+# This is a reference for self-hosting on a single VPS or as a starting
+# point for a container platform (Railway/Render/Fly/ECS/etc, most of which
+# ignore this file and run `web`/`worker` as separate services from the same
+# image instead) -- not a requirement to use Docker at all; see the VPS
+# (systemd/PM2) setup documented in README.md for running without it.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: bridgecodes
+      POSTGRES_PASSWORD: bridgecodes
+      POSTGRES_DB: bridgecodes
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bridgecodes"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  migrate:
+    build: .
+    command: npx prisma migrate deploy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://bridgecodes:bridgecodes@postgres:5432/bridgecodes?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://bridgecodes:bridgecodes@postgres:5432/bridgecodes?schema=public
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: npm run worker
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://bridgecodes:bridgecodes@postgres:5432/bridgecodes?schema=public
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
