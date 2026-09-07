@@ -1,94 +1,113 @@
-# BridgeCodes
+# Monorepo
 
-A software marketplace and managed deployment platform: browse production-ready
-web applications, buy a license, choose how it gets deployed (your own server,
-platform hosting, or a fully managed setup), optionally register a domain, and
-track the whole thing from a dashboard. Billing supports one-time and
-recurring (subscription) pricing with PDF invoices, and every application
-release is a versioned record (`ApplicationVersion` + its deployment spec)
-that a deployment is created against — so "what got deployed" is always
-traceable back to a specific version, order, and target.
+This repository hosts two independent products as npm workspaces:
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full system design, provider
-abstraction layer, and phased roadmap.
+| App | Path | What it is |
+|---|---|---|
+| **marketplace** | [`apps/marketplace`](./apps/marketplace) | BridgeCodes — an existing, already-built software marketplace + managed deployment platform. Untouched. See its own [README](./apps/marketplace/README.md) / [ARCHITECTURE.md](./apps/marketplace/ARCHITECTURE.md). |
+| **school** | [`apps/school`](./apps/school) | A new, from-scratch AI-powered, multi-tenant school management platform. See its [README](./apps/school/README.md) / [ARCHITECTURE.md](./apps/school/ARCHITECTURE.md). |
 
-## Stack
-
-Next.js 16 (App Router) · TypeScript · Tailwind CSS v4 · PostgreSQL + Prisma ·
-Auth.js v5 · BullMQ + Redis · Zod
+The two apps share nothing at runtime — separate databases, separate auth,
+separate deploys — they only share this git history and root-level tooling
+(npm workspaces install).
 
 ## Getting started
 
-Requirements: Node 20+, PostgreSQL, Redis.
-
 ```bash
-npm install
-cp .env.example .env      # fill in DATABASE_URL, REDIS_URL, CREDENTIALS_ENCRYPTION_KEY
-npx prisma migrate dev
-npm run db:seed
-npm run dev                # http://localhost:3000
+npm install                     # installs both workspaces from the root
+npm run dev:marketplace          # -> apps/marketplace, http://localhost:3000
+npm run dev:school               # -> apps/school, http://localhost:3001 (set PORT)
 ```
 
-In a second terminal, run the worker process (required for purchases to
-progress past "Queued", and for domain renewal reminders/auto-renewal and
-recurring hosting billing):
+Each app has its own `.env` (copy from its `.env.example`) and its own
+Postgres database — point `DATABASE_URL` at two different databases (or two
+different Postgres instances) so the two products stay fully isolated.
 
-```bash
-npm run worker
-```
+---
 
-### Demo accounts
+## School platform — architecture assessment (Phase 1 kickoff)
 
-All seeded with password `Passw0rd!`:
+This section is the assessment requested for the school management platform
+build, kept here because the product doesn't exist yet as of this commit.
+Ongoing/updated documentation for it lives in
+[`apps/school/ARCHITECTURE.md`](./apps/school/ARCHITECTURE.md).
 
-| Role | Email |
-|---|---|
-| Super Admin | admin@bridgecodes.example |
-| Staff | ops@bridgecodes.example |
-| Customer | sarah@brightretail.com |
-| Customer | david@northgaterealty.com |
-| Customer | grace@clinicly.example |
+**1. Current architecture** — Nothing existed for this product; `apps/school`
+is a fresh Next.js 16 app. It reuses the marketplace app's proven stack
+(Next.js App Router, TypeScript, Prisma/Postgres, Auth.js v5, Tailwind v4,
+Radix-based UI primitives, Zod, React Hook Form) as boilerplate but has its
+own database, schema, auth realm, and no shared code with `apps/marketplace`.
 
-The platform runs entirely on mock payment/domain/hosting/deployment/email
-providers by default — the full purchase → deployment journey works with no
-external credentials. See Admin → Providers to inspect provider status, and
-`.env.example` for how to switch a category to a real adapter.
+**2. Recommended technology architecture** — Next.js App Router for both the
+UI and the API layer (route handlers + server actions), PostgreSQL via
+Prisma as the source of truth, BullMQ/Redis reserved for async work
+(AI generation jobs, bulk imports, notification fan-out) starting Phase 5,
+a thin AI-provider abstraction (Phase 5) sitting behind an intent → permission
+check → tool-call pipeline, never given raw DB access.
 
-### The purchase → deployment journey
+**3. Database architecture** — Normalized relational schema, one `School` row
+as the tenant root; every tenant-owned table carries a non-nullable
+`schoolId` foreign key plus an index, enforced by application-layer scoping
+(see below) rather than Postgres RLS for Phase 1 (RLS is a good hardening
+candidate for a later phase once the query layer is stable). Money is stored
+as integer minor units; every mutating table gets `createdAt`/`updatedAt`.
 
-1. **Admin** creates an application, adds a version (e.g. `1.0.0`) with a
-   deployment specification (runtime, build/start commands, env vars, health
-   check path) under Admin → Applications → Versions, and publishes it.
-2. **Customer** buys the application; on payment confirmation
-   (`/api/webhooks/[provider]`, idempotent and amount-validated) the order
-   moves to `PAID` and a PDF invoice is generated.
-3. **Customer** goes to Dashboard → Deployments → Deploy Your Application and
-   picks a target — their own server, platform hosting, or the built-in mock
-   "demo infrastructure" target (no real server needed to try the flow).
-4. The **deployment pipeline worker** (`npm run worker`) picks up the queued
-   job and walks the deployment through
-   `QUEUED → PREPARING → CONNECTING → INSTALLING → CONFIGURING → HEALTH_CHECK
-   → COMPLETED`, writing a log entry at each step. A deployment only reaches
-   `COMPLETED` once its health check actually passes.
-5. **Customer** sees a live progress timeline and a "successfully deployed"
-   state; **admin** sees the same deployment with full technical logs, plus
-   retry/rollback/cancel actions.
+**4. Multi-tenancy strategy** — Shared database, shared schema, `schoolId`
+discriminator column (the standard, most operationally simple approach at
+this scale — see section 44's 10 → 10,000 school growth path). A single
+`lib/tenant.ts` helper (`requireSession` → `schoolId`) is the *only* sanctioned
+way route handlers/server actions read the current tenant; every Prisma call
+for a tenant-owned model is written through small per-model repository
+functions that take `schoolId` as a mandatory first argument, so a query that
+forgets to scope is a compile error, not a runtime data leak. Tenant-isolation
+tests (School A can never read/write School B's rows) are part of Phase 1's
+definition of done, not deferred.
 
-## Scripts
+**5. AI architecture** — Deferred to Phase 5 per the phased build strategy;
+not stubbed with fake responses in the UI before it's real (fake "AI" text
+would violate the "no scripted AI responses" requirement). The intent →
+permission-check → tool-call → audit pipeline described in the brief will be
+built as a typed tool registry once there's enough real data (attendance,
+results, fees) for it to reason over.
 
-```bash
-npm run dev              # start the app
-npm run worker           # deployment pipeline + domain renewal + hosting billing schedulers
-npm run build             # production build
-npm run lint               # eslint
-npm test                   # vitest — unit tests + DB-backed integration tests
-                            # (tests/integration/*), run against the same
-                            # local Postgres/Redis as `npm run dev`
-npm run test:e2e-smoke     # Playwright smoke test of the full customer journey
-                            # (requires `npm run dev` running in another terminal)
-npm run test:e2e-acceptance # Playwright walkthrough of purchase -> deployment
-                            # request -> worker pipeline -> COMPLETED, checked
-                            # from both the customer and admin side (requires
-                            # `npm run dev` and `npm run worker` running)
-npm run db:seed            # (re)seed the database
-```
+**6. Auth/authorization strategy** — Auth.js v5 credentials provider,
+bcrypt-hashed passwords, JWT session carrying `userId`, `schoolId`, and role;
+a `module.action` permission-string system (e.g. `students.view`,
+`finance.approve`) with a seeded default role → permission matrix per the
+role list in section 3 of the brief, editable per-school later. Authorization
+is enforced server-side only (route handlers/server actions re-check
+permissions; nothing trusts a client-sent role).
+
+**7. Module breakdown** — Matches the brief's 7 phases; Phase 1 in this
+commit covers: auth, tenancy, users/roles/permissions, school onboarding
+(account → school info → academic structure → invite staff; CSV import and
+fee/grading config are stubbed as "coming in Phase 2/3" rather than faked),
+core design system, main dashboard (real counts only — no invented attendance
+or revenue numbers until those modules exist), and student management
+(full CRUD, tenant-scoped, permission-checked).
+
+**8. Development roadmap** — Phase 1 (this change) → Phase 2 Academics
+(classes/attendance/timetable/results) → Phase 3 Finance → Phase 4
+Communication/portals → Phase 5 AI → Phase 6 Advanced ERP → Phase 7 SaaS
+billing/platform admin, exactly as sectioned in the brief.
+
+**9. What's built first** — Tenancy + auth + RBAC, because every later module
+depends on "which school, which user, what are they allowed to do" being
+correct and tested; then onboarding (a school has to exist with real data
+before a dashboard means anything); then the dashboard shell + student
+management as the first real domain module, proving the whole stack
+end-to-end (schema → server action → permission check → UI) before Phase 2
+adds volume.
+
+**10. Architectural risks** — (a) shared-schema multi-tenancy means a single
+missed `schoolId` filter is a cross-tenant leak — mitigated by routing all
+access through scoped repository functions plus dedicated isolation tests,
+with Postgres RLS as a future hardening layer; (b) the "AI must never bypass
+permissions" requirement means the tool layer has to be designed before
+Phase 5, not bolted on after — the permission-string system is being built
+now so AI tools in Phase 5 reuse the exact same checks as the UI; (c) result
+approval / report-card publishing / payroll workflows all have "human must
+confirm" gates baked into the brief — those need explicit status/workflow
+state machines (not just CRUD) when Phase 2/3/6 land, so the schema leaves
+room for `status` + approval columns rather than hard-deleting/overwriting
+records.
