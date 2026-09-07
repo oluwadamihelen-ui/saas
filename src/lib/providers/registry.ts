@@ -8,6 +8,7 @@ import { MockDomainProvider } from "./domain/mock";
 import { NamecheapDomainProvider } from "./domain/namecheap";
 import { HostingProvider } from "./hosting/types";
 import { MockHostingProvider } from "./hosting/mock";
+import { CPanelHostingProvider } from "./hosting/cpanel";
 import { DeploymentProviderAdapter } from "./deployment/types";
 import { deploymentAdapterRegistry } from "./deployment/registry";
 import { EmailProvider } from "./email/types";
@@ -89,8 +90,15 @@ export async function getDomainProvider(): Promise<DomainProvider> {
 
 export async function getHostingProvider(): Promise<HostingProvider> {
   const preferred = process.env.HOSTING_PROVIDER ?? "mock";
-  // Same seam as getDomainProvider -- no real hosting adapter exists yet.
-  if (preferred !== "mock") {
+  if (preferred === "cpanel") {
+    const host = process.env.CPANEL_HOST || (await getCredential("cpanel", "HOSTING", "host"));
+    const username = process.env.CPANEL_USERNAME || (await getCredential("cpanel", "HOSTING", "username"));
+    const apiToken = process.env.CPANEL_API_TOKEN || (await getCredential("cpanel", "HOSTING", "apiToken"));
+    if (host && username && apiToken) {
+      const port = process.env.CPANEL_PORT ? Number(process.env.CPANEL_PORT) : undefined;
+      return new CPanelHostingProvider({ host, username, apiToken, port });
+    }
+  } else if (preferred !== "mock") {
     logger.warn("hosting_provider.unimplemented_adapter_requested", { preferred });
   }
   if (!global.__cachedHostingProvider) global.__cachedHostingProvider = new MockHostingProvider();

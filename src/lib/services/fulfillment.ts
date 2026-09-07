@@ -5,6 +5,7 @@ import { notifyUser } from "@/lib/services/notifications";
 import { processQuoteOrder } from "@/lib/services/quotes";
 import { recordAuditLog } from "@/lib/security/audit";
 import { logger } from "@/lib/security/logger";
+import { encryptSecret } from "@/lib/security/encryption";
 
 interface FulfillmentIntent {
   deploymentType: "CUSTOMER_SERVER" | "PLATFORM_HOSTING" | "MANAGED";
@@ -143,6 +144,10 @@ export async function fulfillOrder(orderId: string) {
           providerAccountId: account.providerAccountId,
           status: account.status === "ACTIVE" ? "ACTIVE" : "PENDING",
           primaryDomain: intent.domainName,
+          controlPanelUrl: account.controlPanelUrl,
+          // Only a real adapter (e.g. cPanel) sets initialPassword -- the
+          // mock never does, so this stays null for demo accounts.
+          initialCredentialEncrypted: account.initialPassword ? encryptSecret(account.initialPassword) : undefined,
         },
       });
       hostingAccountId = hostingAccount.id;

@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatCurrency } from "@/lib/utils";
+import { decryptSecret } from "@/lib/security/encryption";
 import { ChangePlanForm } from "./change-plan-form";
 import { cancelHosting } from "../actions";
 
@@ -25,6 +26,7 @@ export default async function HostingDetailPage({ params }: { params: Promise<{ 
 
   const usage = account.usage as { storageUsedGB?: number; bandwidthUsedGB?: number; websitesUsed?: number } | null;
   const cancel = cancelHosting.bind(null, account.id);
+  const initialPassword = account.initialCredentialEncrypted ? decryptSecret(account.initialCredentialEncrypted) : null;
 
   return (
     <div className="space-y-6">
@@ -57,6 +59,33 @@ export default async function HostingDetailPage({ params }: { params: Promise<{ 
               </dl>
             </CardContent>
           </Card>
+
+          {account.controlPanelUrl && (
+            <Card>
+              <CardContent>
+                <p className="mb-3 text-sm font-semibold text-foreground">Control Panel Access</p>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-xs">
+                  <dt className="text-muted">Login URL</dt>
+                  <dd>
+                    <a href={account.controlPanelUrl} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                      {account.controlPanelUrl}
+                    </a>
+                  </dd>
+                  <dt className="text-muted">Username</dt>
+                  <dd className="font-mono text-foreground">{account.providerAccountId}</dd>
+                  {initialPassword && (
+                    <>
+                      <dt className="text-muted">Password</dt>
+                      <dd className="font-mono text-foreground">{initialPassword}</dd>
+                    </>
+                  )}
+                </dl>
+                <p className="mt-3 text-xs text-muted">
+                  Save this somewhere safe -- this is your login for the hosting control panel directly, separate from your BridgeCodes account.
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardContent>

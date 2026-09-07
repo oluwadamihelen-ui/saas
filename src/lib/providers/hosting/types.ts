@@ -10,6 +10,8 @@ export interface HostingAccountRef {
   providerAccountId: string;
   status: "ACTIVE" | "PENDING" | "SUSPENDED";
   controlPanelUrl?: string;
+  /** Only set by createAccount -- a freshly generated login password for the new account. Never returned by getAccount. */
+  initialPassword?: string;
 }
 
 export interface HostingUsage {

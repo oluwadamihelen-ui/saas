@@ -251,7 +251,7 @@ PaymentProvider      → MockPaymentProvider, PaystackPaymentProvider,
                         KoraPayPaymentProvider, NowPaymentsPaymentProvider
 DomainProvider        → MockDomainProvider, NamecheapDomainProvider
                         (capabilities-flagged)
-HostingProvider       → MockHostingProvider
+HostingProvider       → MockHostingProvider, CPanelHostingProvider
 DeploymentProviderAdapter → MockDeploymentProvider   (resolved for every
                                                        provider key —
                                                        ssh/cpanel/plesk/
@@ -987,11 +987,55 @@ shape and response parsing, the DNS get-then-set-back merge, the
 registrant-contact guard, error/auth-failure classification) and
 `tests/integration/domain-registrant-guard.test.ts` (the pre-payment
 guard against a stubbed "requires contact" provider, independent of
-Namecheap's actual HTTP behavior). Remaining from the go-live audit,
-tracked for the next phases: hosting/deployment/DNS-management adapters
-are still mock, the background worker still needs its own always-on host,
-the seed script still needs a production guard, and there's still no
-password-recovery flow.
+Namecheap's actual HTTP behavior).
+
+**Go-live phase 2 — real hosting provisioning (cPanel/WHM).**
+`lib/providers/hosting/cpanel.ts` implements the full `HostingProvider`
+interface against WHM's real JSON API (`createacct`, `suspendacct`,
+`unsuspendacct`, `removeacct`, `accountsummary`, `changepackage`, and
+`version` for the connection check) — chosen because that interface
+(create an account by plan+domain, suspend/unsuspend, disk/bandwidth
+usage, upgrade/downgrade package) already maps almost 1:1 onto WHM's
+reseller-hosting model, unlike a VPS/compute API (DigitalOcean, etc.)
+which would have meant reinterpreting what a "hosting account" is. Every
+WHM API 1 call shares one response envelope
+(`{metadata:{result,reason},data:{...}}`, `result===1` is success
+regardless of function) and authenticates with a WHM API Token
+(`Authorization: whm <username>:<token>`, generated in WHM > Development >
+Manage API Tokens) rather than the account password — WHM's own
+recommended method. `getUsage`'s bandwidth figure is honestly left at 0
+with a comment rather than guessed: `showbw` needs a month/year parameter
+and its exact response shape wasn't verifiable without a live WHM server
+to test against, unlike `accountsummary`'s disk figures which are
+well-documented and implemented for real; worth wiring up once there's a
+sandbox account to confirm the shape against, same caveat-and-flag
+approach as `namecheap.ts`'s pricing-response walk.
+
+WHM identifies accounts by cPanel username, not an opaque id, so
+`providerAccountId` for this adapter *is* the generated cPanel username
+(derived from the domain, 1-16 lowercase alphanumeric chars, prefixed if
+it would otherwise start with a digit). Creating a real cPanel account
+also means WHM hands back a login password that nothing before this
+adapter had anywhere to put — `HostingAccountRef` gained an optional
+`initialPassword` (only set by `createAccount`, never `getAccount`), and
+`HostingAccount` gained `controlPanelUrl` + `initialCredentialEncrypted`
+(the latter encrypted with the same AES-256-GCM helper `ProviderCredential`
+already uses). `fulfillOrder()` persists both when a real adapter sets
+them; the customer's hosting detail page decrypts and shows a "Control
+Panel Access" card (login URL, username, password) only when
+`controlPanelUrl` is present — invisible for mock accounts, exactly as
+before. Wired into every seam the previous adapters established:
+`registry.ts`, `admin/providers` `resolveAdapter()`, `seedProviders()`,
+`.env.example` (`CPANEL_HOST/PORT/USERNAME/API_TOKEN`). Covered by
+`tests/services/cpanel-provider.test.ts` (every WHM function, the auth
+header and URL shape, username generation including the leading-digit
+edge case, disk-usage unit conversion including the "unlimited" case,
+and connected/auth-failure/HTTP-error classification).
+
+Remaining from the go-live audit, tracked for the next phases:
+deployment and DNS-management adapters are still mock, the background
+worker still needs its own always-on host, the seed script still needs a
+production guard, and there's still no password-recovery flow.
 
 ## 13. Local Development
 
@@ -1021,7 +1065,9 @@ applies to `EMAIL_PROVIDER=resend` plus `RESEND_API_KEY`,
 `NOWPAYMENTS_IPN_SECRET`, and `DOMAIN_PROVIDER=namecheap` plus
 `NAMECHEAP_API_USER` + `NAMECHEAP_API_KEY` + `NAMECHEAP_USERNAME` +
 `NAMECHEAP_CLIENT_IP` (the IP must be whitelisted in the Namecheap account
-first, or every call fails auth regardless of how correct the key is).
+first, or every call fails auth regardless of how correct the key is), and
+`HOSTING_PROVIDER=cpanel` plus `CPANEL_HOST` + `CPANEL_USERNAME` +
+`CPANEL_API_TOKEN` (a WHM API Token, not the account password).
 
 ## 14. Operations
 

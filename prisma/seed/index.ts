@@ -72,6 +72,7 @@ async function seedProviders() {
     { name: "Namecheap", type: "DOMAIN", adapterKey: "namecheap", isDefault: false },
     { name: "Mock DNS", type: "DNS", adapterKey: "mock", isDefault: true },
     { name: "Mock Hosting", type: "HOSTING", adapterKey: "mock", isDefault: true },
+    { name: "cPanel/WHM", type: "HOSTING", adapterKey: "cpanel", isDefault: false },
     { name: "Mock Deployment", type: "DEPLOYMENT", adapterKey: "mock", isDefault: true },
     { name: "Mock Email", type: "EMAIL", adapterKey: "mock", isDefault: true },
     { name: "Resend", type: "EMAIL", adapterKey: "resend", isDefault: false },

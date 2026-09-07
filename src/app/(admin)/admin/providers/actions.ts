@@ -14,6 +14,7 @@ import { NowPaymentsPaymentProvider } from "@/lib/providers/payment/nowpayments"
 import { MockDomainProvider } from "@/lib/providers/domain/mock";
 import { NamecheapDomainProvider } from "@/lib/providers/domain/namecheap";
 import { MockHostingProvider } from "@/lib/providers/hosting/mock";
+import { CPanelHostingProvider } from "@/lib/providers/hosting/cpanel";
 import { MockDeploymentProvider } from "@/lib/providers/deployment/mock";
 import { MockEmailProvider } from "@/lib/providers/email/mock";
 import { ResendEmailProvider } from "@/lib/providers/email/resend";
@@ -62,6 +63,21 @@ async function resolveAdapter(providerId: string): Promise<ProviderAdapterBase |
     const ipnSecretCred = provider.credentials.find((c) => c.key === "ipnSecret");
     if (!apiKeyCred || !ipnSecretCred) return null;
     return new NowPaymentsPaymentProvider(decryptSecret(apiKeyCred.encryptedValue), decryptSecret(ipnSecretCred.encryptedValue));
+  }
+
+  if (provider.adapterKey === "cpanel") {
+    const find = (key: string) => provider.credentials.find((c) => c.key === key);
+    const hostCred = find("host");
+    const usernameCred = find("username");
+    const apiTokenCred = find("apiToken");
+    if (!hostCred || !usernameCred || !apiTokenCred) return null;
+    const portCred = find("port");
+    return new CPanelHostingProvider({
+      host: decryptSecret(hostCred.encryptedValue),
+      username: decryptSecret(usernameCred.encryptedValue),
+      apiToken: decryptSecret(apiTokenCred.encryptedValue),
+      port: portCred ? Number(decryptSecret(portCred.encryptedValue)) : undefined,
+    });
   }
 
   if (provider.adapterKey === "namecheap") {

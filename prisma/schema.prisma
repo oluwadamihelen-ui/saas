@@ -1171,6 +1171,13 @@ model HostingAccount {
   status            HostingAccountStatus @default(PENDING)
   primaryDomain     String?
   usage             Json?
+  // Real hosting adapters (e.g. cPanel/WHM) hand back a control panel URL
+  // and a one-time-generated login password at account creation; the mock
+  // never sets these. Encrypted with the same AES-256-GCM helper used for
+  // ProviderCredential -- decrypted only to show the account owner their
+  // own login, never logged or shown to anyone else.
+  controlPanelUrl             String?
+  initialCredentialEncrypted  String?
   deployments       Deployment[]
   deploymentTargets DeploymentTarget[]
   renewalEvents     RenewalEvent[]
