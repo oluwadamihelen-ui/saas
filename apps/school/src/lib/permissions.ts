@@ -1,0 +1,109 @@
+// Canonical module.action permission catalog (brief section 3). Only
+// permissions for modules that actually exist in this phase are listed —
+// finance/results/attendance permissions get added when those modules do,
+// not seeded ahead of time as inert placeholders.
+//
+// The catalog is fixed in code; which roles have which permission is the
+// tenant-editable part, stored in RolePermission and seeded per school from
+// ROLE_DEFAULT_PERMISSIONS below so a school can later customize its own
+// matrix without affecting any other school.
+
+export const PERMISSIONS = {
+  DASHBOARD_VIEW: "dashboard.view",
+  STUDENTS_VIEW: "students.view",
+  STUDENTS_CREATE: "students.create",
+  STUDENTS_EDIT: "students.edit",
+  STUDENTS_DELETE: "students.delete",
+  GUARDIANS_MANAGE: "guardians.manage",
+  STAFF_VIEW: "staff.view",
+  STAFF_INVITE: "staff.invite",
+  STAFF_MANAGE: "staff.manage",
+  ROLES_MANAGE: "roles.manage",
+  ACADEMICS_MANAGE: "academics.manage",
+  SCHOOL_SETTINGS_MANAGE: "school_settings.manage",
+  AUDIT_VIEW: "audit.view",
+} as const;
+
+export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+
+export const PERMISSION_CATALOG: { key: PermissionKey; module: string; description: string }[] = [
+  { key: PERMISSIONS.DASHBOARD_VIEW, module: "dashboard", description: "View the school dashboard" },
+  { key: PERMISSIONS.STUDENTS_VIEW, module: "students", description: "View student records" },
+  { key: PERMISSIONS.STUDENTS_CREATE, module: "students", description: "Enroll new students" },
+  { key: PERMISSIONS.STUDENTS_EDIT, module: "students", description: "Edit student records" },
+  { key: PERMISSIONS.STUDENTS_DELETE, module: "students", description: "Withdraw/delete student records" },
+  { key: PERMISSIONS.GUARDIANS_MANAGE, module: "students", description: "Manage parent/guardian records" },
+  { key: PERMISSIONS.STAFF_VIEW, module: "staff", description: "View staff accounts" },
+  { key: PERMISSIONS.STAFF_INVITE, module: "staff", description: "Invite new staff members" },
+  { key: PERMISSIONS.STAFF_MANAGE, module: "staff", description: "Edit or deactivate staff accounts" },
+  { key: PERMISSIONS.ROLES_MANAGE, module: "staff", description: "Change role permission assignments" },
+  { key: PERMISSIONS.ACADEMICS_MANAGE, module: "academics", description: "Manage sessions, terms, classes and subjects" },
+  { key: PERMISSIONS.SCHOOL_SETTINGS_MANAGE, module: "school", description: "Edit school profile and branding" },
+  { key: PERMISSIONS.AUDIT_VIEW, module: "administration", description: "View the audit log" },
+];
+
+/// System roles seeded into every new school (brief section 3's role list).
+/// PARENT and STUDENT are seeded so the schema/role model doesn't need to
+/// change when the parent/student portals land in Phase 4 — they carry no
+/// dashboard permissions yet because there is no portal UI for them.
+export const SYSTEM_ROLE_KEYS = [
+  "SCHOOL_OWNER",
+  "SCHOOL_ADMIN",
+  "PRINCIPAL",
+  "TEACHER",
+  "ACCOUNTANT",
+  "HR_STAFF",
+  "LIBRARIAN",
+  "TRANSPORT_MANAGER",
+  "PARENT",
+  "STUDENT",
+] as const;
+
+export type SystemRoleKey = (typeof SYSTEM_ROLE_KEYS)[number];
+
+export const SYSTEM_ROLE_LABELS: Record<SystemRoleKey, string> = {
+  SCHOOL_OWNER: "School Owner",
+  SCHOOL_ADMIN: "School Administrator",
+  PRINCIPAL: "Principal / Head Teacher",
+  TEACHER: "Teacher",
+  ACCOUNTANT: "Accountant / Bursar",
+  HR_STAFF: "HR / Admin Staff",
+  LIBRARIAN: "Librarian",
+  TRANSPORT_MANAGER: "Transport Manager",
+  PARENT: "Parent",
+  STUDENT: "Student",
+};
+
+const ALL_PERMISSIONS = PERMISSION_CATALOG.map((p) => p.key);
+
+export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = {
+  SCHOOL_OWNER: ALL_PERMISSIONS,
+  SCHOOL_ADMIN: ALL_PERMISSIONS.filter((p) => p !== PERMISSIONS.ROLES_MANAGE),
+  PRINCIPAL: [
+    PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.STUDENTS_VIEW,
+    PERMISSIONS.STUDENTS_EDIT,
+    PERMISSIONS.GUARDIANS_MANAGE,
+    PERMISSIONS.STAFF_VIEW,
+    PERMISSIONS.ACADEMICS_MANAGE,
+    PERMISSIONS.AUDIT_VIEW,
+  ],
+  TEACHER: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.STUDENTS_VIEW],
+  ACCOUNTANT: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.STUDENTS_VIEW],
+  HR_STAFF: [
+    PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.STAFF_VIEW,
+    PERMISSIONS.STAFF_INVITE,
+    PERMISSIONS.STAFF_MANAGE,
+  ],
+  LIBRARIAN: [PERMISSIONS.DASHBOARD_VIEW],
+  TRANSPORT_MANAGER: [PERMISSIONS.DASHBOARD_VIEW],
+  PARENT: [],
+  STUDENT: [],
+};
+
+/// The single platform-level role (School = null). Its permission set is
+/// intentionally empty in Phase 1 — the platform admin app (brief section
+/// 35) is Phase 7 scope; this role exists so `User.schoolId` nullable +
+/// `Role.schoolId` nullable never needs a schema change to support it.
+export const SUPER_ADMIN_ROLE_KEY = "SUPER_ADMIN";

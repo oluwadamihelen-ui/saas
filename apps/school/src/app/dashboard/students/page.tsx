@@ -1,0 +1,142 @@
+import Link from "next/link";
+import { Users } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input, Select } from "@/components/ui/input";
+import { EmptyState } from "@/components/ui/empty-state";
+import { requireSchoolUser } from "@/lib/auth/require";
+import { listStudents } from "@/lib/services/students";
+import { listClassArms } from "@/lib/services/academics";
+import type { StudentStatus } from "@/generated/prisma/client";
+
+const STATUS_VARIANT: Record<StudentStatus, "success" | "warning" | "neutral" | "danger"> = {
+  ACTIVE: "success",
+  GRADUATED: "neutral",
+  WITHDRAWN: "warning",
+  SUSPENDED: "danger",
+};
+
+export default async function StudentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; classArmId?: string; status?: string; page?: string }>;
+}) {
+  const user = await requireSchoolUser();
+  const params = await searchParams;
+
+  const [{ students, total, page, pageCount }, classArms] = await Promise.all([
+    listStudents(user.schoolId, {
+      search: params.q,
+      classArmId: params.classArmId,
+      status: (params.status as StudentStatus) || undefined,
+      page: params.page ? Number(params.page) : 1,
+    }),
+    listClassArms(user.schoolId),
+  ]);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Students</h1>
+          <p className="text-sm text-muted">{total} student{total === 1 ? "" : "s"}</p>
+        </div>
+        <Button asChild>
+          <Link href="/dashboard/students/new">Enroll a student</Link>
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="space-y-4">
+          <form className="flex flex-wrap items-end gap-3" method="get">
+            <div className="min-w-[220px] flex-1 space-y-1.5">
+              <label className="text-sm font-medium text-foreground" htmlFor="q">Search</label>
+              <Input id="q" name="q" defaultValue={params.q ?? ""} placeholder="Name or admission number" />
+            </div>
+            <div className="w-56 space-y-1.5">
+              <label className="text-sm font-medium text-foreground" htmlFor="classArmId">Class</label>
+              <Select id="classArmId" name="classArmId" defaultValue={params.classArmId ?? ""}>
+                <option value="">All classes</option>
+                {classArms.map((arm) => (
+                  <option key={arm.id} value={arm.id}>{arm.classGroup.name} {arm.name}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="w-44 space-y-1.5">
+              <label className="text-sm font-medium text-foreground" htmlFor="status">Status</label>
+              <Select id="status" name="status" defaultValue={params.status ?? ""}>
+                <option value="">Any status</option>
+                <option value="ACTIVE">Active</option>
+                <option value="GRADUATED">Graduated</option>
+                <option value="WITHDRAWN">Withdrawn</option>
+                <option value="SUSPENDED">Suspended</option>
+              </Select>
+            </div>
+            <Button type="submit" variant="secondary">Filter</Button>
+          </form>
+
+          {students.length === 0 ? (
+            <EmptyState
+              icon={<Users className="h-6 w-6" />}
+              title="No students found"
+              description="Try a different search, or enroll a new student."
+              action={
+                <Button asChild size="sm">
+                  <Link href="/dashboard/students/new">Enroll a student</Link>
+                </Button>
+              }
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Admission No.</TableHead>
+                  <TableHead>Class</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {students.map((s) => (
+                  <TableRow key={s.id}>
+                    <TableCell>
+                      <Link href={`/dashboard/students/${s.id}`} className="font-medium text-foreground hover:text-accent">
+                        {s.firstName} {s.lastName}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-muted">{s.admissionNumber}</TableCell>
+                    <TableCell className="text-muted">
+                      {s.classArm ? `${s.classArm.classGroup.name} ${s.classArm.name}` : "Unassigned"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={STATUS_VARIANT[s.status]}>{s.status}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+
+          {pageCount > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-2">
+              {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) => (
+                <Button key={p} asChild size="sm" variant={p === page ? "primary" : "outline"}>
+                  <Link
+                    href={{
+                      pathname: "/dashboard/students",
+                      query: { ...params, page: p },
+                    }}
+                  >
+                    {p}
+                  </Link>
+                </Button>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

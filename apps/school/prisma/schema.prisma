@@ -1,0 +1,425 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Platform / tenancy
+// ---------------------------------------------------------------------------
+
+enum SchoolStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+}
+
+/// The tenant root. Every tenant-owned table below carries a schoolId and
+/// must be queried through the scoped repository helpers in src/lib/tenant.ts
+/// — never a bare `prisma.<model>.findMany()` for a tenant-owned model.
+model School {
+  id     String       @id @default(cuid())
+  name   String
+  slug   String       @unique
+  status SchoolStatus @default(TRIAL)
+
+  logoUrl String?
+  email   String?
+  phone   String?
+  website String?
+
+  addressLine String?
+  city        String?
+  state       String?
+  country     String  @default("Nigeria")
+
+  currency String @default("NGN")
+  timezone String @default("Africa/Lagos")
+
+  // Onboarding wizard progress (brief section 4). Nullable timestamps double
+  // as both a "is this step done" flag and a record of when it happened.
+  accountCreatedAt          DateTime  @default(now())
+  schoolInfoCompletedAt     DateTime?
+  academicStructureSetupAt  DateTime?
+  staffInvitedAt            DateTime?
+  onboardingCompletedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campuses         Campus[]
+  users            User[]
+  roles            Role[]
+  invites          StaffInvite[]
+  academicSessions AcademicSession[]
+  terms            Term[]
+  departments      Department[]
+  classGroups      ClassGroup[]
+  classArms        ClassArm[]
+  subjects         Subject[]
+  students         Student[]
+  guardians        Guardian[]
+  auditLogs        AuditLog[]
+
+  @@index([status])
+}
+
+model Campus {
+  id       String  @id @default(cuid())
+  schoolId String
+  school   School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name     String
+  isMain   Boolean @default(false)
+
+  addressLine String?
+  city        String?
+  state       String?
+
+  createdAt DateTime @default(now())
+
+  students Student[]
+
+  @@index([schoolId])
+}
+
+// ---------------------------------------------------------------------------
+// Identity, roles & permissions
+// ---------------------------------------------------------------------------
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+/// schoolId is null only for platform Super Admins. Every other user belongs
+/// to exactly one school in Phase 1 — a staff member working at two schools
+/// is out of scope until multi-membership is needed.
+model User {
+  id           String     @id @default(cuid())
+  schoolId     String?
+  school       School?    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id])
+  campusId     String?
+
+  email        String     @unique
+  passwordHash String
+  name         String
+  avatarUrl    String?
+  status       UserStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  auditLogs      AuditLog[]
+  classArmsLed   ClassArm[]     @relation("ClassArmTeacher")
+  invitesSent    StaffInvite[]  @relation("InviteSentBy")
+
+  @@index([schoolId])
+}
+
+/// Roles are tenant-scoped (schoolId set) except the single platform-level
+/// SUPER_ADMIN role (schoolId null), so a school can customize its own
+/// role -> permission matrix without touching any other school's roles.
+/// System roles (isSystem) are seeded for every school and can't be deleted.
+model Role {
+  id       String  @id @default(cuid())
+  schoolId String?
+  school   School? @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  key      String
+  name     String
+  isSystem Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  users           User[]
+  rolePermissions RolePermission[]
+  staffInvites    StaffInvite[]
+
+  @@unique([schoolId, key])
+  @@index([schoolId])
+}
+
+/// Global catalog of module.action permission strings (e.g. "students.view").
+/// Not tenant-scoped — the catalog itself is fixed; which roles have which
+/// permission is the tenant-editable part, via RolePermission.
+model Permission {
+  id          String @id @default(cuid())
+  key         String @unique
+  module      String
+  action      String
+  description String
+
+  rolePermissions RolePermission[]
+
+  @@index([module])
+}
+
+model RolePermission {
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+model StaffInvite {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  email      String
+  roleId     String
+  role       Role         @relation(fields: [roleId], references: [id])
+  token      String       @unique
+  status     InviteStatus @default(PENDING)
+  expiresAt  DateTime
+  invitedById String
+  invitedBy   User        @relation("InviteSentBy", fields: [invitedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@unique([schoolId, email, status])
+}
+
+// ---------------------------------------------------------------------------
+// Academic structure
+// ---------------------------------------------------------------------------
+
+model AcademicSession {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  isCurrent Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+
+  terms Term[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+model Term {
+  id                String          @id @default(cuid())
+  schoolId          String
+  school            School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicSessionId String
+  academicSession   AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  isCurrent Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@unique([academicSessionId, name])
+  @@index([schoolId])
+}
+
+model Department {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name     String
+
+  classGroups ClassGroup[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+/// A grade level, e.g. "JSS1", "SS2" — the brief calls this a "Class".
+model ClassGroup {
+  id           String      @id @default(cuid())
+  schoolId     String
+  school       School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  name  String
+  order Int    @default(0)
+
+  createdAt DateTime @default(now())
+
+  arms ClassArm[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+/// A specific stream within a class group, e.g. "JSS1 Blue" — this is what
+/// students are actually enrolled into.
+model ClassArm {
+  id           String      @id @default(cuid())
+  schoolId     String
+  school       School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classGroupId String
+  classGroup   ClassGroup  @relation(fields: [classGroupId], references: [id], onDelete: Cascade)
+
+  name             String
+  capacity         Int?
+  classTeacherId   String?
+  classTeacher     User?   @relation("ClassArmTeacher", fields: [classTeacherId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  students Student[]
+
+  @@unique([classGroupId, name])
+  @@index([schoolId])
+}
+
+model Subject {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  name String
+  code String
+
+  createdAt DateTime @default(now())
+
+  @@unique([schoolId, code])
+  @@index([schoolId])
+}
+
+// ---------------------------------------------------------------------------
+// Students & guardians
+// ---------------------------------------------------------------------------
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum StudentStatus {
+  ACTIVE
+  GRADUATED
+  WITHDRAWN
+  SUSPENDED
+}
+
+model Student {
+  id       String  @id @default(cuid())
+  schoolId String
+  school   School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  campusId String?
+  campus   Campus? @relation(fields: [campusId], references: [id])
+
+  admissionNumber String
+
+  firstName   String
+  lastName    String
+  otherNames  String?
+  photoUrl    String?
+  dateOfBirth DateTime?
+  gender      Gender?
+  bloodGroup  String?
+  nationality String? @default("Nigeria")
+
+  addressLine String?
+  city        String?
+  state       String?
+
+  medicalNotes     String?
+  allergies        String?
+  emergencyContact String?
+
+  classArmId String?
+  classArm   ClassArm? @relation(fields: [classArmId], references: [id])
+
+  status       StudentStatus @default(ACTIVE)
+  admissionDate DateTime     @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  guardians StudentGuardian[]
+
+  @@unique([schoolId, admissionNumber])
+  @@index([schoolId])
+  @@index([schoolId, classArmId])
+  @@index([schoolId, status])
+}
+
+model Guardian {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  firstName  String
+  lastName   String
+  phone      String
+  email      String?
+  addressLine String?
+  occupation String?
+
+  createdAt DateTime @default(now())
+
+  students StudentGuardian[]
+
+  @@index([schoolId])
+}
+
+enum GuardianRelationship {
+  FATHER
+  MOTHER
+  GUARDIAN
+  OTHER
+}
+
+model StudentGuardian {
+  studentId    String
+  student      Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  guardianId   String
+  guardian     Guardian             @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+  relationship GuardianRelationship
+  isPrimary    Boolean              @default(false)
+
+  @@id([studentId, guardianId])
+}
+
+// ---------------------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id       String  @id @default(cuid())
+  schoolId String?
+  school   School? @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId   String?
+  user     User?   @relation(fields: [userId], references: [id])
+
+  action       String
+  resourceType String
+  resourceId   String?
+  previousValue Json?
+  newValue      Json?
+  ipAddress     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId, createdAt])
+  @@index([resourceType, resourceId])
+}
