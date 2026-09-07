@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { saveLegalDocument, saveGeneralSettings } from "./actions";
+import { saveLegalDocument, saveGeneralSettings, saveDeveloperSettings } from "./actions";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -19,12 +19,14 @@ const LEGAL_DOCS = [
 export default async function AdminSettingsPage() {
   await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
 
-  const [generalSetting, ...legalSettings] = await Promise.all([
+  const [generalSetting, developerSetting, ...legalSettings] = await Promise.all([
     prisma.setting.findUnique({ where: { key: "general" } }),
+    prisma.setting.findUnique({ where: { key: "developer" } }),
     ...LEGAL_DOCS.map((doc) => prisma.setting.findUnique({ where: { key: `legal.${doc.slug}` } })),
   ]);
 
   const general = generalSetting?.value as { companyName?: string; supportEmail?: string; currency?: string } | undefined;
+  const developer = developerSetting?.value as { commissionRate?: number } | undefined;
 
   return (
     <div className="space-y-8">
@@ -48,6 +50,26 @@ export default async function AdminSettingsPage() {
               <Label htmlFor="currency">Platform currency (ISO 4217)</Label>
               <Input id="currency" name="currency" maxLength={3} minLength={3} className="uppercase" defaultValue={general?.currency ?? "USD"} required />
               <p className="text-xs text-muted">Applies to new pricing and orders. Existing orders keep the currency they were placed in.</p>
+            </div>
+            <div className="sm:col-span-2">
+              <Button type="submit" size="sm">
+                Save
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Developer Marketplace</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form action={saveDeveloperSettings} className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="commissionRate">Developer commission rate (0–1)</Label>
+              <Input id="commissionRate" name="commissionRate" type="number" min={0} max={1} step={0.01} defaultValue={developer?.commissionRate ?? 0.7} required />
+              <p className="text-xs text-muted">Share of each direct app-license sale paid to the developer who authored it, e.g. 0.7 for 70%.</p>
             </div>
             <div className="sm:col-span-2">
               <Button type="submit" size="sm">

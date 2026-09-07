@@ -1,4 +1,4 @@
-import { CheckCircle2, XCircle, AlertCircle, RotateCcw } from "lucide-react";
+import { CheckCircle2, XCircle, AlertCircle, RotateCcw, ArrowUpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STEPS: { key: string; label: string }[] = [
@@ -44,6 +44,15 @@ export function DeploymentTimeline({ status }: { status: string }) {
       <div className="flex items-center gap-3 rounded-md bg-warning-soft px-3 py-2 text-sm text-warning">
         <RotateCcw className="h-4 w-4" />
         {status === "ROLLING_BACK" ? "Rolling back to the previous version…" : "Rolled back to the previous version."}
+      </div>
+    );
+  }
+
+  if (status === "UPGRADING" || status === "UPGRADED") {
+    return (
+      <div className="flex items-center gap-3 rounded-md bg-accent-soft px-3 py-2 text-sm text-accent">
+        <ArrowUpCircle className="h-4 w-4" />
+        {status === "UPGRADING" ? "Upgrading to a new version…" : "Superseded by an upgraded version."}
       </div>
     );
   }

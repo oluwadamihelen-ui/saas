@@ -31,7 +31,7 @@ export default async function AdminDeploymentDetailPage({ params }: { params: Pr
   const cancel = cancelDeployment.bind(null, deployment.id);
   const rollback = rollbackDeployment.bind(null, deployment.id);
   const canRollback = Boolean(deployment.applicationVersion.rollbackOf);
-  const isTerminal = ["COMPLETED", "FAILED", "CANCELLED", "ROLLED_BACK"].includes(deployment.status);
+  const isTerminal = ["COMPLETED", "FAILED", "CANCELLED", "ROLLED_BACK", "UPGRADED"].includes(deployment.status);
 
   return (
     <div className="space-y-6">

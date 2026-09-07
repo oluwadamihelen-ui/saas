@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/require";
-import { createDeployment } from "@/lib/services/deployments";
+import { createDeployment, upgradeDeployment as upgradeDeploymentService } from "@/lib/services/deployments";
 import { deploymentTargetSchema } from "@/lib/services/deployment-targets";
 import { encryptSecret } from "@/lib/security/encryption";
 
@@ -105,4 +105,13 @@ export async function requestDeployment(_prev: RequestDeploymentState, formData:
   });
 
   redirect(`/dashboard/deployments/${deployment.id}`);
+}
+
+export async function upgradeDeployment(deploymentId: string, formData: FormData) {
+  const user = await requireUser();
+  const targetVersionId = String(formData.get("targetVersionId") ?? "");
+  if (!targetVersionId) throw new Error("Select a version to upgrade to.");
+
+  const upgraded = await upgradeDeploymentService(user.id, deploymentId, targetVersionId);
+  redirect(`/dashboard/deployments/${upgraded.id}`);
 }

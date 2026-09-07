@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { generateInvoiceNumber, generateLicenseKey, generateOrderNumber } from "@/lib/utils/ids";
 import { OrderItemType, BillingCycle } from "@/generated/prisma/client";
 import { notifyUser } from "@/lib/services/notifications";
-import { getPlatformCurrency } from "@/lib/services/settings";
+import { getPlatformCurrency, getDeveloperCommissionRate } from "@/lib/services/settings";
 import { validateCoupon } from "@/lib/services/coupons";
 import { logger } from "@/lib/security/logger";
 
@@ -87,7 +87,13 @@ export async function createOrder(customerId: string, lines: CartLineInput[], bi
  * redirect). Idempotent: safe to call more than once for the same order.
  */
 export async function markOrderPaid(orderId: string, payment: { provider: string; providerRef: string; amount: number; currency: string }) {
-  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: { include: { bundle: { include: { items: true } } } }, customer: true } });
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      items: { include: { bundle: { include: { items: true } }, application: { include: { createdBy: { include: { role: true } } } } } },
+      customer: true,
+    },
+  });
   if (!order) throw new Error(`Order ${orderId} not found`);
   if (order.paymentStatus === "PAID") return order; // idempotent
 
@@ -101,6 +107,8 @@ export async function markOrderPaid(orderId: string, payment: { provider: string
   if (payment.currency.toUpperCase() !== order.currency.toUpperCase()) {
     throw new Error(`Payment currency ${payment.currency} does not match order currency ${order.currency}`);
   }
+
+  const commissionRate = await getDeveloperCommissionRate();
 
   await prisma.$transaction(async (tx) => {
     await tx.payment.create({
@@ -160,6 +168,28 @@ export async function markOrderPaid(orderId: string, payment: { provider: string
           status: "ACTIVE",
         },
       });
+
+      // Direct application sales only -- splitting a flat bundle price
+      // fairly across several developers' apps has no single correct
+      // answer, so bundle-derived licenses (above) don't generate a
+      // commission. One Commission per OrderItem, enforced by its unique
+      // orderItemId, keeps this idempotent alongside the rest of this
+      // transaction.
+      if (line.application?.createdBy?.role.key === "DEVELOPER") {
+        const rate = commissionRate;
+        const saleAmount = Number(line.total);
+        await tx.commission.create({
+          data: {
+            developerId: line.application.createdBy.id,
+            applicationId: line.applicationId!,
+            orderId: order.id,
+            orderItemId: line.id,
+            saleAmount,
+            rate,
+            amount: Math.round(saleAmount * rate * 100) / 100,
+          },
+        });
+      }
     }
 
     // A bundle is sold as one line item at a flat price, but still grants a

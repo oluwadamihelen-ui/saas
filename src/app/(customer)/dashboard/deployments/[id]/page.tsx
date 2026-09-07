@@ -1,16 +1,29 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/require";
+import { prisma } from "@/lib/db";
 import { getDeploymentForCustomer } from "@/lib/services/deployments";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { Select } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { DeploymentTimeline } from "@/components/dashboard/deployment-timeline";
 import { formatDate } from "@/lib/utils";
+import { upgradeDeployment } from "../actions";
 
 export default async function DeploymentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   const { id } = await params;
   const deployment = await getDeploymentForCustomer(id, user.id);
   if (!deployment) notFound();
+
+  const upgradeTargets =
+    deployment.status === "COMPLETED"
+      ? await prisma.applicationVersion.findMany({
+          where: { applicationId: deployment.applicationId, isStable: true, id: { not: deployment.applicationVersionId } },
+          orderBy: { createdAt: "desc" },
+        })
+      : [];
+  const upgrade = upgradeDeployment.bind(null, deployment.id);
 
   return (
     <div className="space-y-6">
@@ -79,6 +92,28 @@ export default async function DeploymentDetailPage({ params }: { params: Promise
           </CardContent>
         </Card>
       ) : null}
+
+      {upgradeTargets.length > 0 && (
+        <Card>
+          <CardContent>
+            <p className="mb-1 text-sm font-semibold text-foreground">Upgrade available</p>
+            <p className="mb-4 text-sm text-muted">Move this deployment to a different published version of {deployment.application.name}.</p>
+            <form action={upgrade} className="flex flex-wrap items-end gap-3">
+              <div className="min-w-[200px] space-y-1.5">
+                <Select name="targetVersionId" defaultValue={upgradeTargets[0].id}>
+                  {upgradeTargets.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      v{v.version}
+                      {v.releaseName ? ` — ${v.releaseName}` : ""}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <Button type="submit">Upgrade</Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

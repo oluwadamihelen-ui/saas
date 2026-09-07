@@ -15,9 +15,8 @@ Customer → Platform (Next.js) → Provider Adapter Interface → Third-party A
 This document describes the system as implemented through **Phase 1
 (Foundation)**, **Phase 2 (Payments, Billing & Commercial Foundation)**,
 **Phase 3 (Application Versioning & Deployment Foundation)**,
-**Phase 4 (Domains)**, **Phase 5 (Hosting)**, and **Phase 6 (Business
-Operations)**. Phase 7 builds on this foundation without architectural
-changes — see [Phased Plan](#phased-plan).
+**Phase 4 (Domains)**, **Phase 5 (Hosting)**, **Phase 6 (Business
+Operations)**, and **Phase 7 (Advanced)** — see [Phased Plan](#phased-plan).
 
 ## 1. Recommended Architecture
 
@@ -48,7 +47,7 @@ Full schema: `prisma/schema.prisma`. Key clusters:
 | Cluster | Models |
 |---|---|
 | Identity & RBAC | `User`, `Role`, `Permission`, `RolePermission`, `UserPermission`, `Organization`, `OrganizationMember` |
-| Catalog | `Category`, `Application`, `ApplicationImage`, `ApplicationFeature`, `ApplicationReview`, `ApplicationPricing`, `ApplicationLicense`, `Bundle`, `BundleItem`, `Coupon` |
+| Catalog | `Category`, `Application`, `ApplicationImage`, `ApplicationFeature`, `ApplicationReview`, `ApplicationPricing`, `ApplicationLicense`, `Bundle`, `BundleItem`, `Coupon`, `Commission` |
 | Commerce | `Order`, `OrderItem`, `Payment`, `PaymentWebhookEvent`, `Refund`, `Invoice`, `InvoiceItem`, `Subscription`, `RenewalEvent` |
 | Versioning & Release | `ApplicationVersion`, `DeploymentSpecification`, `ApplicationArtifact` |
 | Deployment | `DeploymentTarget`, `Deployment`, `DeploymentJob`, `DeploymentLog`, `DeploymentCredential` |
@@ -765,13 +764,45 @@ beforehand); domain/hosting-type bundle items are modeled and priceable but
 not yet auto-fulfilled the way application items are (they still require
 manual follow-up, same as a domain or hosting item on a custom quote).
 
-**Phase 7 — Advanced.** In-app upgrade flow for a customer moving between
-already-published `ApplicationVersion`s (creating new versions and
-publishing them is delivered — see §2.1 — a customer-initiated "upgrade my
-running deployment" action is not), license online-verification endpoint,
-developer marketplace + revenue share (`RoleKey.DEVELOPER` seeded,
-`Application.createdById` present), uptime monitoring beyond the single
-post-deploy health check.
+**Phase 7 — Advanced (delivered).** In-app version upgrades:
+`lib/services/deployments.ts` gained `upgradeDeployment()`, which queues a
+fresh deployment on a different already-`isStable` `ApplicationVersion`
+against the same target and marks the old one `UPGRADED` — the same
+lineage pattern (`previousDeploymentId`) the admin `rollbackDeployment`
+action already used, just choosing the target version by customer
+selection instead of a version's configured `rollbackOf`. Two new
+`DeploymentStatus` values (`UPGRADING`/`UPGRADED`) and a version picker on
+the customer deployment detail page. License online-verification: `POST
+/api/licenses/verify` (`lib/services/licenses.ts`) checks status, expiry,
+and — if `allowedDomains` is set — the calling domain, tracking
+`lastVerifiedAt`/`verificationCount` on every successful check; a customer
+`/dashboard/licenses` page surfaces the key and lets the customer manage
+`allowedDomains`, and `/admin/licenses` covers suspend/revoke/reactivate.
+Developer marketplace + revenue share: `RoleKey.DEVELOPER` now does
+something — a role-gated `/dashboard/developer` section lets a developer
+submit an `Application` (created `DRAFT`, into the same admin review/publish
+queue every other app goes through) and see their own apps and commission
+ledger; `markOrderPaid()` creates a `Commission` row (new model) inside its
+existing transaction for every direct `APPLICATION_LICENSE` line whose
+application was authored by a `DEVELOPER`, at a platform-wide rate
+(`Setting` key `"developer"`, admin-configurable on `/admin/settings`,
+70% by default); `/admin/commissions` marks them paid. Deliberately scoped
+to direct sales only — splitting a flat bundle price fairly across several
+developers' apps has no single correct answer, so a bundle-derived license
+never generates a commission, the same limitation already noted for
+domain/hosting bundle items in Phase 6. Uptime monitoring: `uptimeQueue.ts`
+/ `uptimeWorker.ts` — the third repeating BullMQ job, alongside the domain
+and hosting renewal sweeps — runs `runUptimeSweep()` every 15 minutes,
+re-checking every `COMPLETED` deployment through the same
+`DeploymentProviderAdapter.runHealthCheck()` the one-time post-deploy check
+uses, and notifies the customer only on a `HEALTHY`/`UNKNOWN` → `OFFLINE` or
+`OFFLINE` → `HEALTHY` transition (not on every sweep). Remaining: real
+adapters for both `DeploymentProviderAdapter.runHealthCheck` (the mock
+always reports healthy, so the sweep's own logic is exercised via a seeded
+pre-degraded deployment rather than genuine failure detection) and payouts
+(`Commission.status` is a manually-marked ledger, not a real transfer —
+consistent with this codebase never faking a third-party integration);
+per-application commission rate overrides (today it's platform-wide only).
 
 ## 13. Local Development
 

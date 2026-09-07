@@ -47,3 +47,17 @@ export async function saveGeneralSettings(formData: FormData) {
   await recordAuditLog({ actorId: user.id, action: "settings.general_updated", resourceType: "Setting", resourceId: "general" });
   revalidatePath("/admin/settings");
 }
+
+const developerSchema = z.object({
+  commissionRate: z.coerce.number().min(0).max(1),
+});
+
+export async function saveDeveloperSettings(formData: FormData) {
+  const user = await requirePermission(PERMISSIONS.SETTINGS_MANAGE);
+  const parsed = developerSchema.parse({ commissionRate: formData.get("commissionRate") });
+
+  await prisma.setting.upsert({ where: { key: "developer" }, update: { value: parsed }, create: { key: "developer", value: parsed } });
+
+  await recordAuditLog({ actorId: user.id, action: "settings.developer_updated", resourceType: "Setting", resourceId: "developer", newValue: parsed });
+  revalidatePath("/admin/settings");
+}

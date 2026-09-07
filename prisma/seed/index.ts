@@ -3,6 +3,8 @@ import bcrypt from "bcryptjs";
 import { PrismaClient } from "../../src/generated/prisma/client";
 import { PERMISSION_CATALOG, ROLE_DEFAULT_PERMISSIONS } from "../../src/lib/auth/permissions";
 import { generateQuoteNumber } from "../../src/lib/utils/ids";
+import { getDeveloperCommissionRate } from "../../src/lib/services/settings";
+import { getOrCreateMockTarget } from "../../src/lib/services/deployment-targets";
 
 const prisma = new PrismaClient();
 
@@ -33,7 +35,7 @@ async function seedRolesAndPermissions() {
     { key: "SUPER_ADMIN", name: "Super Admin", description: "Full control over the platform" },
     { key: "STAFF", name: "Staff / Operations", description: "Limited administrative access" },
     { key: "CUSTOMER", name: "Customer", description: "Buys and manages applications, deployments and services" },
-    { key: "DEVELOPER", name: "App Developer", description: "Future role: publishes applications to the marketplace" },
+    { key: "DEVELOPER", name: "App Developer", description: "Submits applications to the marketplace and earns a commission on their sales" },
   ];
 
   const roles = new Map<string, { id: string }>();
@@ -992,6 +994,209 @@ async function seedPhase6DemoData(
   });
 }
 
+async function clearSeededPhase7OrderScenarios() {
+  const staleOrders = await prisma.order.findMany({ where: { orderNumber: { startsWith: "ORD-2701-" } }, select: { id: true } });
+  const staleOrderIds = staleOrders.map((o) => o.id);
+  if (staleOrderIds.length === 0) return;
+
+  const staleDeployments = await prisma.deployment.findMany({ where: { orderId: { in: staleOrderIds } }, select: { id: true } });
+  const staleDeploymentIds = staleDeployments.map((d) => d.id);
+
+  await prisma.deploymentLog.deleteMany({ where: { deploymentId: { in: staleDeploymentIds } } });
+  await prisma.deploymentJob.deleteMany({ where: { deploymentId: { in: staleDeploymentIds } } });
+  await prisma.deployment.deleteMany({ where: { id: { in: staleDeploymentIds } } });
+  await prisma.commission.deleteMany({ where: { orderId: { in: staleOrderIds } } });
+  await prisma.applicationLicense.deleteMany({ where: { orderId: { in: staleOrderIds } } });
+  await prisma.invoiceItem.deleteMany({ where: { invoice: { orderId: { in: staleOrderIds } } } });
+  await prisma.invoice.deleteMany({ where: { orderId: { in: staleOrderIds } } });
+  await prisma.payment.deleteMany({ where: { orderId: { in: staleOrderIds } } });
+  await prisma.orderItem.deleteMany({ where: { orderId: { in: staleOrderIds } } });
+  await prisma.order.deleteMany({ where: { id: { in: staleOrderIds } } });
+}
+
+/**
+ * A developer account with a published app (two STABLE versions, so the
+ * in-app upgrade flow has a real target to upgrade to), a DRAFT submission
+ * still awaiting review, and two paid orders for the published app -- one
+ * commission left PENDING, one already marked PAID -- so both the
+ * developer's and admin's commission views have something to show. Also
+ * flips one of the existing seeded COMPLETED deployments to healthStatus
+ * OFFLINE so the uptime sweep has a real recovery transition to demonstrate
+ * (the mock health-check adapter always reports healthy, so the very next
+ * sweep flips it back and fires the "recovered" notification).
+ */
+async function seedPhase7DemoData(roles: Map<string, { id: string }>, categories: { id: string }[], customers: { id: string; name: string; email: string }[]) {
+  const passwordHash = await bcrypt.hash("Passw0rd!", 12);
+  const developerRole = roles.get("DEVELOPER")!;
+  const developer = await prisma.user.upsert({
+    where: { email: "femi@devstudio.example" },
+    update: {},
+    create: { name: "Femi Adewale", email: "femi@devstudio.example", passwordHash, roleId: developerRole.id, status: "ACTIVE" },
+  });
+
+  const app = await prisma.application.upsert({
+    where: { slug: "devstudio-helpdesk" },
+    update: { createdById: developer.id },
+    create: {
+      name: "DevStudio Helpdesk",
+      slug: "devstudio-helpdesk",
+      categoryId: categories[0].id,
+      shortDescription: "A lightweight, self-hosted helpdesk widget for small teams.",
+      fullDescription: "A lightweight, self-hosted helpdesk widget for small teams who don't want a full support suite.",
+      status: "PUBLISHED",
+      createdById: developer.id,
+      pricing: { create: { type: "LICENSE", name: "Software License", amount: 149, billingCycle: "ONE_TIME" } },
+    },
+  });
+
+  const specData = { runtime: "node20", buildCommand: "npm run build", startCommand: "npm start", healthCheckPath: "/api/health", requiredServices: [], environmentVariables: [] };
+  const v1 = await prisma.applicationVersion.upsert({
+    where: { applicationId_version: { applicationId: app.id, version: "1.0.0" } },
+    update: {},
+    create: {
+      application: { connect: { id: app.id } },
+      version: "1.0.0",
+      releaseName: "Initial release",
+      status: "STABLE",
+      isLatest: false,
+      isStable: true,
+      deploymentSpecification: { create: specData },
+      artifact: { create: { type: "GIT_REPOSITORY", reference: "https://github.com/bridgecodes-apps/devstudio-helpdesk" } },
+    },
+  });
+  await prisma.applicationVersion.upsert({
+    where: { applicationId_version: { applicationId: app.id, version: "1.1.0" } },
+    update: {},
+    create: {
+      application: { connect: { id: app.id } },
+      version: "1.1.0",
+      releaseName: "Minor improvements",
+      status: "STABLE",
+      isLatest: true,
+      isStable: true,
+      deploymentSpecification: { create: specData },
+      artifact: { create: { type: "GIT_REPOSITORY", reference: "https://github.com/bridgecodes-apps/devstudio-helpdesk" } },
+    },
+  });
+
+  // Awaiting review -- exercises the admin review queue and the developer's own "pending" state.
+  await prisma.application.upsert({
+    where: { slug: "devstudio-analytics" },
+    update: {},
+    create: {
+      name: "DevStudio Analytics",
+      slug: "devstudio-analytics",
+      categoryId: categories[0].id,
+      shortDescription: "Simple, privacy-friendly analytics for indie apps.",
+      fullDescription: "Simple, privacy-friendly analytics for indie apps -- no cookies, no PII, just the numbers that matter.",
+      status: "DRAFT",
+      createdById: developer.id,
+      pricing: { create: { type: "LICENSE", name: "Software License", amount: 79, billingCycle: "ONE_TIME" } },
+    },
+  });
+
+  await clearSeededPhase7OrderScenarios();
+
+  const buyer = customers[0];
+  const commissionRate = await getDeveloperCommissionRate();
+  const licenseAmount = 149;
+
+  async function seedPaidOrder(i: number, commissionStatus: "PENDING" | "PAID") {
+    const order = await prisma.order.create({
+      data: {
+        orderNumber: `ORD-2701-${String(100 + i).padStart(6, "0")}`,
+        customerId: buyer.id,
+        status: "COMPLETED",
+        paymentStatus: "PAID",
+        paymentProvider: "mock",
+        transactionRef: `mock_seed7_${i}`,
+        subtotal: licenseAmount,
+        discount: 0,
+        tax: 0,
+        total: licenseAmount,
+        billingName: buyer.name,
+        billingEmail: buyer.email,
+        items: {
+          create: [{ type: "APPLICATION_LICENSE", applicationId: app.id, description: `${app.name} — Software License`, quantity: 1, unitPrice: licenseAmount, total: licenseAmount }],
+        },
+      },
+      include: { items: true },
+    });
+
+    await prisma.payment.create({ data: { orderId: order.id, provider: "mock", providerRef: order.transactionRef!, amount: licenseAmount, currency: "USD", status: "PAID" } });
+    await prisma.invoice.create({
+      data: {
+        invoiceNumber: `INV-2701-${String(1000 + i)}`,
+        orderId: order.id,
+        customerId: buyer.id,
+        status: "PAID",
+        subtotal: licenseAmount,
+        discount: 0,
+        tax: 0,
+        total: licenseAmount,
+        paidAt: new Date(),
+        items: { create: order.items.map((item) => ({ description: item.description, quantity: item.quantity, unitPrice: item.unitPrice, total: item.total })) },
+      },
+    });
+
+    const license = await prisma.applicationLicense.create({
+      data: { licenseKey: `SEED7-${i}-HELPDESK`, customerId: buyer.id, applicationId: app.id, orderId: order.id, status: "ACTIVE" },
+    });
+
+    await prisma.commission.create({
+      data: {
+        developerId: developer.id,
+        applicationId: app.id,
+        orderId: order.id,
+        orderItemId: order.items[0].id,
+        saleAmount: licenseAmount,
+        rate: commissionRate,
+        amount: Math.round(licenseAmount * commissionRate * 100) / 100,
+        status: commissionStatus,
+        paidAt: commissionStatus === "PAID" ? new Date() : null,
+      },
+    });
+
+    return { order, license };
+  }
+
+  const { order: order1 } = await seedPaidOrder(1, "PENDING");
+  await seedPaidOrder(2, "PAID");
+
+  const target = await getOrCreateMockTarget(buyer.id);
+  const existingDeployment = await prisma.deployment.findFirst({ where: { orderId: order1.id } });
+  if (!existingDeployment) {
+    await prisma.deployment.create({
+      data: {
+        customerId: buyer.id,
+        orderId: order1.id,
+        applicationId: app.id,
+        applicationVersionId: v1.id,
+        type: "MANAGED",
+        status: "COMPLETED",
+        healthStatus: "HEALTHY",
+        lastHealthCheckAt: new Date(),
+        deploymentTargetId: target.id,
+        previewUrl: "https://devstudio-helpdesk-seed.preview.bridgecodes.app",
+      },
+    });
+  }
+
+  // Flip one already-seeded COMPLETED deployment OFFLINE so the uptime
+  // sweep's OFFLINE -> HEALTHY recovery path has something real to catch.
+  // Reset on every seed run so re-seeding after a sweep has already
+  // recovered it demonstrates the transition again.
+  const scenarioDeployment = await prisma.deployment.findFirst({
+    where: { order: { orderNumber: "ORD-2601-000101" }, status: "COMPLETED" },
+  });
+  if (scenarioDeployment) {
+    await prisma.deployment.update({
+      where: { id: scenarioDeployment.id },
+      data: { healthStatus: "OFFLINE", lastHealthCheckAt: new Date(Date.now() - 60 * 60 * 1000) },
+    });
+  }
+}
+
 async function main() {
   console.log("Seeding roles and permissions...");
   const roles = await seedRolesAndPermissions();
@@ -1028,6 +1233,9 @@ async function main() {
 
   console.log("Seeding coupons, bundles, customization requests, and quotes...");
   await seedPhase6DemoData(customers, apps, hostingPlans);
+
+  console.log("Seeding developer marketplace, commissions, and uptime demo data...");
+  await seedPhase7DemoData(roles, categories, customers);
 
   console.log("Seed complete.");
 }

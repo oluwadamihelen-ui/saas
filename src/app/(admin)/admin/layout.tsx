@@ -20,6 +20,8 @@ import {
   MessageSquareText,
   Layers,
   Tag,
+  KeyRound,
+  CircleDollarSign,
 } from "lucide-react";
 import { auth } from "@/auth";
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
@@ -34,6 +36,7 @@ const NAV_ITEMS = [
   { href: "/admin/orders", label: "Orders", icon: <ShoppingBag className={ICON_CLASS} /> },
   { href: "/admin/customers", label: "Customers", icon: <Users className={ICON_CLASS} /> },
   { href: "/admin/deployments", label: "Deployments", icon: <Rocket className={ICON_CLASS} /> },
+  { href: "/admin/licenses", label: "Licenses", icon: <KeyRound className={ICON_CLASS} /> },
   { href: "/admin/domains", label: "Domains", icon: <Globe className={ICON_CLASS} /> },
   { href: "/admin/hosting", label: "Hosting", icon: <Server className={ICON_CLASS} /> },
   { href: "/admin/subscriptions", label: "Subscriptions", icon: <RefreshCcw className={ICON_CLASS} /> },
@@ -43,6 +46,7 @@ const NAV_ITEMS = [
   { href: "/admin/quotes", label: "Quotes", icon: <MessageSquareText className={ICON_CLASS} /> },
   { href: "/admin/bundles", label: "Bundles", icon: <Layers className={ICON_CLASS} /> },
   { href: "/admin/coupons", label: "Coupons", icon: <Tag className={ICON_CLASS} /> },
+  { href: "/admin/commissions", label: "Commissions", icon: <CircleDollarSign className={ICON_CLASS} /> },
   { href: "/admin/providers", label: "Providers", icon: <Plug className={ICON_CLASS} /> },
   { href: "/admin/staff", label: "Staff", icon: <UserCog className={ICON_CLASS} /> },
   { href: "/admin/analytics", label: "Analytics", icon: <BarChart3 className={ICON_CLASS} /> },

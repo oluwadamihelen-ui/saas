@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LayoutDashboard, ShoppingBag, FileText, Rocket, Globe, Server, RefreshCcw, LifeBuoy, User, MessageSquareText } from "lucide-react";
+import { LayoutDashboard, ShoppingBag, FileText, Rocket, Globe, Server, RefreshCcw, LifeBuoy, User, MessageSquareText, KeyRound, Code2 } from "lucide-react";
 import { auth } from "@/auth";
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
 import { DashboardTopbar } from "@/components/dashboard/dashboard-topbar";
@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/invoices", label: "Invoices", icon: <FileText className={ICON_CLASS} /> },
   { href: "/dashboard/subscriptions", label: "Subscriptions", icon: <RefreshCcw className={ICON_CLASS} /> },
   { href: "/dashboard/deployments", label: "Deployments", icon: <Rocket className={ICON_CLASS} /> },
+  { href: "/dashboard/licenses", label: "Licenses", icon: <KeyRound className={ICON_CLASS} /> },
   { href: "/dashboard/domains", label: "Domains", icon: <Globe className={ICON_CLASS} /> },
   { href: "/dashboard/hosting", label: "Hosting", icon: <Server className={ICON_CLASS} /> },
   { href: "/dashboard/support", label: "Support", icon: <LifeBuoy className={ICON_CLASS} /> },
@@ -21,6 +22,10 @@ const NAV_ITEMS = [
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
+  const navItems =
+    session?.user?.role === "DEVELOPER"
+      ? [NAV_ITEMS[0], { href: "/dashboard/developer", label: "Developer", icon: <Code2 className={ICON_CLASS} /> }, ...NAV_ITEMS.slice(1)]
+      : NAV_ITEMS;
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -28,7 +33,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <Link href="/" className="mb-6 flex items-center px-2">
           <Logo height={28} />
         </Link>
-        <SidebarNav items={NAV_ITEMS} basePath="/dashboard" />
+        <SidebarNav items={navItems} basePath="/dashboard" />
       </aside>
       <div className="flex flex-1 flex-col">
         <DashboardTopbar name={session?.user?.name ?? "Customer"} email={session?.user?.email ?? ""} />
