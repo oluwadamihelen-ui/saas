@@ -1,0 +1,1410 @@
+// Prisma schema for the SaaS Application Marketplace & Deployment Platform
+// See /ARCHITECTURE.md for the full system design this schema implements.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =========================================================================
+// IDENTITY, ROLES & ORGANIZATIONS
+// =========================================================================
+
+enum RoleKey {
+  SUPER_ADMIN
+  STAFF
+  CUSTOMER
+  DEVELOPER
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  key         RoleKey          @unique
+  name        String
+  description String?
+  permissions RolePermission[]
+  users       User[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model Permission {
+  id            String           @id @default(uuid())
+  key           String           @unique // e.g. "applications.manage", "orders.view"
+  description   String?
+  category      String? // grouping for admin UI e.g. "Applications", "Orders"
+  roles         RolePermission[]
+  userOverrides UserPermission[]
+  createdAt     DateTime         @default(now())
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+// Per-user permission overrides, mainly used to fine-tune STAFF accounts.
+model UserPermission {
+  id           String     @id @default(uuid())
+  userId       String
+  permissionId String
+  granted      Boolean    @default(true)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@unique([userId, permissionId])
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+model User {
+  id                    String           @id @default(uuid())
+  email                 String           @unique
+  passwordHash          String?
+  name                  String
+  phone                 String?
+  company               String?
+  country               String?
+  image                 String?
+  emailVerifiedAt       DateTime?
+  status                UserStatus       @default(ACTIVE)
+  roleId                String
+  role                  Role             @relation(fields: [roleId], references: [id])
+  primaryOrganizationId String?
+  primaryOrganization   Organization?    @relation("PrimaryOrg", fields: [primaryOrganizationId], references: [id])
+  permissionOverrides   UserPermission[]
+
+  organizationMembers   OrganizationMember[]
+  orders                Order[]
+  licenses              ApplicationLicense[]
+  deployments           Deployment[]
+  deploymentTargets     DeploymentTarget[]
+  domains               Domain[]
+  hostingAccounts       HostingAccount[]
+  supportTickets        SupportTicket[]
+  supportMessages       SupportMessage[]
+  notifications         Notification[]
+  auditLogs             AuditLog[]
+  customizationRequests CustomizationRequest[]
+  quotes                Quote[]
+  subscriptions         Subscription[]
+  createdApplications   Application[]          @relation("AppCreatedBy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([roleId])
+  @@index([primaryOrganizationId])
+}
+
+model Organization {
+  id                String               @id @default(uuid())
+  name              String
+  slug              String               @unique
+  billingEmail      String?
+  members           OrganizationMember[]
+  primaryUsers      User[]               @relation("PrimaryOrg")
+  orders            Order[]
+  domains           Domain[]
+  hostingAccounts   HostingAccount[]
+  deployments       Deployment[]
+  deploymentTargets DeploymentTarget[]
+  supportTickets    SupportTicket[]
+  subscriptions     Subscription[]
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+}
+
+enum OrgMemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model OrganizationMember {
+  id             String        @id @default(uuid())
+  organizationId String
+  userId         String
+  role           OrgMemberRole @default(MEMBER)
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime      @default(now())
+
+  @@unique([organizationId, userId])
+}
+
+// =========================================================================
+// CATALOG: CATEGORIES & APPLICATIONS
+// =========================================================================
+
+model Category {
+  id           String        @id @default(uuid())
+  name         String
+  slug         String        @unique
+  description  String?
+  icon         String?
+  sortOrder    Int           @default(0)
+  applications Application[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+enum ApplicationStatus {
+  DRAFT
+  PUBLISHED
+  UNPUBLISHED
+  ARCHIVED
+}
+
+model Application {
+  id               String            @id @default(uuid())
+  name             String
+  slug             String            @unique
+  shortDescription String
+  fullDescription  String
+  categoryId       String
+  category         Category          @relation(fields: [categoryId], references: [id])
+  technologyStack  String[]
+  currentVersion   String            @default("1.0.0")
+  status           ApplicationStatus @default(DRAFT)
+  featured         Boolean           @default(false)
+
+  demoUrl      String?
+  demoUsername String?
+  demoPassword String?
+
+  whatsIncluded    String[]
+  whatsNotIncluded String[]
+  requirements     String[]
+
+  seoTitle       String?
+  seoDescription String?
+  ogImageUrl     String?
+
+  createdById String?
+  createdBy   User?   @relation("AppCreatedBy", fields: [createdById], references: [id])
+
+  images                ApplicationImage[]
+  features              ApplicationFeature[]
+  pricing               ApplicationPricing[]
+  versions              ApplicationVersion[]
+  licenses              ApplicationLicense[]
+  orderItems            OrderItem[]
+  deployments           Deployment[]
+  bundleItems           BundleItem[]
+  customizationRequests CustomizationRequest[]
+  supportTickets        SupportTicket[]
+  reviews               ApplicationReview[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categoryId])
+  @@index([status])
+  @@index([featured])
+}
+
+model ApplicationImage {
+  id            String      @id @default(uuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  url           String
+  altText       String?
+  sortOrder     Int         @default(0)
+  createdAt     DateTime    @default(now())
+
+  @@index([applicationId])
+}
+
+model ApplicationFeature {
+  id            String      @id @default(uuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  title         String
+  description   String?
+  sortOrder     Int         @default(0)
+
+  @@index([applicationId])
+}
+
+model ApplicationReview {
+  id            String      @id @default(uuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  customerName  String
+  rating        Int
+  comment       String?
+  createdAt     DateTime    @default(now())
+
+  @@index([applicationId])
+}
+
+enum ApplicationVersionStatus {
+  DRAFT
+  TESTING
+  STABLE
+  DEPRECATED
+  RETIRED
+}
+
+// The commercial/release record for one technical release of an
+// application. Deliberately separate from DeploymentSpecification (the "how
+// to install it") and ApplicationArtifact (the "what gets installed") so a
+// version's release metadata doesn't get tangled up with its build config --
+// see ARCHITECTURE.md "Application Versioning & Deployment" for the full
+// Application -> Version -> Spec -> Adapter -> Infrastructure chain.
+model ApplicationVersion {
+  id               String                   @id @default(uuid())
+  applicationId    String
+  application      Application              @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  version          String
+  releaseName      String?
+  description      String?
+  status           ApplicationVersionStatus @default(DRAFT)
+  isLatest         Boolean                  @default(false)
+  isStable         Boolean                  @default(false)
+  packageReference String? // human-readable pointer, e.g. "ghcr.io/bridgecodes/crm:1.4.0"
+  rollbackOf       String? // version string this can roll back to
+
+  deploymentSpecificationId String?                  @unique
+  deploymentSpecification   DeploymentSpecification? @relation(fields: [deploymentSpecificationId], references: [id])
+  artifact                  ApplicationArtifact?
+
+  deployments Deployment[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([applicationId, version])
+  @@index([applicationId])
+  @@index([status])
+}
+
+// Structured, provider-independent description of how a version is built,
+// configured, and run -- generated commands come from these validated
+// fields, never from raw customer input. One spec belongs to one version.
+model DeploymentSpecification {
+  id                   String   @id @default(uuid())
+  runtime              String // e.g. "node20", "php8.2", "python3.11"
+  runtimeVersion       String?
+  framework            String? // e.g. "nextjs", "laravel", "django"
+  frameworkVersion     String?
+  packageManager       String? // e.g. "npm", "composer", "pip"
+  installCommand       String?
+  buildCommand         String?
+  startCommand         String?
+  port                 Int?     @default(3000)
+  healthCheckPath      String?  @default("/api/health")
+  databaseType         String? // e.g. "postgresql", "mysql", "none"
+  databaseVersion      String?
+  requiredServices     String[] // e.g. ["postgresql", "redis"]
+  // [{ key, description, required, secret, defaultValue? }] -- secret vars
+  // are never rendered to the customer and are resolved at deploy time from
+  // DeploymentCredential, never stored here in plaintext.
+  environmentVariables Json
+  migrationCommand     String?
+  seedCommand          String?
+  deploymentMethod     String? // e.g. "ssh", "docker", "cpanel", "cloud"
+
+  version   ApplicationVersion?
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+}
+
+enum ArtifactType {
+  DOCKER_IMAGE
+  GIT_REPOSITORY
+  GIT_COMMIT
+  ARCHIVE
+  OTHER
+}
+
+// The deployable artifact a version points to. Storage-mechanism independent
+// -- "reference" means different things per type (an image tag, a repo URL,
+// a commit SHA, an archive URL) and adapters interpret it accordingly.
+model ApplicationArtifact {
+  id                   String             @id @default(uuid())
+  applicationVersionId String             @unique
+  applicationVersion   ApplicationVersion @relation(fields: [applicationVersionId], references: [id], onDelete: Cascade)
+  type                 ArtifactType
+  reference            String
+  metadata             Json?
+  createdAt            DateTime           @default(now())
+}
+
+enum PricingType {
+  LICENSE
+  INSTALLATION
+  CUSTOMIZATION
+  HOSTING
+  MAINTENANCE
+  DOMAIN
+  SUPPORT
+  OTHER
+}
+
+enum BillingCycle {
+  ONE_TIME
+  MONTHLY
+  YEARLY
+}
+
+model ApplicationPricing {
+  id             String       @id @default(uuid())
+  applicationId  String
+  application    Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  type           PricingType
+  name           String
+  billingCycle   BillingCycle @default(ONE_TIME)
+  amount         Decimal      @db.Decimal(12, 2)
+  currency       String       @default("USD")
+  isStartingFrom Boolean      @default(false)
+  isActive       Boolean      @default(true)
+  sortOrder      Int          @default(0)
+  orderItems     OrderItem[]
+
+  @@index([applicationId])
+}
+
+enum LicenseType {
+  STANDARD
+  EXTENDED
+  DEVELOPER
+}
+
+enum LicenseStatus {
+  ACTIVE
+  SUSPENDED
+  EXPIRED
+  REVOKED
+}
+
+model ApplicationLicense {
+  id                         String        @id @default(uuid())
+  licenseKey                 String        @unique
+  customerId                 String
+  customer                   User          @relation(fields: [customerId], references: [id])
+  applicationId              String
+  application                Application   @relation(fields: [applicationId], references: [id])
+  orderId                    String?
+  order                      Order?        @relation(fields: [orderId], references: [id])
+  type                       LicenseType   @default(STANDARD)
+  status                     LicenseStatus @default(ACTIVE)
+  allowedDomains             String[]
+  requiresOnlineVerification Boolean       @default(false)
+  issuedAt                   DateTime      @default(now())
+  expiresAt                  DateTime?
+  createdAt                  DateTime      @default(now())
+  updatedAt                  DateTime      @updatedAt
+
+  @@index([customerId])
+  @@index([applicationId])
+}
+
+// =========================================================================
+// BUNDLES & COUPONS
+// =========================================================================
+
+model Bundle {
+  id          String       @id @default(uuid())
+  name        String
+  slug        String       @unique
+  description String?
+  price       Decimal      @db.Decimal(12, 2)
+  currency    String       @default("USD")
+  isActive    Boolean      @default(true)
+  items       BundleItem[]
+  orderItems  OrderItem[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+enum BundleItemType {
+  APPLICATION
+  DOMAIN
+  HOSTING_PLAN
+  SERVICE
+}
+
+model BundleItem {
+  id            String         @id @default(uuid())
+  bundleId      String
+  bundle        Bundle         @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  type          BundleItemType
+  applicationId String?
+  application   Application?   @relation(fields: [applicationId], references: [id])
+  hostingPlanId String?
+  hostingPlan   HostingPlan?   @relation(fields: [hostingPlanId], references: [id])
+  serviceLabel  String?
+  quantity      Int            @default(1)
+
+  @@index([bundleId])
+}
+
+enum CouponType {
+  PERCENT
+  FIXED
+}
+
+model Coupon {
+  id        String     @id @default(uuid())
+  code      String     @unique
+  type      CouponType
+  value     Decimal    @db.Decimal(12, 2)
+  maxUses   Int?
+  usedCount Int        @default(0)
+  startsAt  DateTime?
+  expiresAt DateTime?
+  isActive  Boolean    @default(true)
+  orders    Order[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+// =========================================================================
+// ORDERS, PAYMENTS, INVOICES
+// =========================================================================
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PROCESSING
+  AWAITING_CUSTOMER
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  CANCELLED
+}
+
+model Order {
+  id             String        @id @default(uuid())
+  orderNumber    String        @unique
+  customerId     String
+  customer       User          @relation(fields: [customerId], references: [id])
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  status          OrderStatus   @default(PENDING_PAYMENT)
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentProvider String?
+  transactionRef  String?
+
+  subtotal Decimal @db.Decimal(12, 2)
+  discount Decimal @default(0) @db.Decimal(12, 2)
+  tax      Decimal @default(0) @db.Decimal(12, 2)
+  total    Decimal @db.Decimal(12, 2)
+  currency String  @default("USD")
+
+  couponId String?
+  coupon   Coupon? @relation(fields: [couponId], references: [id])
+
+  billingName    String?
+  billingEmail   String?
+  billingPhone   String?
+  billingCompany String?
+  billingCountry String?
+  billingAddress String?
+
+  notes String?
+
+  // Captures the customer's deployment + domain choices made at checkout
+  // (deployment type, server details, domain name) so the fulfillment step
+  // that runs after payment succeeds knows what to provision.
+  fulfillmentIntent Json?
+
+  items        OrderItem[]
+  payments     Payment[]
+  invoice      Invoice?
+  deployments  Deployment[]
+  domainOrders DomainOrder[]
+  licenses     ApplicationLicense[]
+  quote        Quote?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+  @@index([paymentStatus])
+}
+
+enum OrderItemType {
+  APPLICATION_LICENSE
+  INSTALLATION
+  CUSTOMIZATION
+  HOSTING_PLAN
+  DOMAIN
+  MAINTENANCE
+  BUNDLE
+}
+
+model OrderItem {
+  id      String        @id @default(uuid())
+  orderId String
+  order   Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  type    OrderItemType
+
+  applicationId        String?
+  application          Application?        @relation(fields: [applicationId], references: [id])
+  applicationPricingId String?
+  applicationPricing   ApplicationPricing? @relation(fields: [applicationPricingId], references: [id])
+  hostingPlanId        String?
+  hostingPlan          HostingPlan?        @relation(fields: [hostingPlanId], references: [id])
+  bundleId             String?
+  bundle               Bundle?             @relation(fields: [bundleId], references: [id])
+
+  description  String
+  billingCycle BillingCycle @default(ONE_TIME)
+  quantity     Int          @default(1)
+  unitPrice    Decimal      @db.Decimal(12, 2)
+  total        Decimal      @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model Payment {
+  id          String        @id @default(uuid())
+  orderId     String
+  order       Order         @relation(fields: [orderId], references: [id])
+  provider    String
+  providerRef String?
+  amount      Decimal       @db.Decimal(12, 2)
+  currency    String        @default("USD")
+  status      PaymentStatus @default(PENDING)
+  method      String?
+  rawPayload  Json?
+  refunds     Refund[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([orderId])
+  @@index([providerRef])
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+model Refund {
+  id            String       @id @default(uuid())
+  paymentId     String
+  payment       Payment      @relation(fields: [paymentId], references: [id])
+  amount        Decimal      @db.Decimal(12, 2)
+  reason        String
+  status        RefundStatus @default(PENDING)
+  processedById String?
+  providerRef   String?
+  createdAt     DateTime     @default(now())
+
+  @@index([paymentId])
+}
+
+// Idempotency ledger for inbound payment webhooks. A (provider, eventId) pair
+// is processed at most once, so a provider retrying delivery (which every
+// real payment webhook does) never double-applies a payment or refund.
+model PaymentWebhookEvent {
+  id          String   @id @default(uuid())
+  provider    String
+  eventId     String // provider-assigned event/idempotency id
+  eventType   String
+  orderId     String?
+  amount      Decimal? @db.Decimal(12, 2)
+  currency    String?
+  payload     Json
+  processedAt DateTime @default(now())
+
+  @@unique([provider, eventId])
+  @@index([orderId])
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  VOID
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique
+  orderId       String        @unique
+  order         Order         @relation(fields: [orderId], references: [id])
+  customerId    String
+  status        InvoiceStatus @default(SENT)
+  subtotal      Decimal       @db.Decimal(12, 2)
+  discount      Decimal       @default(0) @db.Decimal(12, 2)
+  tax           Decimal       @default(0) @db.Decimal(12, 2)
+  total         Decimal       @db.Decimal(12, 2)
+  currency      String        @default("USD")
+  dueDate       DateTime?
+  issuedAt      DateTime      @default(now())
+  paidAt        DateTime?
+  notes         String?
+  items         InvoiceItem[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([customerId])
+}
+
+model InvoiceItem {
+  id          String  @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Int     @default(1)
+  unitPrice   Decimal @db.Decimal(12, 2)
+  total       Decimal @db.Decimal(12, 2)
+
+  @@index([invoiceId])
+}
+
+enum SubscriptionType {
+  HOSTING
+  MAINTENANCE
+  SOFTWARE
+  SUPPORT
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+model Subscription {
+  id                     String             @id @default(uuid())
+  customerId             String
+  customer               User               @relation(fields: [customerId], references: [id])
+  organizationId         String?
+  organization           Organization?      @relation(fields: [organizationId], references: [id])
+  type                   SubscriptionType
+  referenceId            String? // e.g. HostingAccount.id
+  status                 SubscriptionStatus @default(ACTIVE)
+  amount                 Decimal            @db.Decimal(12, 2)
+  currency               String             @default("USD")
+  billingCycle           BillingCycle       @default(MONTHLY)
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  nextBillingDate        DateTime?
+  startedAt              DateTime           @default(now())
+  cancelledAt            DateTime?
+  providerSubscriptionId String?
+  renewalEvents          RenewalEvent[]
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+}
+
+enum RenewalReferenceType {
+  DOMAIN
+  HOSTING
+  SUBSCRIPTION
+}
+
+enum RenewalStatus {
+  UPCOMING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+// Generalized renewal event so domain, hosting, and subscription renewals
+// can share one billing/notification pipeline instead of three bespoke ones.
+model RenewalEvent {
+  id               String               @id @default(uuid())
+  referenceType    RenewalReferenceType
+  subscriptionId   String?
+  subscription     Subscription?        @relation(fields: [subscriptionId], references: [id])
+  domainId         String?
+  domain           Domain?              @relation(fields: [domainId], references: [id])
+  hostingAccountId String?
+  hostingAccount   HostingAccount?      @relation(fields: [hostingAccountId], references: [id])
+  status           RenewalStatus        @default(UPCOMING)
+  dueDate          DateTime
+  amount           Decimal              @db.Decimal(12, 2)
+  currency         String               @default("USD")
+  processedAt      DateTime?
+  failureReason    String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@index([referenceType])
+  @@index([status])
+  @@index([dueDate])
+}
+
+// =========================================================================
+// DEPLOYMENTS
+// =========================================================================
+
+enum DeploymentType {
+  CUSTOMER_SERVER
+  PLATFORM_HOSTING
+  MANAGED
+}
+
+enum DeploymentStatus {
+  DRAFT
+  QUEUED
+  PREPARING
+  CONNECTING
+  INSTALLING
+  CONFIGURING
+  DATABASE_SETUP
+  MIGRATING
+  DNS_SETUP
+  SSL_SETUP
+  HEALTH_CHECK
+  COMPLETED
+  FAILED
+  ROLLING_BACK
+  ROLLED_BACK
+  NEEDS_CUSTOMER_ACTION
+  CANCELLED
+}
+
+enum HealthStatus {
+  UNKNOWN
+  HEALTHY
+  WARNING
+  OFFLINE
+}
+
+enum DeploymentTargetType {
+  CUSTOMER_SERVER
+  PLATFORM_HOSTING
+  MANAGED
+  MOCK
+}
+
+enum DeploymentTargetStatus {
+  PENDING
+  VALIDATED
+  ACTIVE
+  ERROR
+  ARCHIVED
+}
+
+// WHERE an application gets deployed. Separate from Deployment so a
+// customer's server/hosting account can be reused across multiple
+// deployments (redeploys, upgrades) instead of re-entering it each time.
+model DeploymentTarget {
+  id               String                 @id @default(uuid())
+  customerId       String
+  customer         User                   @relation(fields: [customerId], references: [id])
+  organizationId   String?
+  organization     Organization?          @relation(fields: [organizationId], references: [id])
+  label            String?
+  type             DeploymentTargetType
+  // Adapter key this target is executed through, e.g. "ssh", "cpanel",
+  // "plesk", "docker", "cloud", "mock". Resolved via DeploymentAdapterRegistry.
+  provider         String
+  hostname         String?
+  port             Int?
+  operatingSystem  String?
+  controlPanel     String?
+  region           String?
+  hostingAccountId String?
+  hostingAccount   HostingAccount?        @relation(fields: [hostingAccountId], references: [id])
+  domainId         String?
+  domain           Domain?                @relation(fields: [domainId], references: [id])
+  status           DeploymentTargetStatus @default(PENDING)
+
+  deployments Deployment[]
+  credentials DeploymentCredential[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([type])
+}
+
+model Deployment {
+  id             String        @id @default(uuid())
+  customerId     String
+  customer       User          @relation(fields: [customerId], references: [id])
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  orderId        String?
+  order          Order?        @relation(fields: [orderId], references: [id])
+
+  applicationId        String
+  application          Application        @relation(fields: [applicationId], references: [id])
+  applicationVersionId String
+  applicationVersion   ApplicationVersion @relation(fields: [applicationVersionId], references: [id])
+
+  type   DeploymentType
+  status DeploymentStatus @default(DRAFT)
+
+  domainId           String?
+  domain             Domain?           @relation(fields: [domainId], references: [id])
+  hostingAccountId   String?
+  hostingAccount     HostingAccount?   @relation(fields: [hostingAccountId], references: [id])
+  deploymentTargetId String?
+  deploymentTarget   DeploymentTarget? @relation(fields: [deploymentTargetId], references: [id])
+
+  // Auto-assigned preview URL for deployments without a customer domain yet
+  // (mock/managed deployments). Kept distinct from `domain` -- URL, domain,
+  // DNS, and SSL are related but separate concerns.
+  previewUrl String?
+
+  // Self-relation capturing upgrade/rollback lineage: previousDeployment is
+  // what this deployment replaced (or rolled back to).
+  previousDeploymentId String?
+  previousDeployment   Deployment?  @relation("DeploymentLineage", fields: [previousDeploymentId], references: [id])
+  nextDeployments      Deployment[] @relation("DeploymentLineage")
+
+  healthStatus      HealthStatus @default(UNKNOWN)
+  lastHealthCheckAt DateTime?
+
+  jobs DeploymentJob[]
+  logs DeploymentLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+  @@index([deploymentTargetId])
+}
+
+enum CredentialType {
+  SSH_KEY
+  API_TOKEN
+  CPANEL
+  PLESK
+  OAUTH
+  PASSWORD
+}
+
+// Encrypted at rest; value is ciphertext produced by the secrets module.
+// Never selected into logs or API responses. Belongs to the reusable
+// DeploymentTarget (where the credential authenticates), not to any one
+// Deployment run.
+model DeploymentCredential {
+  id                 String           @id @default(uuid())
+  deploymentTargetId String
+  deploymentTarget   DeploymentTarget @relation(fields: [deploymentTargetId], references: [id], onDelete: Cascade)
+  type               CredentialType
+  label              String?
+  encryptedValue     String
+  createdAt          DateTime         @default(now())
+
+  @@index([deploymentTargetId])
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  RETRYING
+}
+
+model DeploymentJob {
+  id           String          @id @default(uuid())
+  deploymentId String
+  deployment   Deployment      @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
+  jobType      String // e.g. "provision", "install", "configure_dns", "issue_ssl", "health_check"
+  status       JobStatus       @default(QUEUED)
+  attempts     Int             @default(0)
+  maxAttempts  Int             @default(3)
+  payload      Json?
+  result       Json?
+  error        String?
+  logs         DeploymentLog[]
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime        @default(now())
+
+  @@index([deploymentId])
+  @@index([status])
+}
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+}
+
+model DeploymentLog {
+  id                String         @id @default(uuid())
+  deploymentId      String
+  deployment        Deployment     @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
+  jobId             String?
+  job               DeploymentJob? @relation(fields: [jobId], references: [id])
+  level             LogLevel       @default(INFO)
+  message           String
+  isCustomerVisible Boolean        @default(true)
+  createdAt         DateTime       @default(now())
+
+  @@index([deploymentId])
+}
+
+// =========================================================================
+// DOMAINS & DNS
+// =========================================================================
+
+enum DomainStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  TRANSFERRED
+  FAILED
+}
+
+model Domain {
+  id                String             @id @default(uuid())
+  name              String             @unique
+  tld               String
+  customerId        String
+  customer          User               @relation(fields: [customerId], references: [id])
+  organizationId    String?
+  organization      Organization?      @relation(fields: [organizationId], references: [id])
+  registrarProvider String
+  providerRef       String?
+  status            DomainStatus       @default(PENDING)
+  registeredAt      DateTime?
+  expiresAt         DateTime?
+  autoRenew         Boolean            @default(true)
+  nameservers       String[]
+  dnsRecords        DNSRecord[]
+  domainOrders      DomainOrder[]
+  deployments       Deployment[]
+  deploymentTargets DeploymentTarget[]
+  renewalEvents     RenewalEvent[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([customerId])
+  @@index([expiresAt])
+}
+
+enum DomainAction {
+  REGISTER
+  RENEW
+  TRANSFER
+}
+
+enum DomainOrderStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model DomainOrder {
+  id            String            @id @default(uuid())
+  domainId      String?
+  domain        Domain?           @relation(fields: [domainId], references: [id])
+  orderId       String?
+  order         Order?            @relation(fields: [orderId], references: [id])
+  domainName    String
+  action        DomainAction
+  years         Int               @default(1)
+  providerCost  Decimal           @db.Decimal(12, 2)
+  customerPrice Decimal           @db.Decimal(12, 2)
+  status        DomainOrderStatus @default(PENDING)
+  createdAt     DateTime          @default(now())
+
+  @@index([orderId])
+}
+
+enum DNSRecordType {
+  A
+  AAAA
+  CNAME
+  MX
+  TXT
+  NS
+  SRV
+}
+
+model DNSRecord {
+  id               String        @id @default(uuid())
+  domainId         String
+  domain           Domain        @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  type             DNSRecordType
+  name             String
+  value            String
+  ttl              Int           @default(3600)
+  priority         Int?
+  providerRecordId String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([domainId])
+}
+
+// =========================================================================
+// HOSTING
+// =========================================================================
+
+model HostingPlan {
+  id               String           @id @default(uuid())
+  name             String
+  slug             String           @unique
+  description      String?
+  websitesLimit    Int              @default(1)
+  storageGB        Int              @default(10)
+  bandwidthGB      Int              @default(100)
+  databasesLimit   Int              @default(1)
+  priceMonthly     Decimal          @db.Decimal(12, 2)
+  priceYearly      Decimal?         @db.Decimal(12, 2)
+  providerPlanCode String?
+  isCustom         Boolean          @default(false)
+  isActive         Boolean          @default(true)
+  sortOrder        Int              @default(0)
+  hostingAccounts  HostingAccount[]
+  orderItems       OrderItem[]
+  bundleItems      BundleItem[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+}
+
+enum HostingAccountStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  TERMINATED
+}
+
+model HostingAccount {
+  id                String               @id @default(uuid())
+  customerId        String
+  customer          User                 @relation(fields: [customerId], references: [id])
+  organizationId    String?
+  organization      Organization?        @relation(fields: [organizationId], references: [id])
+  hostingPlanId     String
+  hostingPlan       HostingPlan          @relation(fields: [hostingPlanId], references: [id])
+  provider          String
+  providerAccountId String?
+  status            HostingAccountStatus @default(PENDING)
+  primaryDomain     String?
+  usage             Json?
+  deployments       Deployment[]
+  deploymentTargets DeploymentTarget[]
+  renewalEvents     RenewalEvent[]
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([customerId])
+}
+
+// =========================================================================
+// PROVIDERS (third-party integration abstraction)
+// =========================================================================
+
+enum ProviderType {
+  PAYMENT
+  DOMAIN
+  DNS
+  HOSTING
+  DEPLOYMENT
+  EMAIL
+  SMS
+}
+
+enum ProviderMode {
+  MOCK
+  CONFIGURED
+  CONNECTED
+  ERROR
+}
+
+enum ProviderEnvironment {
+  SANDBOX
+  LIVE
+}
+
+model Provider {
+  id             String               @id @default(uuid())
+  name           String
+  type           ProviderType
+  adapterKey     String // maps to the code adapter implementation, e.g. "mock", "paystack", "namecheap"
+  mode           ProviderMode         @default(MOCK)
+  environment    ProviderEnvironment  @default(SANDBOX)
+  isActive       Boolean              @default(true)
+  isDefault      Boolean              @default(false)
+  capabilities   Json? // detected/declared capability flags
+  costConfig     Json? // markup configuration for this provider
+  lastTestedAt   DateTime?
+  lastTestResult String?
+  credentials    ProviderCredential[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([type])
+}
+
+// Individual credential fields, encrypted at rest. Never returned to the browser.
+model ProviderCredential {
+  id             String   @id @default(uuid())
+  providerId     String
+  provider       Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  key            String // e.g. "apiKey", "apiSecret", "webhookSecret"
+  encryptedValue String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([providerId, key])
+}
+
+// =========================================================================
+// SUPPORT
+// =========================================================================
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_FOR_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+model SupportTicket {
+  id             String           @id @default(uuid())
+  ticketNumber   String           @unique
+  customerId     String
+  customer       User             @relation(fields: [customerId], references: [id])
+  organizationId String?
+  organization   Organization?    @relation(fields: [organizationId], references: [id])
+  subject        String
+  category       String
+  priority       TicketPriority   @default(MEDIUM)
+  status         TicketStatus     @default(OPEN)
+  orderId        String?
+  applicationId  String?
+  application    Application?     @relation(fields: [applicationId], references: [id])
+  deploymentId   String?
+  messages       SupportMessage[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  closedAt       DateTime?
+
+  @@index([customerId])
+  @@index([status])
+}
+
+enum AuthorType {
+  CUSTOMER
+  STAFF
+}
+
+model SupportMessage {
+  id          String        @id @default(uuid())
+  ticketId    String
+  ticket      SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User          @relation(fields: [authorId], references: [id])
+  authorType  AuthorType
+  message     String
+  attachments String[]
+  createdAt   DateTime      @default(now())
+
+  @@index([ticketId])
+}
+
+// =========================================================================
+// CUSTOMIZATION REQUESTS & QUOTES
+// =========================================================================
+
+enum CustomizationRequestStatus {
+  SUBMITTED
+  REVIEWING
+  QUOTED
+  CONVERTED
+  DECLINED
+}
+
+model CustomizationRequest {
+  id            String                     @id @default(uuid())
+  customerId    String
+  customer      User                       @relation(fields: [customerId], references: [id])
+  applicationId String?
+  application   Application?               @relation(fields: [applicationId], references: [id])
+  description   String
+  attachments   String[]
+  budget        Decimal?                   @db.Decimal(12, 2)
+  deadline      DateTime?
+  status        CustomizationRequestStatus @default(SUBMITTED)
+  quoteId       String?
+  quote         Quote?                     @relation(fields: [quoteId], references: [id])
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+model Quote {
+  id          String                 @id @default(uuid())
+  quoteNumber String                 @unique
+  customerId  String
+  customer    User                   @relation(fields: [customerId], references: [id])
+  subtotal    Decimal                @default(0) @db.Decimal(12, 2)
+  discount    Decimal                @default(0) @db.Decimal(12, 2)
+  tax         Decimal                @default(0) @db.Decimal(12, 2)
+  total       Decimal                @db.Decimal(12, 2)
+  currency    String                 @default("USD")
+  status      QuoteStatus            @default(DRAFT)
+  expiresAt   DateTime?
+  // Set once the customer accepts and the quote is converted into a real
+  // Order through the standard payment pipeline -- the link back from an
+  // accepted quote to what it actually became.
+  orderId     String?                @unique
+  order       Order?                 @relation(fields: [orderId], references: [id])
+  items       QuoteItem[]
+  requests    CustomizationRequest[]
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+}
+
+model QuoteItem {
+  id          String  @id @default(uuid())
+  quoteId     String
+  quote       Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Int     @default(1)
+  unitPrice   Decimal @db.Decimal(12, 2)
+  total       Decimal @db.Decimal(12, 2)
+
+  @@index([quoteId])
+}
+
+// =========================================================================
+// NOTIFICATIONS & EMAIL TEMPLATES
+// =========================================================================
+
+enum NotificationChannel {
+  EMAIL
+  IN_APP
+  SMS
+  WHATSAPP
+}
+
+model Notification {
+  id        String              @id @default(uuid())
+  userId    String
+  user      User                @relation(fields: [userId], references: [id])
+  type      String // e.g. "order.received", "deployment.completed"
+  channel   NotificationChannel @default(IN_APP)
+  title     String
+  message   String
+  data      Json?
+  isRead    Boolean             @default(false)
+  createdAt DateTime            @default(now())
+
+  @@index([userId])
+  @@index([userId, isRead])
+}
+
+model EmailTemplate {
+  id        String   @id @default(uuid())
+  key       String   @unique // e.g. "order.received"
+  subject   String
+  body      String // HTML with {{variable}} placeholders
+  variables String[]
+  isActive  Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+// Configurable renewal reminder schedule (days-before-expiry -> enabled)
+model NotificationSchedule {
+  id         String   @id @default(uuid())
+  key        String   @unique // e.g. "domain.expiry", "hosting.expiry"
+  daysBefore Int[] // e.g. [30,14,7,3,1]
+  isActive   Boolean  @default(true)
+  updatedAt  DateTime @updatedAt
+}
+
+// =========================================================================
+// AUDIT LOG & SETTINGS
+// =========================================================================
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  actorId      String?
+  actor        User?    @relation(fields: [actorId], references: [id])
+  action       String // e.g. "application.price_changed"
+  resourceType String
+  resourceId   String?
+  oldValue     Json?
+  newValue     Json?
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+
+  @@index([actorId])
+  @@index([resourceType, resourceId])
+  @@index([createdAt])
+}
+
+model Setting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+// Lightweight analytics event log (visitors, views, checkout funnel).
+model AnalyticsEvent {
+  id            String   @id @default(uuid())
+  type          String // e.g. "app_view", "demo_click", "checkout_start", "purchase"
+  sessionId     String?
+  userId        String?
+  applicationId String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  @@index([type])
+  @@index([applicationId])
+  @@index([createdAt])
+}
