@@ -15,8 +15,9 @@ Customer → Platform (Next.js) → Provider Adapter Interface → Third-party A
 This document describes the system as implemented through **Phase 1
 (Foundation)**, **Phase 2 (Payments, Billing & Commercial Foundation)**,
 **Phase 3 (Application Versioning & Deployment Foundation)**,
-**Phase 4 (Domains)**, and **Phase 5 (Hosting)**. Phases 6–7 build on this
-foundation without architectural changes — see [Phased Plan](#phased-plan).
+**Phase 4 (Domains)**, **Phase 5 (Hosting)**, and **Phase 6 (Business
+Operations)**. Phase 7 builds on this foundation without architectural
+changes — see [Phased Plan](#phased-plan).
 
 ## 1. Recommended Architecture
 
@@ -734,10 +735,35 @@ application checkout with `PLATFORM_HOSTING` selected, so the marketing
 hosting page's plan cards link to the app catalog rather than a direct
 purchase).
 
-**Phase 6 — Business Operations.** Support ticketing, coupons, and settings
-are delivered. Remaining: quote-to-order conversion UI (`Quote`/`QuoteItem`
-schema exists), bundle checkout (`Bundle`/`BundleItem` schema exists),
-and a renewal notification cron.
+**Phase 6 — Business Operations (delivered).** Support ticketing and
+settings were already delivered in earlier phases. Coupons, quotes, and
+bundles — previously schema-only despite an earlier note claiming coupons
+were delivered — now have full application code: `lib/services/coupons.ts`
+(`validateCoupon`/`incrementCouponUsage`, percent-or-fixed, capped at the
+order subtotal, checked against active window and usage limit) wired into
+checkout (`couponCode` on both the app and bundle checkout forms) and
+`createOrder()`, with admin CRUD at `/admin/coupons`.
+`lib/services/customization-requests.ts` and `lib/services/quotes.ts`
+implement the full custom-work flow: a customer submits a
+`CustomizationRequest` (`/dashboard/quotes/new`), staff move it through
+SUBMITTED → REVIEWING and price it into a `Quote` with line items
+(`/admin/quotes/requests/[id]`), the customer accepts or declines
+(`/dashboard/quotes/[id]`), and acceptance creates an Order the same way any
+other purchase does — the quote only flips to ACCEPTED and the request to
+CONVERTED once `fulfillOrder()` confirms payment (`processQuoteOrder()`,
+mirroring the `DomainOrder`/`processDomainOrders()` ledger pattern from
+Phase 4), never on accept-intent alone. `lib/services/bundles.ts` adds admin
+bundle CRUD (`/admin/bundles`, items typed APPLICATION/HOSTING_PLAN/
+DOMAIN/SERVICE), a marketing listing and detail page (`/bundles`), and a
+checkout entry point (`/checkout/bundle/[slug]`) that creates an order with
+a single BUNDLE-type line item at the bundle's flat price; `markOrderPaid()`
+issues a real `ApplicationLicense` for each APPLICATION-type `BundleItem`
+once that order is paid, the same as buying each app individually. Remaining:
+a renewal-style notification cron for quotes nearing `expiresAt` (today a
+quote simply becomes un-acceptable once expired — no reminder is sent
+beforehand); domain/hosting-type bundle items are modeled and priceable but
+not yet auto-fulfilled the way application items are (they still require
+manual follow-up, same as a domain or hosting item on a custom quote).
 
 **Phase 7 — Advanced.** In-app upgrade flow for a customer moving between
 already-published `ApplicationVersion`s (creating new versions and

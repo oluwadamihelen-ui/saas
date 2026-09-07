@@ -542,6 +542,7 @@ model Order {
   deployments  Deployment[]
   domainOrders DomainOrder[]
   licenses     ApplicationLicense[]
+  quote        Quote?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1288,12 +1289,18 @@ model Quote {
   quoteNumber String                 @unique
   customerId  String
   customer    User                   @relation(fields: [customerId], references: [id])
+  subtotal    Decimal                @default(0) @db.Decimal(12, 2)
   discount    Decimal                @default(0) @db.Decimal(12, 2)
   tax         Decimal                @default(0) @db.Decimal(12, 2)
   total       Decimal                @db.Decimal(12, 2)
   currency    String                 @default("USD")
   status      QuoteStatus            @default(DRAFT)
   expiresAt   DateTime?
+  // Set once the customer accepts and the quote is converted into a real
+  // Order through the standard payment pipeline -- the link back from an
+  // accepted quote to what it actually became.
+  orderId     String?                @unique
+  order       Order?                 @relation(fields: [orderId], references: [id])
   items       QuoteItem[]
   requests    CustomizationRequest[]
   createdAt   DateTime               @default(now())

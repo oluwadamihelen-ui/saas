@@ -2,6 +2,7 @@ import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "../../src/generated/prisma/client";
 import { PERMISSION_CATALOG, ROLE_DEFAULT_PERMISSIONS } from "../../src/lib/auth/permissions";
+import { generateQuoteNumber } from "../../src/lib/utils/ids";
 
 const prisma = new PrismaClient();
 
@@ -863,6 +864,134 @@ async function seedHostingRenewalDemoScenarios(customer: { id: string }, starter
   return { dueAccount, overdueAccount };
 }
 
+/**
+ * Coupons, a bundle, and a handful of customization requests / quotes in
+ * every status the UI renders differently, so both the admin and customer
+ * Phase 6 screens have something to show without manually clicking through
+ * the flow first. Uses explicit ids so re-seeding upserts in place instead
+ * of duplicating rows.
+ */
+async function seedPhase6DemoData(
+  customers: { id: string; name: string }[],
+  apps: { id: string; name: string }[],
+  hostingPlans: { id: string; slug: string; name: string }[]
+) {
+  await prisma.coupon.upsert({
+    where: { code: "WELCOME10" },
+    update: {},
+    create: { code: "WELCOME10", type: "PERCENT", value: 10, isActive: true },
+  });
+  await prisma.coupon.upsert({
+    where: { code: "SAVE20" },
+    update: {},
+    create: { code: "SAVE20", type: "FIXED", value: 20, maxUses: 50, isActive: true },
+  });
+  await prisma.coupon.upsert({
+    where: { code: "EXPIRED5" },
+    update: {},
+    create: { code: "EXPIRED5", type: "PERCENT", value: 5, isActive: true, expiresAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+  });
+
+  const bundleApps = apps.slice(0, 2);
+  const starterPlan = hostingPlans.find((p) => p.slug === "starter") ?? hostingPlans[0];
+  const bundle = await prisma.bundle.upsert({
+    where: { slug: "launch-pack" },
+    update: {},
+    create: {
+      name: "Launch Pack",
+      slug: "launch-pack",
+      description: `${bundleApps.map((a) => a.name).join(" + ")} with ${starterPlan.name} hosting included — everything you need to launch, bundled at one price.`,
+      price: 499,
+      isActive: true,
+    },
+  });
+  const existingBundleItems = await prisma.bundleItem.count({ where: { bundleId: bundle.id } });
+  if (existingBundleItems === 0) {
+    await prisma.bundleItem.createMany({
+      data: [
+        ...bundleApps.map((a) => ({ bundleId: bundle.id, type: "APPLICATION" as const, applicationId: a.id, quantity: 1 })),
+        { bundleId: bundle.id, type: "HOSTING_PLAN" as const, hostingPlanId: starterPlan.id, quantity: 1 },
+        { bundleId: bundle.id, type: "SERVICE" as const, serviceLabel: "White-glove onboarding call", quantity: 1 },
+      ],
+    });
+  }
+
+  const customer = customers[1] ?? customers[0];
+  const app = apps[0];
+
+  await prisma.customizationRequest.upsert({
+    where: { id: "00000000-0000-4000-8000-000000000001" },
+    update: {},
+    create: {
+      id: "00000000-0000-4000-8000-000000000001",
+      customerId: customer.id,
+      applicationId: app.id,
+      description: "We'd like to add multi-currency support and a custom checkout flow that matches our brand colors.",
+      budget: 1500,
+      status: "SUBMITTED",
+    },
+  });
+
+  await prisma.customizationRequest.upsert({
+    where: { id: "00000000-0000-4000-8000-000000000002" },
+    update: {},
+    create: {
+      id: "00000000-0000-4000-8000-000000000002",
+      customerId: customer.id,
+      description: "Need a custom reporting dashboard with exportable PDF summaries for our regional managers.",
+      budget: 2200,
+      status: "REVIEWING",
+    },
+  });
+
+  await prisma.customizationRequest.upsert({
+    where: { id: "00000000-0000-4000-8000-000000000003" },
+    update: {},
+    create: {
+      id: "00000000-0000-4000-8000-000000000003",
+      customerId: customer.id,
+      description: "Full white-label rebrand across every screen with a new design system.",
+      status: "DECLINED",
+    },
+  });
+
+  const quote = await prisma.quote.upsert({
+    where: { id: "00000000-0000-4000-8000-0000000000aa" },
+    update: {},
+    create: {
+      id: "00000000-0000-4000-8000-0000000000aa",
+      quoteNumber: generateQuoteNumber(),
+      customerId: customer.id,
+      subtotal: 1800,
+      tax: 0,
+      discount: 0,
+      total: 1800,
+      status: "SENT",
+      expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+      items: {
+        create: [
+          { description: "Custom API integration with third-party CRM", quantity: 1, unitPrice: 1200, total: 1200 },
+          { description: "Additional QA and testing cycle", quantity: 1, unitPrice: 600, total: 600 },
+        ],
+      },
+    },
+  });
+
+  await prisma.customizationRequest.upsert({
+    where: { id: "00000000-0000-4000-8000-000000000004" },
+    update: { status: "QUOTED", quoteId: quote.id },
+    create: {
+      id: "00000000-0000-4000-8000-000000000004",
+      customerId: customer.id,
+      applicationId: app.id,
+      description: "We need a custom CRM integration to sync leads automatically, plus an extra QA pass before go-live.",
+      budget: 2000,
+      status: "QUOTED",
+      quoteId: quote.id,
+    },
+  });
+}
+
 async function main() {
   console.log("Seeding roles and permissions...");
   const roles = await seedRolesAndPermissions();
@@ -896,6 +1025,9 @@ async function main() {
 
   console.log("Seeding hosting renewal demo scenarios...");
   await seedHostingRenewalDemoScenarios(customers[0], hostingPlans[0]);
+
+  console.log("Seeding coupons, bundles, customization requests, and quotes...");
+  await seedPhase6DemoData(customers, apps, hostingPlans);
 
   console.log("Seed complete.");
 }

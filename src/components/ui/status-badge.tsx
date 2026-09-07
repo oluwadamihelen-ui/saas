@@ -57,6 +57,15 @@ const STATUS_MAP: Record<string, { label: string; variant: "neutral" | "accent" 
   PUBLISHED: { label: "Published", variant: "success" },
   UNPUBLISHED: { label: "Unpublished", variant: "neutral" },
   ARCHIVED: { label: "Archived", variant: "neutral" },
+  // Customization requests / quotes
+  SUBMITTED: { label: "Submitted", variant: "accent" },
+  REVIEWING: { label: "Reviewing", variant: "accent" },
+  QUOTED: { label: "Quoted", variant: "warning" },
+  CONVERTED: { label: "Converted", variant: "success" },
+  DECLINED: { label: "Declined", variant: "neutral" },
+  SENT: { label: "Sent", variant: "warning" },
+  ACCEPTED: { label: "Accepted", variant: "success" },
+  REJECTED: { label: "Rejected", variant: "neutral" },
 };
 
 export function StatusBadge({ status }: { status: string }) {

@@ -8,6 +8,7 @@ const NAV_LINKS = [
   { href: "/apps", label: "Apps" },
   { href: "/categories", label: "Categories" },
   { href: "/services", label: "Services" },
+  { href: "/bundles", label: "Bundles" },
   { href: "/domains", label: "Domains" },
   { href: "/hosting", label: "Hosting" },
   { href: "/pricing", label: "Pricing" },

@@ -15,6 +15,7 @@ export const checkoutSchema = z.object({
   serverPort: z.coerce.number().int().min(1).max(65535).optional(),
   controlPanel: z.string().trim().max(80).optional().or(z.literal("")),
   domainName: z.string().trim().max(255).optional().or(z.literal("")),
+  couponCode: z.string().trim().max(50).optional().or(z.literal("")),
   billingName: z.string().trim().min(1).max(200),
   billingEmail: z.string().trim().email(),
   billingPhone: z.string().trim().max(40).optional().or(z.literal("")),
@@ -102,7 +103,8 @@ export async function initiateCheckout(customerId: string, input: CheckoutInput,
       billingCompany: input.billingCompany || undefined,
       billingCountry: input.billingCountry || undefined,
       billingAddress: input.billingAddress || undefined,
-    }
+    },
+    input.couponCode || undefined
   );
 
   await prisma.order.update({

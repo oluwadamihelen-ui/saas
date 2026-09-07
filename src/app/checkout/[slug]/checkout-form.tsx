@@ -218,10 +218,17 @@ export function CheckoutForm({
               </div>
             )}
           </div>
+
+          <div className="mt-4 space-y-1.5 border-t border-border pt-4">
+            <Label htmlFor="couponCode">Coupon code (optional)</Label>
+            <Input id="couponCode" name="couponCode" placeholder="e.g. WELCOME10" className="uppercase placeholder:normal-case" />
+          </div>
+
           <div className="mt-4 flex justify-between border-t border-border pt-4 text-base font-semibold">
             <span>Total due today</span>
             <span>{formatCurrency(subtotal)}</span>
           </div>
+          <p className="mt-1 text-xs text-muted">A valid coupon is applied to your total on the next step.</p>
           <Button type="submit" size="lg" className="mt-6 w-full" disabled={isPending}>
             {isPending ? "Processing..." : "Continue to Payment"}
           </Button>

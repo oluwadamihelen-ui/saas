@@ -3,26 +3,19 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { requireUser } from "@/lib/auth/require";
-import { checkoutSchema, initiateCheckout } from "@/lib/services/checkout";
+import { bundleCheckoutSchema, initiateBundleCheckout } from "@/lib/services/bundles";
 import { logger } from "@/lib/security/logger";
 
-export interface CheckoutFormState {
+export interface BundleCheckoutFormState {
   status: "idle" | "error";
   message?: string;
 }
 
-export async function submitCheckout(_prev: CheckoutFormState, formData: FormData): Promise<CheckoutFormState> {
+export async function submitBundleCheckout(_prev: BundleCheckoutFormState, formData: FormData): Promise<BundleCheckoutFormState> {
   const user = await requireUser();
 
-  const parsed = checkoutSchema.safeParse({
-    applicationId: formData.get("applicationId"),
-    includeInstallation: formData.get("includeInstallation") === "on",
-    hostingPlanId: formData.get("hostingPlanId") || undefined,
-    deploymentType: formData.get("deploymentType"),
-    serverHost: formData.get("serverHost") || undefined,
-    serverPort: formData.get("serverPort") || undefined,
-    controlPanel: formData.get("controlPanel") || undefined,
-    domainName: formData.get("domainName") || undefined,
+  const parsed = bundleCheckoutSchema.safeParse({
+    bundleId: formData.get("bundleId"),
     couponCode: formData.get("couponCode") || undefined,
     billingName: formData.get("billingName"),
     billingEmail: formData.get("billingEmail"),
@@ -43,11 +36,11 @@ export async function submitCheckout(_prev: CheckoutFormState, formData: FormDat
 
   let authorizationUrl: string | null;
   try {
-    const result = await initiateCheckout(user.id, parsed.data, appOrigin);
+    const result = await initiateBundleCheckout(user.id, parsed.data, appOrigin);
     authorizationUrl = result.authorizationUrl;
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown";
-    logger.error("checkout.failed", { error: message });
+    logger.error("bundle_checkout.failed", { error: message });
     return { status: "error", message: error instanceof Error ? message : "We couldn't start checkout. Please try again." };
   }
 

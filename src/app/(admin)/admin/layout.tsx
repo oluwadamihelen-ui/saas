@@ -17,6 +17,9 @@ import {
   BarChart3,
   Settings,
   ScrollText,
+  MessageSquareText,
+  Layers,
+  Tag,
 } from "lucide-react";
 import { auth } from "@/auth";
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
@@ -37,6 +40,9 @@ const NAV_ITEMS = [
   { href: "/admin/invoices", label: "Invoices", icon: <FileText className={ICON_CLASS} /> },
   { href: "/admin/payments", label: "Payments", icon: <CreditCard className={ICON_CLASS} /> },
   { href: "/admin/support", label: "Support", icon: <LifeBuoy className={ICON_CLASS} /> },
+  { href: "/admin/quotes", label: "Quotes", icon: <MessageSquareText className={ICON_CLASS} /> },
+  { href: "/admin/bundles", label: "Bundles", icon: <Layers className={ICON_CLASS} /> },
+  { href: "/admin/coupons", label: "Coupons", icon: <Tag className={ICON_CLASS} /> },
   { href: "/admin/providers", label: "Providers", icon: <Plug className={ICON_CLASS} /> },
   { href: "/admin/staff", label: "Staff", icon: <UserCog className={ICON_CLASS} /> },
   { href: "/admin/analytics", label: "Analytics", icon: <BarChart3 className={ICON_CLASS} /> },

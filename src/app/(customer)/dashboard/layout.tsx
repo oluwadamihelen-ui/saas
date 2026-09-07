@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LayoutDashboard, ShoppingBag, FileText, Rocket, Globe, Server, RefreshCcw, LifeBuoy, User } from "lucide-react";
+import { LayoutDashboard, ShoppingBag, FileText, Rocket, Globe, Server, RefreshCcw, LifeBuoy, User, MessageSquareText } from "lucide-react";
 import { auth } from "@/auth";
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
 import { DashboardTopbar } from "@/components/dashboard/dashboard-topbar";
@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/domains", label: "Domains", icon: <Globe className={ICON_CLASS} /> },
   { href: "/dashboard/hosting", label: "Hosting", icon: <Server className={ICON_CLASS} /> },
   { href: "/dashboard/support", label: "Support", icon: <LifeBuoy className={ICON_CLASS} /> },
+  { href: "/dashboard/quotes", label: "Quotes", icon: <MessageSquareText className={ICON_CLASS} /> },
   { href: "/dashboard/profile", label: "Profile", icon: <User className={ICON_CLASS} /> },
 ];
 

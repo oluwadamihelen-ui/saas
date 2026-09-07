@@ -3,6 +3,7 @@ import { generateInvoiceNumber, generateLicenseKey, generateOrderNumber } from "
 import { OrderItemType, BillingCycle } from "@/generated/prisma/client";
 import { notifyUser } from "@/lib/services/notifications";
 import { getPlatformCurrency } from "@/lib/services/settings";
+import { validateCoupon } from "@/lib/services/coupons";
 import { logger } from "@/lib/security/logger";
 
 export interface CartLineInput {
@@ -10,6 +11,7 @@ export interface CartLineInput {
   applicationId?: string;
   applicationPricingId?: string;
   hostingPlanId?: string;
+  bundleId?: string;
   description: string;
   billingCycle: BillingCycle;
   quantity: number;
@@ -27,12 +29,21 @@ export interface BillingDetailsInput {
 
 const TAX_RATE = 0; // configurable via Setting in a later phase
 
-export async function createOrder(customerId: string, lines: CartLineInput[], billing: BillingDetailsInput) {
+export async function createOrder(customerId: string, lines: CartLineInput[], billing: BillingDetailsInput, couponCode?: string) {
   if (lines.length === 0) throw new Error("Cannot create an order with no items");
 
   const subtotal = lines.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
   const tax = Math.round(subtotal * TAX_RATE * 100) / 100;
-  const discount = 0;
+
+  let discount = 0;
+  let couponId: string | undefined;
+  if (couponCode) {
+    const validation = await validateCoupon(couponCode, subtotal);
+    if (!validation.valid) throw new Error(validation.error ?? "Invalid coupon code");
+    discount = validation.discount!;
+    couponId = validation.couponId;
+  }
+
   const total = subtotal + tax - discount;
   const currency = await getPlatformCurrency();
 
@@ -47,6 +58,7 @@ export async function createOrder(customerId: string, lines: CartLineInput[], bi
       tax,
       total,
       currency,
+      couponId,
       ...billing,
       items: {
         create: lines.map((l) => ({
@@ -54,6 +66,7 @@ export async function createOrder(customerId: string, lines: CartLineInput[], bi
           applicationId: l.applicationId,
           applicationPricingId: l.applicationPricingId,
           hostingPlanId: l.hostingPlanId,
+          bundleId: l.bundleId,
           description: l.description,
           billingCycle: l.billingCycle,
           quantity: l.quantity,
@@ -65,7 +78,7 @@ export async function createOrder(customerId: string, lines: CartLineInput[], bi
     include: { items: true },
   });
 
-  logger.info("order.created", { orderId: order.id, orderNumber: order.orderNumber, total });
+  logger.info("order.created", { orderId: order.id, orderNumber: order.orderNumber, total, couponId });
   return order;
 }
 
@@ -74,7 +87,7 @@ export async function createOrder(customerId: string, lines: CartLineInput[], bi
  * redirect). Idempotent: safe to call more than once for the same order.
  */
 export async function markOrderPaid(orderId: string, payment: { provider: string; providerRef: string; amount: number; currency: string }) {
-  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true, customer: true } });
+  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: { include: { bundle: { include: { items: true } } } }, customer: true } });
   if (!order) throw new Error(`Order ${orderId} not found`);
   if (order.paymentStatus === "PAID") return order; // idempotent
 
@@ -148,6 +161,32 @@ export async function markOrderPaid(orderId: string, payment: { provider: string
         },
       });
     }
+
+    // A bundle is sold as one line item at a flat price, but still grants a
+    // real license for each application it bundles -- same effect as buying
+    // each app individually, minus the per-app deployment/hosting wizard
+    // (the customer configures deployment for each licensed app afterward,
+    // same as any other license).
+    const bundleLines = order.items.filter((i) => i.type === "BUNDLE" && i.bundle);
+    for (const line of bundleLines) {
+      const applicationItems = line.bundle!.items.filter((bi) => bi.type === "APPLICATION" && bi.applicationId);
+      for (const bundleItem of applicationItems) {
+        await tx.applicationLicense.create({
+          data: {
+            licenseKey: generateLicenseKey(),
+            customerId: order.customerId,
+            applicationId: bundleItem.applicationId!,
+            orderId: order.id,
+            type: "STANDARD",
+            status: "ACTIVE",
+          },
+        });
+      }
+    }
+
+    if (order.couponId) {
+      await tx.coupon.update({ where: { id: order.couponId }, data: { usedCount: { increment: 1 } } });
+    }
   });
 
   await notifyUser(order.customerId, {
@@ -166,7 +205,7 @@ export async function getOrderForCustomer(orderId: string, customerId: string) {
   return prisma.order.findFirst({
     where: { id: orderId, customerId },
     include: {
-      items: { include: { application: true, hostingPlan: true } },
+      items: { include: { application: true, hostingPlan: true, bundle: true } },
       payments: true,
       invoice: true,
       deployments: true,

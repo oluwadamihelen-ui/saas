@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { getDomainProvider, getHostingProvider } from "@/lib/providers/registry";
 import { createDeployment } from "@/lib/services/deployments";
 import { notifyUser } from "@/lib/services/notifications";
+import { processQuoteOrder } from "@/lib/services/quotes";
 import { recordAuditLog } from "@/lib/security/audit";
 import { logger } from "@/lib/security/logger";
 
@@ -109,6 +110,7 @@ export async function fulfillOrder(orderId: string) {
   });
 
   const domainOrderResults = await processDomainOrders(order.id, order.customerId);
+  await processQuoteOrder(order.id);
 
   const intent = order.fulfillmentIntent as unknown as FulfillmentIntent | null;
   const licenseItem = order.items.find((i) => i.type === "APPLICATION_LICENSE" && i.applicationId);
