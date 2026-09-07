@@ -111,16 +111,25 @@ a reference stack wiring it up with Postgres, Redis, and a one-off
 
 ```bash
 cp .env.example .env   # fill in AUTH_SECRET, CREDENTIALS_ENCRYPTION_KEY,
-                        # and any provider credentials -- leave
+                        # DOMAIN, and any provider credentials -- leave
                         # DATABASE_URL/REDIS_URL as-is, docker-compose.yml
                         # points them at the postgres/redis services
-docker compose up --build
+docker compose up --build -d
 ```
 
+`DOMAIN` (e.g. `example.com`, no `www`) must already resolve in DNS to
+this server's public IP before the `caddy` service can start — it's both
+the reverse-proxy target and what Caddy requests its Let's Encrypt
+certificate for, fully automatically, no separate certbot step. On
+Namecheap: **Domain List → Manage → Advanced DNS** → add an `A` record for
+`@` (and one for `www`) pointing at the server's IP. DNS propagation is
+usually fast but can take up to 24–48 hours.
+
 Most container platforms (Railway, Render, Fly.io, ECS, etc.) ignore the
-compose file and instead run `web` and `worker` as two separate services
-from the same built image with different start commands (`npm run start`
-and `npm run worker`) — the Dockerfile alone covers that case.
+compose file — including Caddy, since they terminate TLS themselves — and
+instead run `web` and `worker` as two separate services from the same
+built image with different start commands (`npm run start` and
+`npm run worker`) — the Dockerfile alone covers that case.
 
 **VPS (systemd or PM2)** — for running directly on a Linux server you
 manage yourself (the same kind of box the SSH deployment adapter targets

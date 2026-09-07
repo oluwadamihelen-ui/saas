@@ -1,0 +1,8 @@
+# Caddy reverse-proxies HTTPS traffic to the `web` container and handles
+# TLS entirely on its own -- it requests a Let's Encrypt certificate for
+# {$DOMAIN} the first time it starts and renews automatically, as long as
+# that domain's DNS A record already points at this server (see README.md's
+# Namecheap DNS steps) and ports 80/443 are reachable from the internet.
+{$DOMAIN} {
+	reverse_proxy web:3000
+}

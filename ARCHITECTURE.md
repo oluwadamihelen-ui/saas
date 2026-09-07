@@ -1227,6 +1227,22 @@ independent of Docker), and the worker hardening itself is plain
 TypeScript covered by the existing typecheck/lint/build passes — no new
 adapter code, so no new gap in what's testable.
 
+Added shortly after, once the operator confirmed they're going live on a
+Namecheap VPS: a `caddy` service in `docker-compose.yml` (`Caddyfile` at
+the repo root) so the stack terminates TLS itself rather than leaving
+`web` on plain HTTP with no certificate story — Caddy requests and renews
+its Let's Encrypt certificate automatically from a `DOMAIN` env var (new
+in `.env.example`), the only requirement being that domain's DNS A record
+already points at the server. `web` no longer publishes port 3000 to the
+host directly; Caddy is the only public-facing service now (80/443),
+reverse-proxying to `web` by its Compose network name. Verified the same
+way as the rest of the compose file: `docker compose config` renders
+cleanly with `DOMAIN` interpolated and the `caddy` service's `depends_on`/
+volumes/ports all resolved correctly — actually starting it (which needs
+a real DNS-resolvable domain to get past Let's Encrypt's HTTP-01
+challenge) is unverified for the same Docker Hub network-policy reason as
+the rest of this phase.
+
 ## 13. Local Development
 
 ```bash
