@@ -1,6 +1,7 @@
 "use client";
 
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
+import { ImageUploadField } from "@/components/ui/image-upload-field";
 import { Button } from "@/components/ui/button";
 
 export interface ApplicationFormValues {
@@ -139,8 +140,8 @@ export function ApplicationForm({
         <h2 className="text-lg font-semibold">Content</h2>
         <div className="mt-4 grid gap-4">
           <div className="space-y-1.5">
-            <Label htmlFor="imageUrls">Screenshot URLs (one per line)</Label>
-            <Textarea id="imageUrls" name="imageUrls" rows={3} defaultValue={v.imageUrls} />
+            <Label>Screenshots</Label>
+            <ImageUploadField name="imageUrls" defaultValue={v.imageUrls} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="features">Features (one per line, &quot;Title: description&quot;)</Label>

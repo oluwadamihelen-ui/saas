@@ -66,6 +66,12 @@ services:
     environment:
       DATABASE_URL: postgresql://bridgecodes:bridgecodes@postgres:5432/bridgecodes?schema=public
       REDIS_URL: redis://redis:6379
+    volumes:
+      # Admin-uploaded application screenshots (src/app/api/admin/uploads)
+      # are written straight into the image's public/ dir at runtime --
+      # without this volume they'd vanish on every `docker compose up
+      # --build`, since a rebuild starts from a fresh image layer.
+      - uploads_data:/app/public/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -113,3 +119,4 @@ volumes:
   postgres_data:
   caddy_data:
   caddy_config:
+  uploads_data:

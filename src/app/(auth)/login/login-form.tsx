@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Input, Label } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Button } from "@/components/ui/button";
 
 export function LoginForm() {
@@ -39,7 +40,7 @@ export function LoginForm() {
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="password">Password</Label>
-        <Input id="password" name="password" type="password" required placeholder="••••••••" />
+        <PasswordInput id="password" name="password" required placeholder="••••••••" />
       </div>
       <Button type="submit" disabled={isPending} className="w-full">
         {isPending ? "Signing in..." : "Sign in"}

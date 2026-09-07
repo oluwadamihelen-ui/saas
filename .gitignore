@@ -45,3 +45,7 @@ next-env.d.ts
 
 # database backups (see scripts/backup-db.sh)
 /backups
+
+# admin-uploaded content (see src/app/api/admin/uploads/route.ts) -- not
+# checked in; mount a persistent volume at this path in production
+/public/uploads
