@@ -90,6 +90,12 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 Paste the output as the value of `AUTH_SECRET` in `.env`.
 
+The AI assistant (`/dashboard/assistant` once you're signed in) is
+optional — everything else in the app works without it. To turn it on,
+paste a real key into `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` in `.env`
+before starting the app in step 7. With neither set, the assistant page
+just says it isn't configured — it won't make anything else break.
+
 ## 6. Set up the database schema and demo data
 
 Still inside `apps\school`:

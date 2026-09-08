@@ -96,6 +96,7 @@ model School {
   announcements        Announcement[]
   conversations        Conversation[]
   messages             Message[]
+  aiConversations      AiConversation[]
 
   @@index([status])
 }
@@ -168,11 +169,12 @@ model User {
   guardianProfile Guardian? @relation("GuardianUser")
   studentProfile  Student?  @relation("StudentUser")
 
-  portalInvitesSent      PortalInvite[] @relation("PortalInviteSentBy")
-  notifications          Notification[] @relation("UserNotifications")
-  announcementsCreated   Announcement[] @relation("AnnouncementCreatedBy")
-  conversationsInitiated Conversation[] @relation("ConversationInitiatedBy")
-  messagesSent           Message[]      @relation("MessageSender")
+  portalInvitesSent      PortalInvite[]   @relation("PortalInviteSentBy")
+  notifications          Notification[]   @relation("UserNotifications")
+  announcementsCreated   Announcement[]   @relation("AnnouncementCreatedBy")
+  conversationsInitiated Conversation[]   @relation("ConversationInitiatedBy")
+  messagesSent           Message[]        @relation("MessageSender")
+  aiConversations        AiConversation[] @relation("AiConversationUser")
 
   @@index([schoolId])
 }
@@ -1133,5 +1135,68 @@ model Message {
   createdAt DateTime @default(now())
 
   @@index([schoolId])
+  @@index([conversationId])
+}
+
+// ---------------------------------------------------------------------------
+// AI assistant (Phase 5)
+// ---------------------------------------------------------------------------
+
+enum AiMessageRole {
+  USER
+  ASSISTANT
+  TOOL
+}
+
+/// Only meaningful on a TOOL-role message. A read tool (find a student,
+/// summarize attendance, ...) goes straight to EXECUTED in the same turn.
+/// A write tool (e.g. marking attendance) stops at PROPOSED — the model
+/// names the action and its arguments, but src/lib/ai/tools.ts never runs
+/// it until the signed-in user explicitly confirms, which re-checks the
+/// same PermissionKey the equivalent dashboard action requires before
+/// calling the underlying service function. DECLINED means the user
+/// dismissed a proposal without running it.
+enum AiToolCallStatus {
+  PROPOSED
+  EXECUTED
+  DECLINED
+}
+
+model AiConversation {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation("AiConversationUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  title String @default("New conversation")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages AiMessage[]
+
+  @@index([schoolId])
+  @@index([userId])
+}
+
+/// content is the human-readable text for USER/ASSISTANT roles; TOOL rows
+/// carry toolName/toolArgs/toolResult instead (content is null) so the UI
+/// can render a distinct "tool call" card rather than plain chat text.
+model AiMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  role    AiMessageRole
+  content String?
+
+  toolName   String?
+  toolArgs   Json?
+  toolResult Json?
+  toolStatus AiToolCallStatus?
+
+  createdAt DateTime @default(now())
+
   @@index([conversationId])
 }

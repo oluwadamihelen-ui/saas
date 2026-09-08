@@ -2,8 +2,8 @@
 
 Winfield is a multi-tenant AI-native school management platform. This document
 describes the system as implemented through **Phase 1 (Foundation)**,
-**Phase 2 (Academics)**, **Phase 3 (Finance)** and **Phase 4 (Communication &
-portals)** — see the [root README](../../README.md#school-platform--architecture-assessment-phase-1-kickoff)
+**Phase 2 (Academics)**, **Phase 3 (Finance)**, **Phase 4 (Communication &
+portals)** and **Phase 5 (AI assistant)** — see the [root README](../../README.md#school-platform--architecture-assessment-phase-1-kickoff)
 for the initial assessment this build started from, and the phased roadmap
 below for what comes next.
 
@@ -82,6 +82,7 @@ Core entities (`prisma/schema.prisma`):
   `Payment`, `Vendor`, `ExpenseCategory`, `Expense`
 - **Communication & portals**: `PortalInvite`, `Notification`, `Announcement`,
   `Conversation`, `Message`
+- **AI assistant**: `AiConversation`, `AiMessage`
 - **Audit**: `AuditLog`
 
 `ClassGroup` is a grade level (e.g. "JSS1"); `ClassArm` is the stream
@@ -252,28 +253,83 @@ part of this wizard yet — they're real Phase 2/3 features, not stubbed.
   surfaces it as a link on each invoice row instead of it only being
   reachable by an unauthenticated payer who was sent the link separately.
 
-## AI architecture (not yet built)
+## Phase 5: AI assistant
 
-Phase 1 has no AI code — no chatbot, no scripted "AI insight" text. Building
-the intent → permission-check → tool-call → audit pipeline described in the
-brief now, before there was real attendance/results/finance data for it to
-reason over, would have meant either faking its output (explicitly
-disallowed) or building against a data shape that kept changing as Phase
-2/3 landed. That data now exists; Phase 5 is next in the roadmap, not blocked
-on anything further. The permission-string system exists specifically so
-Phase 5's AI tools can reuse the exact same `requirePermission()` checks the
-UI uses, rather than inventing a parallel authorization path.
+```
+Chat message → provider.generate() → tool_calls? → permission check → tool.execute() → audit log
+                       ↑__________________________________________________|
+                       (results fed back for the next round, or a final text reply)
+```
+
+- **No mock AI provider — this is the one place the mock-adapter pattern
+  from payments deliberately doesn't apply.** `src/lib/payments/mock-provider.ts`
+  is honest about not being a real gateway (it just redirects to the app's
+  own confirmation page); there's no equivalent honest stand-in for "a real
+  answer" — a scripted response IS a fake answer. So
+  `src/lib/ai/providers/registry.ts`'s `getAiProvider()` returns `null` when
+  neither `OPENAI_API_KEY` nor `ANTHROPIC_API_KEY` is set, and every caller
+  (the assistant pages, `sendMessage`) treats that as "not configured," not
+  as a reason to fabricate a reply. This was verified in this environment
+  (no API key available) with a throwaway scripted provider that was never
+  committed — see the note below.
+- **Every tool is permission-gated twice, not once.** `src/lib/ai/tools.ts`
+  pairs each tool with the exact `PermissionKey` its dashboard equivalent
+  requires (`get_student_fees` needs `finance.view`, `mark_student_attendance`
+  needs `attendance.mark`, ...). `getToolsForPermissions()` filters the tool
+  list the model even sees down to what the signed-in user can do — a
+  teacher's tool list has no finance tools in it at all — and
+  `sendMessage`/`confirmToolCall` re-check the same permission again before
+  calling `execute()`, so a model that somehow named a tool it wasn't shown
+  still can't run it. This is the same "belt and suspenders" pattern as
+  `updateReportCardComments` re-checking `results.approve` server-side
+  instead of trusting which fields the UI rendered.
+- **Read tools execute inline; the one write tool waits for a human.**
+  `AiTool.kind` is `"read"` or `"write"`. A read tool's result is computed
+  and stored in the same turn the model asks for it. `mark_student_attendance`
+  (`kind: "write"`) is the only exception in this phase — its `AiMessage` row
+  is written with `toolStatus: "PROPOSED"` and `sendMessage` stops there,
+  returning `pendingConfirmation: true`; nothing runs until the signed-in
+  user calls `confirmToolCall` (or `declineToolCall`) from the confirmation
+  card in the UI. This mirrors the report card `DRAFT → APPROVED → PUBLISHED`
+  gate: the model can *propose* a change, never *make* one unattended.
+- **Every executed tool call — read or write — is written to `AuditLog`**
+  (`action: "ai.tool_call"`, `resourceType` the tool's name, `newValue` the
+  arguments and result), from the same `logAudit()` helper every other
+  mutation in the app uses. A declined write leaves no audit row, since
+  nothing happened.
+- **Conversation history round-trips through Postgres, not memory.**
+  `AiConversation`/`AiMessage` store every turn, including tool calls and
+  their results, so `rowsToChatMessages()` (`src/lib/services/ai-assistant.ts`)
+  can reconstruct the exact message sequence both providers require on
+  every call — a synthesized assistant "tool_calls" message immediately
+  followed by one tool-result message per call — rather than trusting
+  anything held in a request-scoped variable. This is also what makes
+  `confirmToolCall` work as a separate request from the one that proposed
+  the action: it reloads history, doesn't resume in-memory state.
+- **Verified without a live API key.** This environment has neither
+  `OPENAI_API_KEY` nor `ANTHROPIC_API_KEY` set, so the real
+  `sendMessage`/`confirmToolCall` loop was exercised end-to-end using a
+  small scripted provider (fixed tool-call sequence, no model, never
+  imported by `registry.ts`) wired in only long enough to prove the
+  history-reconstruction, confirm/decline, and audit-logging code paths
+  work — then removed before this was committed. Every tool's `execute()`
+  was also run directly against the seeded database (find a student, pull
+  their attendance/results/fees, mark attendance, hit a bad id) and checked
+  against real rows. What's *not* verified here is an actual model choosing
+  the right tool from natural language — that depends on a real provider key,
+  which this environment doesn't have.
 
 ## Testing tenant isolation
 
 Still not automated (no test suite exists for this app yet — `vitest` is
-wired up in `package.json` but empty; Phases 1 through 4 were each verified
+wired up in `package.json` but empty; Phases 1 through 5 were each verified
 manually end-to-end against a real database instead). The service-layer
 pattern above (`schoolId` as a mandatory first argument everywhere) is the
 structural mitigation in place; a "School A cannot read School B's students
-(or invoices, or payments, or portal invites, or messages)" integration
-test, per the brief's testing requirements, is overdue and should not be
-deferred again — it's the highest-value thing to add before Phase 5.
+(or invoices, or payments, or portal invites, or messages, or AI
+conversations)" integration test, per the brief's testing requirements, is
+overdue and should not be deferred again — it's the highest-value thing to
+add before Phase 6.
 
 ## Known scale limitation
 
@@ -286,6 +342,6 @@ past a few hundred rows.
 ## Phased roadmap
 
 Matches the brief exactly: Phase 1 Foundation → Phase 2 Academics → Phase 3
-Finance → Phase 4 Communication/parent & student portals (this) → Phase 5
-AI → Phase 6 Advanced ERP (payroll/library/transport/hostel) → Phase 7 SaaS
+Finance → Phase 4 Communication/parent & student portals → Phase 5 AI (this)
+→ Phase 6 Advanced ERP (payroll/library/transport/hostel) → Phase 7 SaaS
 billing & platform admin.

@@ -6,7 +6,8 @@ assistant, built on a multi-tenant foundation (so other schools can be
 onboarded the same way later). This app is being built in phases (see
 [the root README](../../README.md) for the full architecture assessment and
 roadmap); this commit implements **Phase 1 (Foundation)**, **Phase 2
-(Academics)**, **Phase 3 (Finance)** and **Phase 4 (Communication & portals)**:
+(Academics)**, **Phase 3 (Finance)**, **Phase 4 (Communication & portals)**
+and **Phase 5 (AI assistant)**:
 
 **Phase 1 — Foundation**
 - Multi-tenant data model (every tenant-owned table carries `schoolId`)
@@ -91,12 +92,34 @@ roadmap); this commit implements **Phase 1 (Foundation)**, **Phase 2
   teachers, since this is an admin-office inbox) replies from
   `/dashboard/messages`. Replying notifies the other side
 
-Not yet built (see the phased roadmap): payroll, AI.
+**Phase 5 — AI assistant**
+- `/dashboard/assistant`: a chat assistant over the school's own data —
+  ask about a student, today's attendance, a class's results, or the
+  finance summary — answered by real tool calls into the same service
+  functions the dashboard uses, never invented numbers
+- Every tool is gated by the same permission the equivalent dashboard page
+  requires (e.g. a finance question needs `finance.view`), checked before
+  the tool is even offered to the model, not just before it runs — a
+  teacher's assistant literally cannot see finance data because the tool
+  isn't in its list
+- One write-capable tool (`mark_student_attendance`) demonstrates the
+  intent → permission-check → tool-call → audit pipeline end to end: the
+  model can propose it, but it sits as a confirmation card until the
+  signed-in user clicks Confirm — the same human-in-the-loop principle the
+  report card approve/publish workflow already uses. Every tool call that
+  actually runs (read or write) is written to the audit log
+- Provider abstraction (`src/lib/ai/providers/`) supporting OpenAI and
+  Anthropic via `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`, selected with
+  `AI_PROVIDER` if both are set. **With neither key set, the assistant page
+  says so plainly instead of faking a response** — there is no mock AI
+  provider, unlike the mock payment gateway; see ARCHITECTURE.md for why
+
+Not yet built (see the phased roadmap): payroll, advanced ERP modules.
 
 ## Stack
 
 Next.js 16 (App Router) · TypeScript · Tailwind CSS v4 · PostgreSQL + Prisma ·
-Auth.js v5 · Zod · React Hook Form
+Auth.js v5 · Zod · React Hook Form · OpenAI / Anthropic SDKs (assistant)
 
 ## Getting started
 
@@ -110,6 +133,10 @@ npx prisma migrate dev
 npm run db:seed            # seeds a demo school with 110 students
 npm run dev                # http://localhost:3001
 ```
+
+The AI assistant (`/dashboard/assistant`) is optional — everything else
+works with no further setup. To turn it on, add `OPENAI_API_KEY` or
+`ANTHROPIC_API_KEY` to `.env` (see `.env.example`) before starting the app.
 
 ### Demo accounts
 

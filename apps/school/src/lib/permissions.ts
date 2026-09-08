@@ -44,6 +44,7 @@ export const PERMISSIONS = {
   ANNOUNCEMENTS_MANAGE: "announcements.manage",
   MESSAGES_VIEW: "messages.view",
   MESSAGES_MANAGE: "messages.manage",
+  ASSISTANT_USE: "assistant.use",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -84,6 +85,7 @@ export const PERMISSION_CATALOG: { key: PermissionKey; module: string; descripti
   { key: PERMISSIONS.ANNOUNCEMENTS_MANAGE, module: "communication", description: "Create and publish announcements" },
   { key: PERMISSIONS.MESSAGES_VIEW, module: "communication", description: "View parent/guardian messages" },
   { key: PERMISSIONS.MESSAGES_MANAGE, module: "communication", description: "Reply to and close parent/guardian conversations" },
+  { key: PERMISSIONS.ASSISTANT_USE, module: "assistant", description: "Use the AI assistant" },
 ];
 
 /// System roles seeded into every new school (brief section 3's role list).
@@ -147,6 +149,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.ANNOUNCEMENTS_MANAGE,
     PERMISSIONS.MESSAGES_VIEW,
     PERMISSIONS.MESSAGES_MANAGE,
+    PERMISSIONS.ASSISTANT_USE,
   ],
   TEACHER: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -159,6 +162,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.RESULTS_VIEW,
     PERMISSIONS.RESULTS_ENTER,
     PERMISSIONS.ANNOUNCEMENTS_VIEW,
+    PERMISSIONS.ASSISTANT_USE,
   ],
   ACCOUNTANT: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -170,6 +174,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.EXPENSES_VIEW,
     PERMISSIONS.EXPENSES_CREATE,
     PERMISSIONS.ANNOUNCEMENTS_VIEW,
+    PERMISSIONS.ASSISTANT_USE,
   ],
   HR_STAFF: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -177,9 +182,10 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.STAFF_INVITE,
     PERMISSIONS.STAFF_MANAGE,
     PERMISSIONS.ANNOUNCEMENTS_VIEW,
+    PERMISSIONS.ASSISTANT_USE,
   ],
-  LIBRARIAN: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.ANNOUNCEMENTS_VIEW],
-  TRANSPORT_MANAGER: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.ANNOUNCEMENTS_VIEW],
+  LIBRARIAN: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.ANNOUNCEMENTS_VIEW, PERMISSIONS.ASSISTANT_USE],
+  TRANSPORT_MANAGER: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.ANNOUNCEMENTS_VIEW, PERMISSIONS.ASSISTANT_USE],
   PARENT: [],
   STUDENT: [],
 };

@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.124.0",
     "@hookform/resolvers": "^5.9.1",
     "@prisma/client": "^6.19.3",
     "@radix-ui/react-avatar": "^1.2.6",
@@ -28,6 +29,7 @@
     "lucide-react": "^1.41.0",
     "next": "16.3.4",
     "next-auth": "^5.0.0-beta.32",
+    "openai": "^7.10.0",
     "pdfkit": "^0.20.2",
     "prisma": "^6.19.3",
     "react": "19.2.8",
