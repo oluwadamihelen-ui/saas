@@ -46,6 +46,16 @@ export async function listStudents(schoolId: string, filters: StudentListFilters
   return { students, total, page, pageSize: PAGE_SIZE, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
 }
 
+/// Unpaginated, active students only — for assignment pickers (library
+/// loans, transport, hostel) rather than the main directory table.
+export async function listActiveStudentsBrief(schoolId: string) {
+  return prisma.student.findMany({
+    where: { schoolId, status: "ACTIVE" },
+    select: { id: true, firstName: true, lastName: true, admissionNumber: true },
+    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+  });
+}
+
 export async function getStudent(schoolId: string, id: string) {
   return prisma.student.findFirst({
     where: { schoolId, id },

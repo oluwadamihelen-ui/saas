@@ -447,9 +447,75 @@ Page headers with a title + primary action button
 `flex flex-wrap items-center justify-between gap-3` so the button drops
 below the title on narrow screens instead of being squeezed or clipped.
 
+## Phase 6: advanced ERP (payroll, library, transport, hostel)
+
+Four independent modules, each with its own schema slice, `module.action`
+permissions, and `/dashboard/<module>` pages — none of them depend on each
+other, so they're described separately.
+
+**Payroll.** `SalaryComponent` is a per-school catalog of earning/deduction
+line items (mirrors `FeeCategory` on the finance side). `StaffSalaryStructure`
++ `StaffSalaryItem` hold one staff member's current pay structure. A
+`PayrollRun` (unique per `schoolId`+month+year) generates one `Payslip` per
+staff member who has a structure configured, **snapshotting** their
+`StaffSalaryItem` rows into `Payslip.items` (a JSON array) at generation
+time — editing a structure or the component catalog afterward never changes
+an already-generated payslip, only future runs. A run only regenerates while
+`DRAFT` (re-running replaces its payslips wholesale, e.g. after fixing a
+structure or onboarding a new staff member); `payroll.approve` moves it
+`DRAFT → APPROVED → PAID`, each step one-way. `payroll.view` is broad
+(Owner, Admin, Head of School, Accountant, HR); `payroll.manage` (build
+structures, generate runs) sits with Accountant and HR — realistic for a
+small school where either might run payroll — while `payroll.approve` stays
+with Owner/Admin/Head of School, the same separation-of-duties shape as
+`expenses.approve`.
+
+**Library.** `Book.totalCopies` is the only stock number stored;
+`availableCopies` is always derived (`totalCopies` minus currently-`ISSUED`
+`BookLoan` rows) rather than duplicated, so it can't drift the way a
+manually-decremented counter could. A loan's borrower is either a `Student`
+or a staff `User` (`borrowerStudentId`/`borrowerUserId`, exactly one set) —
+checked in `src/lib/services/library.ts`, not a DB constraint, the same
+application-layer-invariant pattern used elsewhere in this schema (e.g.
+`Expense.vendorId` being optional). `LIBRARIAN` (a system role seeded since
+Phase 1 but unused until now) gets `library.view`+`library.manage`.
+
+**Transport.** `Vehicle` → `TransportRoute` (optional vehicle assignment) →
+`RouteStop` (ordered, with optional pickup/drop-off times) →
+`StudentTransportAssignment`. Assigning a student to a route ends their
+existing active assignment first (`endedAt` set) — one active assignment per
+student, enforced in `src/lib/services/transport.ts` rather than a DB
+constraint, since Postgres/Prisma can't express "at most one row with
+`endedAt IS NULL` per student" as a simple unique index. `TRANSPORT_MANAGER`
+(also seeded since Phase 1, also unused until now) gets
+`transport.view`+`transport.manage`.
+
+**Hostel.** `Hostel` → `HostelRoom` (fixed `capacity`) →
+`HostelBedAssignment`, the same one-active-assignment-per-student pattern as
+transport, plus a capacity check (`assignStudentToRoom` throws if the room
+is already full — computed from the active-assignment count, not a stored
+counter, same derived-not-duplicated reasoning as library availability). No
+system role was pre-seeded for hostel management (unlike Librarian/Transport
+Manager) — `hostel.view`+`hostel.manage` went to `HR_STAFF` instead, since
+boarding administration is realistically an HR/admin function at a small
+school, not one that warranted reserving a dedicated role since Phase 1.
+
+**Shared decisions across all four:** dropdown pickers for a book's borrower
+or a route/room assignment use unpaginated "brief" list functions
+(`listAllStaff`, `listActiveStudentsBrief`) rather than the paginated
+directory queries — same reasoning as the `classArmId` filter dropdown on
+the students page: a school's population is bounded, so a `<select>` with
+every option is simpler and fine, while the *tables* that render that same
+population (students list, staff list, payroll runs, book loans) stay
+paginated. The seed script and `backfill-permissions.ts` both had to
+duplicate the payroll snapshot/component logic directly against
+`PrismaClient` rather than importing from `src/lib/services/payroll.ts`, for
+the same `import "server-only"` constraint documented above for finance/
+Phase 4 seeding.
+
 ## Phased roadmap
 
 Matches the brief exactly: Phase 1 Foundation → Phase 2 Academics → Phase 3
-Finance → Phase 4 Communication/parent & student portals → Phase 5 AI (this)
-→ Phase 6 Advanced ERP (payroll/library/transport/hostel) → Phase 7 SaaS
+Finance → Phase 4 Communication/parent & student portals → Phase 5 AI →
+Phase 6 Advanced ERP (payroll/library/transport/hostel, this) → Phase 7 SaaS
 billing & platform admin.

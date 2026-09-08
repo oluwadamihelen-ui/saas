@@ -45,6 +45,15 @@ export const PERMISSIONS = {
   MESSAGES_VIEW: "messages.view",
   MESSAGES_MANAGE: "messages.manage",
   ASSISTANT_USE: "assistant.use",
+  PAYROLL_VIEW: "payroll.view",
+  PAYROLL_MANAGE: "payroll.manage",
+  PAYROLL_APPROVE: "payroll.approve",
+  LIBRARY_VIEW: "library.view",
+  LIBRARY_MANAGE: "library.manage",
+  TRANSPORT_VIEW: "transport.view",
+  TRANSPORT_MANAGE: "transport.manage",
+  HOSTEL_VIEW: "hostel.view",
+  HOSTEL_MANAGE: "hostel.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -86,6 +95,15 @@ export const PERMISSION_CATALOG: { key: PermissionKey; module: string; descripti
   { key: PERMISSIONS.MESSAGES_VIEW, module: "communication", description: "View parent/guardian messages" },
   { key: PERMISSIONS.MESSAGES_MANAGE, module: "communication", description: "Reply to and close parent/guardian conversations" },
   { key: PERMISSIONS.ASSISTANT_USE, module: "assistant", description: "Use the AI assistant" },
+  { key: PERMISSIONS.PAYROLL_VIEW, module: "payroll", description: "View salary structures, payroll runs and payslips" },
+  { key: PERMISSIONS.PAYROLL_MANAGE, module: "payroll", description: "Configure salary structures and generate payroll runs" },
+  { key: PERMISSIONS.PAYROLL_APPROVE, module: "payroll", description: "Approve payroll runs and mark them paid" },
+  { key: PERMISSIONS.LIBRARY_VIEW, module: "library", description: "View the book catalog and loan records" },
+  { key: PERMISSIONS.LIBRARY_MANAGE, module: "library", description: "Manage the book catalog and issue/return loans" },
+  { key: PERMISSIONS.TRANSPORT_VIEW, module: "transport", description: "View vehicles, routes and student transport assignments" },
+  { key: PERMISSIONS.TRANSPORT_MANAGE, module: "transport", description: "Manage vehicles, routes and student transport assignments" },
+  { key: PERMISSIONS.HOSTEL_VIEW, module: "hostel", description: "View hostels, rooms and student room assignments" },
+  { key: PERMISSIONS.HOSTEL_MANAGE, module: "hostel", description: "Manage hostels, rooms and student room assignments" },
 ];
 
 /// System roles seeded into every new school (brief section 3's role list).
@@ -155,6 +173,11 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.MESSAGES_VIEW,
     PERMISSIONS.MESSAGES_MANAGE,
     PERMISSIONS.ASSISTANT_USE,
+    PERMISSIONS.PAYROLL_VIEW,
+    PERMISSIONS.PAYROLL_APPROVE,
+    PERMISSIONS.LIBRARY_VIEW,
+    PERMISSIONS.TRANSPORT_VIEW,
+    PERMISSIONS.HOSTEL_VIEW,
   ],
   TEACHER: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -180,6 +203,8 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.EXPENSES_CREATE,
     PERMISSIONS.ANNOUNCEMENTS_VIEW,
     PERMISSIONS.ASSISTANT_USE,
+    PERMISSIONS.PAYROLL_VIEW,
+    PERMISSIONS.PAYROLL_MANAGE,
   ],
   HR_STAFF: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -188,9 +213,25 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.STAFF_MANAGE,
     PERMISSIONS.ANNOUNCEMENTS_VIEW,
     PERMISSIONS.ASSISTANT_USE,
+    PERMISSIONS.PAYROLL_VIEW,
+    PERMISSIONS.PAYROLL_MANAGE,
+    PERMISSIONS.HOSTEL_VIEW,
+    PERMISSIONS.HOSTEL_MANAGE,
   ],
-  LIBRARIAN: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.ANNOUNCEMENTS_VIEW, PERMISSIONS.ASSISTANT_USE],
-  TRANSPORT_MANAGER: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.ANNOUNCEMENTS_VIEW, PERMISSIONS.ASSISTANT_USE],
+  LIBRARIAN: [
+    PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.ANNOUNCEMENTS_VIEW,
+    PERMISSIONS.ASSISTANT_USE,
+    PERMISSIONS.LIBRARY_VIEW,
+    PERMISSIONS.LIBRARY_MANAGE,
+  ],
+  TRANSPORT_MANAGER: [
+    PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.ANNOUNCEMENTS_VIEW,
+    PERMISSIONS.ASSISTANT_USE,
+    PERMISSIONS.TRANSPORT_VIEW,
+    PERMISSIONS.TRANSPORT_MANAGE,
+  ],
   PARENT: [],
   STUDENT: [],
 };

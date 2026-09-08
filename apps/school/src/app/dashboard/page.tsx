@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarClock, TrendingUp, Wallet } from "lucide-react";
+import { CalendarClock, TrendingUp, Wallet, Banknote, Library, Bus, BedDouble } from "lucide-react";
 import { requireSchoolUser } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -22,6 +22,12 @@ export default async function DashboardPage() {
   const canViewFinance = perms.has(PERMISSIONS.FINANCE_VIEW);
   const canEnroll = perms.has(PERMISSIONS.STUDENTS_CREATE);
   const canUseAssistant = perms.has(PERMISSIONS.ASSISTANT_USE);
+  const operationsLinks = [
+    { href: "/dashboard/payroll", label: "Payroll", icon: Banknote, show: perms.has(PERMISSIONS.PAYROLL_VIEW) },
+    { href: "/dashboard/library", label: "Library", icon: Library, show: perms.has(PERMISSIONS.LIBRARY_VIEW) },
+    { href: "/dashboard/transport", label: "Transport", icon: Bus, show: perms.has(PERMISSIONS.TRANSPORT_VIEW) },
+    { href: "/dashboard/hostel", label: "Hostel", icon: BedDouble, show: perms.has(PERMISSIONS.HOSTEL_VIEW) },
+  ].filter((l) => l.show);
   const [stats, attendanceToday, school] = await Promise.all([
     getDashboardStats(user.schoolId),
     canViewAttendance ? getTodayAttendanceSummary(user.schoolId) : Promise.resolve(null),
@@ -191,6 +197,27 @@ export default async function DashboardPage() {
           </Card>
         </div>
       </div>
+
+      {operationsLinks.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium text-muted">Operations</h2>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {operationsLinks.map((link) => {
+              const Icon = link.icon;
+              return (
+                <Link key={link.href} href={link.href}>
+                  <Card className="transition-colors hover:border-accent">
+                    <CardContent className="flex items-center gap-3 p-4">
+                      <Icon className="h-5 w-5 text-accent" />
+                      <span className="text-sm font-medium text-foreground">{link.label}</span>
+                    </CardContent>
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

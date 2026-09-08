@@ -6,8 +6,8 @@ assistant, built on a multi-tenant foundation (so other schools can be
 onboarded the same way later). This app is being built in phases (see
 [the root README](../../README.md) for the full architecture assessment and
 roadmap); this commit implements **Phase 1 (Foundation)**, **Phase 2
-(Academics)**, **Phase 3 (Finance)**, **Phase 4 (Communication & portals)**
-and **Phase 5 (AI assistant)**:
+(Academics)**, **Phase 3 (Finance)**, **Phase 4 (Communication & portals)**,
+**Phase 5 (AI assistant)** and **Phase 6 (Advanced ERP)**:
 
 **Phase 1 — Foundation**
 - Multi-tenant data model (every tenant-owned table carries `schoolId`)
@@ -114,7 +114,27 @@ and **Phase 5 (AI assistant)**:
   says so plainly instead of faking a response** — there is no mock AI
   provider, unlike the mock payment gateway; see ARCHITECTURE.md for why
 
-Not yet built (see the phased roadmap): payroll, advanced ERP modules.
+**Phase 6 — Advanced ERP**
+- Payroll (`/dashboard/payroll`): a per-school catalog of salary components
+  (earnings/deductions), a salary structure per staff member, and payroll
+  runs that generate one payslip per configured staff member — draft →
+  approve → mark paid, each step one-way. A payslip snapshots the staff
+  member's structure at generation time, so editing their structure later
+  never changes a payslip that's already been generated
+- Library (`/dashboard/library`): a book catalog with a derived (never
+  manually adjusted) available-copies count, and a loan ledger — issue to a
+  student or staff member, mark returned or lost
+- Transport (`/dashboard/transport`): vehicles, routes with ordered stops
+  and pickup/drop-off times, and student-to-route assignments
+- Hostel (`/dashboard/hostel`): hostels, rooms with a fixed bed capacity,
+  and student-to-room assignments (blocked once a room is full)
+- The `LIBRARIAN` and `TRANSPORT_MANAGER` roles — seeded since Phase 1 but
+  unused until now — get real permissions for the first time; hostel
+  management goes to `HR_STAFF` instead, since no dedicated role was
+  pre-seeded for it
+
+Not yet built (see the phased roadmap): the Phase 7 SaaS billing &
+platform-admin layer.
 
 ## Stack
 
@@ -145,8 +165,11 @@ Primary) with 14 class arms, 110 students, fee structures, 110 generated
 invoices with a realistic mix of paid/partial/unpaid/pending-confirmation
 payments, a handful of expenses (one over the approval threshold), four
 published announcements (school-wide, staff-only, parents-only and one
-class-scoped), and a sample parent↔school conversation — plus these
-accounts, all with password `Passw0rd!23`:
+class-scoped), a sample parent↔school conversation, salary structures and
+two payroll runs (one paid, one still draft) for six staff members, a small
+book catalog with a few loans issued, two transport routes with stops and
+assigned students, and two hostels with rooms and assigned students — plus
+these accounts, all with password `Passw0rd!23`:
 
 | Role | Email |
 |---|---|
@@ -156,6 +179,8 @@ accounts, all with password `Passw0rd!23`:
 | Teacher | teacher1@winfield.demo / teacher2@winfield.demo |
 | Accountant | accountant@winfield.demo |
 | HR Staff | hr@winfield.demo |
+| Librarian | librarian@winfield.demo |
+| Transport Manager | transport@winfield.demo |
 | Parent (portal) | parent@winfield.demo |
 | Student (portal) | student@winfield.demo |
 
@@ -181,16 +206,24 @@ beyond the usual `npx prisma migrate dev`:
 
 ```bash
 npx prisma migrate dev              # applies new tables/columns
-npm run db:backfill-permissions     # grants any permission added to a role's defaults since your school was created
+npm run db:backfill-permissions     # syncs each role to the current default permission matrix
 ```
 
-Each phase has occasionally added a new default permission to an existing
-role (e.g. Phase 4 added `announcements.view` to every staff role). That
-default is only ever applied when a school is first created — a school
-that already existed doesn't retroactively gain it, so a role that should
-now be able to open a page instead sees a "Missing permission" error. The
-backfill script (`prisma/scripts/backfill-permissions.ts`) fixes this
-without touching any of your real data — it only adds permissions a role
-is missing, never removes one, and is safe to run as many times as you
-like (a real-data-preserving alternative to `npm run db:seed`, which wipes
-and recreates the whole demo school from scratch instead).
+Each phase has occasionally changed the default permission matrix for an
+existing role — added a permission (e.g. Phase 4 added `announcements.view`
+to every staff role), removed one (e.g. `students.create` was later
+restricted away from `SCHOOL_ADMIN`), or given a role real permissions for
+the first time (e.g. Phase 6 gave `LIBRARIAN`/`TRANSPORT_MANAGER` more than
+just dashboard access). That default is only ever applied when a school is
+first created — a school that already existed doesn't retroactively pick
+up the change, so a role can end up with a page it shouldn't see, or a
+"Missing permission" error on one it now should. The backfill script
+(`prisma/scripts/backfill-permissions.ts`) fixes this without touching any
+of your real data (students, invoices, attendance, etc.) — it reconciles
+every role's permissions to match the current `ROLE_DEFAULT_PERMISSIONS` in
+code, both granting and revoking as needed, and is safe to run as many
+times as you like (a real-data-preserving alternative to `npm run db:seed`,
+which wipes and recreates the whole demo school from scratch instead). It
+assumes no school has customized its own role permissions away from the
+defaults — safe today since there's no role-editing UI yet, but this script
+will need to become smarter once one exists.

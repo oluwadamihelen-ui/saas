@@ -16,6 +16,10 @@ import {
   Megaphone,
   MessageSquare,
   Sparkles,
+  Banknote,
+  Library,
+  Bus,
+  BedDouble,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/brand/logo";
@@ -36,6 +40,10 @@ const NAV: { href: string; label: string; icon: typeof LayoutDashboard; exact?: 
   { href: "/dashboard/assignments", label: "Assignments", icon: FileText, requiredPermission: PERMISSIONS.ASSIGNMENTS_VIEW },
   { href: "/dashboard/results", label: "Results", icon: Award, requiredPermission: PERMISSIONS.RESULTS_VIEW },
   { href: "/dashboard/finance", label: "Finance", icon: Wallet, requiredPermission: PERMISSIONS.FINANCE_VIEW },
+  { href: "/dashboard/payroll", label: "Payroll", icon: Banknote, requiredPermission: PERMISSIONS.PAYROLL_VIEW },
+  { href: "/dashboard/library", label: "Library", icon: Library, requiredPermission: PERMISSIONS.LIBRARY_VIEW },
+  { href: "/dashboard/transport", label: "Transport", icon: Bus, requiredPermission: PERMISSIONS.TRANSPORT_VIEW },
+  { href: "/dashboard/hostel", label: "Hostel", icon: BedDouble, requiredPermission: PERMISSIONS.HOSTEL_VIEW },
   { href: "/dashboard/announcements", label: "Announcements", icon: Megaphone, requiredPermission: PERMISSIONS.ANNOUNCEMENTS_VIEW },
   { href: "/dashboard/messages", label: "Messages", icon: MessageSquare, requiredPermission: PERMISSIONS.MESSAGES_VIEW },
   { href: "/dashboard/assistant", label: "AI Assistant", icon: Sparkles, requiredPermission: PERMISSIONS.ASSISTANT_USE },

@@ -98,6 +98,20 @@ model School {
   messages             Message[]
   aiConversations      AiConversation[]
 
+  salaryComponents            SalaryComponent[]
+  staffSalaryStructures       StaffSalaryStructure[]
+  payrollRuns                 PayrollRun[]
+  payslips                    Payslip[]
+  books                       Book[]
+  bookLoans                   BookLoan[]
+  vehicles                    Vehicle[]
+  transportRoutes             TransportRoute[]
+  routeStops                  RouteStop[]
+  studentTransportAssignments StudentTransportAssignment[]
+  hostels                     Hostel[]
+  hostelRooms                 HostelRoom[]
+  hostelBedAssignments        HostelBedAssignment[]
+
   @@index([status])
 }
 
@@ -175,6 +189,15 @@ model User {
   conversationsInitiated Conversation[]   @relation("ConversationInitiatedBy")
   messagesSent           Message[]        @relation("MessageSender")
   aiConversations        AiConversation[] @relation("AiConversationUser")
+
+  /// Set only for staff — a portal (PARENT/STUDENT) user never has a salary
+  /// structure or payslips of their own.
+  salaryStructure     StaffSalaryStructure? @relation("StaffSalaryStructure")
+  payrollRunsCreated  PayrollRun[]          @relation("PayrollRunCreatedBy")
+  payrollRunsApproved PayrollRun[]          @relation("PayrollRunApprovedBy")
+  payslips            Payslip[]             @relation("Payslips")
+  bookLoansBorrowed   BookLoan[]            @relation("BookBorrower")
+  bookLoansIssued     BookLoan[]            @relation("BookIssuedBy")
 
   @@index([schoolId])
 }
@@ -443,6 +466,10 @@ model Student {
   invoices          Invoice[]
   portalInvites     PortalInvite[]
   conversations     Conversation[]
+
+  bookLoans            BookLoan[]
+  transportAssignments StudentTransportAssignment[]
+  hostelAssignments    HostelBedAssignment[]
 
   @@unique([schoolId, admissionNumber])
   @@index([schoolId])
@@ -1199,4 +1226,311 @@ model AiMessage {
   createdAt DateTime @default(now())
 
   @@index([conversationId])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6: advanced ERP — payroll, library, transport, hostel
+// ---------------------------------------------------------------------------
+
+enum SalaryComponentType {
+  EARNING
+  DEDUCTION
+}
+
+/// Catalog of earning/deduction line items a school can build salary
+/// structures from (e.g. "Basic", "Housing Allowance", "PAYE Tax",
+/// "Pension") — tenant-scoped and editable, same role as FeeCategory on the
+/// finance side.
+model SalaryComponent {
+  id       String              @id @default(cuid())
+  schoolId String
+  school   School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name     String
+  type     SalaryComponentType
+
+  createdAt DateTime @default(now())
+
+  items StaffSalaryItem[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+/// One row per staff member's current pay structure. Editing this only
+/// affects payroll runs generated after the edit — PayrollRun/Payslip
+/// snapshot the amounts at generation time, so an already-generated
+/// payslip never changes retroactively when a structure is edited later.
+model StaffSalaryStructure {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId   String @unique
+  user     User   @relation("StaffSalaryStructure", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items StaffSalaryItem[]
+
+  @@index([schoolId])
+}
+
+model StaffSalaryItem {
+  id          String               @id @default(cuid())
+  structureId String
+  structure   StaffSalaryStructure @relation(fields: [structureId], references: [id], onDelete: Cascade)
+  componentId String
+  component   SalaryComponent      @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  amountMinor Int
+
+  @@unique([structureId, componentId])
+}
+
+enum PayrollRunStatus {
+  DRAFT
+  APPROVED
+  PAID
+}
+
+/// One run per calendar month. DRAFT -> generate/regenerate payslips from
+/// current StaffSalaryStructure rows freely; APPROVED locks that in
+/// (payroll.approve); PAID just records that salaries went out, same
+/// two-step shape as Expense's approve/reject but with a third terminal
+/// state since payroll additionally needs a "money has left the building"
+/// marker that expenses don't.
+model PayrollRun {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  month  Int
+  year   Int
+  status PayrollRunStatus @default(DRAFT)
+
+  createdById  String
+  createdBy    User      @relation("PayrollRunCreatedBy", fields: [createdById], references: [id])
+  approvedById String?
+  approvedBy   User?     @relation("PayrollRunApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  paidAt       DateTime?
+
+  createdAt DateTime @default(now())
+
+  payslips Payslip[]
+
+  @@unique([schoolId, month, year])
+  @@index([schoolId])
+}
+
+/// items is a snapshot ([{ componentName, type, amountMinor }]) of the staff
+/// member's StaffSalaryItem rows at the moment this run was generated —
+/// deliberately not a live relation, so later edits to their salary
+/// structure (or the component catalog) never change an already-generated
+/// payslip.
+model Payslip {
+  id           String     @id @default(cuid())
+  schoolId     String
+  school       School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  payrollRunId String
+  payrollRun   PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User       @relation("Payslips", fields: [userId], references: [id])
+
+  items                Json
+  grossMinor           Int
+  totalDeductionsMinor Int
+  netMinor             Int
+
+  createdAt DateTime @default(now())
+
+  @@unique([payrollRunId, userId])
+  @@index([schoolId])
+  @@index([schoolId, userId])
+}
+
+/// totalCopies is the only stock field stored — availableCopies is derived
+/// (totalCopies minus currently-ISSUED loans) rather than duplicated, so it
+/// can't drift out of sync the way a manually-decremented counter could.
+model Book {
+  id          String  @id @default(cuid())
+  schoolId    String
+  school      School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title       String
+  author      String
+  isbn        String?
+  category    String?
+  totalCopies Int     @default(1)
+
+  createdAt DateTime @default(now())
+
+  loans BookLoan[]
+
+  @@index([schoolId])
+}
+
+enum BookLoanStatus {
+  ISSUED
+  RETURNED
+  LOST
+}
+
+/// Exactly one of borrowerStudentId/borrowerUserId is set — enforced at the
+/// service layer (src/lib/services/library.ts), not the DB, the same way
+/// Expense.vendorId being optional is an application-level choice rather
+/// than a DB-level XOR constraint elsewhere in this schema.
+model BookLoan {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  bookId   String
+  book     Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  borrowerStudentId String?
+  borrowerStudent   Student? @relation(fields: [borrowerStudentId], references: [id])
+  borrowerUserId    String?
+  borrowerUser      User?    @relation("BookBorrower", fields: [borrowerUserId], references: [id])
+
+  issuedById String
+  issuedBy   User   @relation("BookIssuedBy", fields: [issuedById], references: [id])
+
+  issuedAt   DateTime       @default(now())
+  dueAt      DateTime
+  returnedAt DateTime?
+  status     BookLoanStatus @default(ISSUED)
+
+  @@index([schoolId])
+  @@index([schoolId, status])
+  @@index([bookId])
+}
+
+model Vehicle {
+  id          String  @id @default(cuid())
+  schoolId    String
+  school      School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name        String
+  plateNumber String
+  capacity    Int
+  driverName  String?
+  driverPhone String?
+
+  createdAt DateTime @default(now())
+
+  routes TransportRoute[]
+
+  @@unique([schoolId, plateNumber])
+  @@index([schoolId])
+}
+
+model TransportRoute {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name      String
+  vehicleId String?
+  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  stops       RouteStop[]
+  assignments StudentTransportAssignment[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+model RouteStop {
+  id          String         @id @default(cuid())
+  schoolId    String
+  school      School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  routeId     String
+  route       TransportRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  name        String
+  order       Int
+  pickupTime  String?
+  dropoffTime String?
+
+  assignments StudentTransportAssignment[]
+
+  @@index([routeId])
+}
+
+/// One active (endedAt null) assignment per student — enforced at the
+/// service layer (end the existing one before creating a new one) rather
+/// than a DB constraint, the same pattern used for HostelBedAssignment.
+model StudentTransportAssignment {
+  id        String         @id @default(cuid())
+  schoolId  String
+  school    School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  routeId   String
+  route     TransportRoute @relation(fields: [routeId], references: [id])
+  stopId    String?
+  stop      RouteStop?     @relation(fields: [stopId], references: [id])
+
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentId])
+  @@index([routeId])
+}
+
+enum HostelType {
+  MALE
+  FEMALE
+  MIXED
+}
+
+model Hostel {
+  id          String     @id @default(cuid())
+  schoolId    String
+  school      School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name        String
+  type        HostelType
+  wardenName  String?
+  wardenPhone String?
+
+  createdAt DateTime @default(now())
+
+  rooms HostelRoom[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+model HostelRoom {
+  id         String @id @default(cuid())
+  schoolId   String
+  school     School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  hostelId   String
+  hostel     Hostel @relation(fields: [hostelId], references: [id], onDelete: Cascade)
+  roomNumber String
+  capacity   Int
+
+  createdAt DateTime @default(now())
+
+  assignments HostelBedAssignment[]
+
+  @@unique([hostelId, roomNumber])
+  @@index([schoolId])
+}
+
+/// One active (endedAt null) assignment per student — enforced at the
+/// service layer, same pattern as StudentTransportAssignment.
+model HostelBedAssignment {
+  id        String     @id @default(cuid())
+  schoolId  String
+  school    School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  roomId    String
+  room      HostelRoom @relation(fields: [roomId], references: [id])
+
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentId])
+  @@index([roomId])
 }

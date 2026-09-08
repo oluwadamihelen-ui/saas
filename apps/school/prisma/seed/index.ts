@@ -1,7 +1,7 @@
 import "dotenv/config";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
-import { PrismaClient } from "../../src/generated/prisma/client";
+import { PrismaClient, type Prisma } from "../../src/generated/prisma/client";
 import {
   PERMISSION_CATALOG,
   ROLE_DEFAULT_PERMISSIONS,
@@ -121,6 +121,8 @@ async function main() {
     { name: "Amaka Chukwu", email: "teacher2@winfield.demo", role: "TEACHER" },
     { name: "Ibrahim Sule", email: "accountant@winfield.demo", role: "ACCOUNTANT" },
     { name: "Blessing Eze", email: "hr@winfield.demo", role: "HR_STAFF" },
+    { name: "Chidinma Okoro", email: "librarian@winfield.demo", role: "LIBRARIAN" },
+    { name: "Segun Afolabi", email: "transport@winfield.demo", role: "TRANSPORT_MANAGER" },
   ];
   const staffUsers = await Promise.all(
     staffSeeds.map((s) =>
@@ -495,9 +497,196 @@ async function main() {
     });
   }
 
+  console.log("Setting up payroll, library, transport and hostel...");
+
+  const admin = userByEmail.get("admin@winfield.demo")!;
+  const principal = userByEmail.get("principal@winfield.demo")!;
+  const librarian = userByEmail.get("librarian@winfield.demo")!;
+
+  // Payroll — Owner, Librarian and Transport Manager are deliberately left
+  // without a salary structure, so the payroll page's "not configured yet"
+  // state has something real to show.
+  const salaryComponentSeeds: { name: string; type: "EARNING" | "DEDUCTION" }[] = [
+    { name: "Basic Salary", type: "EARNING" },
+    { name: "Housing Allowance", type: "EARNING" },
+    { name: "Transport Allowance", type: "EARNING" },
+    { name: "PAYE Tax", type: "DEDUCTION" },
+    { name: "Pension", type: "DEDUCTION" },
+  ];
+  const salaryComponents = await prisma.salaryComponent.createManyAndReturn({
+    data: salaryComponentSeeds.map((c) => ({ schoolId: school.id, name: c.name, type: c.type })),
+  });
+  const componentByName = new Map(salaryComponents.map((c) => [c.name, c]));
+
+  const salaryStructureSeeds: { user: { id: string }; basic: number; housing: number; transportAllowance: number; tax: number; pension: number }[] = [
+    { user: admin, basic: 25_000_00, housing: 5_000_00, transportAllowance: 3_000_00, tax: 2_000_00, pension: 1_500_00 },
+    { user: principal, basic: 30_000_00, housing: 6_000_00, transportAllowance: 3_500_00, tax: 2_500_00, pension: 1_800_00 },
+    { user: teacher1, basic: 15_000_00, housing: 3_000_00, transportAllowance: 2_000_00, tax: 1_000_00, pension: 900_00 },
+    { user: teacher2, basic: 15_000_00, housing: 3_000_00, transportAllowance: 2_000_00, tax: 1_000_00, pension: 900_00 },
+    { user: accountant, basic: 18_000_00, housing: 3_500_00, transportAllowance: 2_500_00, tax: 1_200_00, pension: 1_080_00 },
+    { user: userByEmail.get("hr@winfield.demo")!, basic: 14_000_00, housing: 2_800_00, transportAllowance: 1_800_00, tax: 900_00, pension: 840_00 },
+  ];
+
+  for (const s of salaryStructureSeeds) {
+    const structure = await prisma.staffSalaryStructure.create({ data: { schoolId: school.id, userId: s.user.id } });
+    await prisma.staffSalaryItem.createMany({
+      data: [
+        { structureId: structure.id, componentId: componentByName.get("Basic Salary")!.id, amountMinor: s.basic },
+        { structureId: structure.id, componentId: componentByName.get("Housing Allowance")!.id, amountMinor: s.housing },
+        { structureId: structure.id, componentId: componentByName.get("Transport Allowance")!.id, amountMinor: s.transportAllowance },
+        { structureId: structure.id, componentId: componentByName.get("PAYE Tax")!.id, amountMinor: s.tax },
+        { structureId: structure.id, componentId: componentByName.get("Pension")!.id, amountMinor: s.pension },
+      ],
+    });
+  }
+
+  /// Mirrors generatePayrollRun in src/lib/services/payroll.ts — duplicated
+  /// here rather than imported because that file is "server-only" and this
+  /// script runs outside Next's server bundle (see backfill-permissions.ts
+  /// for the same constraint).
+  async function seedPayrollRun(month: number, year: number, status: "DRAFT" | "APPROVED" | "PAID") {
+    const run = await prisma.payrollRun.create({
+      data: {
+        schoolId: school.id,
+        month,
+        year,
+        status,
+        createdById: admin.id,
+        approvedById: status !== "DRAFT" ? owner.id : null,
+        approvedAt: status !== "DRAFT" ? new Date() : null,
+        paidAt: status === "PAID" ? new Date() : null,
+      },
+    });
+    const structures = await prisma.staffSalaryStructure.findMany({
+      where: { schoolId: school.id },
+      include: { items: { include: { component: true } } },
+    });
+    await prisma.payslip.createMany({
+      data: structures.map((s) => {
+        const gross = s.items.filter((i) => i.component.type === "EARNING").reduce((sum, i) => sum + i.amountMinor, 0);
+        const deductions = s.items.filter((i) => i.component.type === "DEDUCTION").reduce((sum, i) => sum + i.amountMinor, 0);
+        return {
+          schoolId: school.id,
+          payrollRunId: run.id,
+          userId: s.userId,
+          items: s.items.map((i) => ({ componentName: i.component.name, type: i.component.type, amountMinor: i.amountMinor })) as unknown as Prisma.InputJsonValue,
+          grossMinor: gross,
+          totalDeductionsMinor: deductions,
+          netMinor: gross - deductions,
+        };
+      }),
+    });
+  }
+
+  const lastMonthDate = new Date();
+  lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+  await seedPayrollRun(lastMonthDate.getMonth() + 1, lastMonthDate.getFullYear(), "PAID");
+  const thisMonthDate = new Date();
+  await seedPayrollRun(thisMonthDate.getMonth() + 1, thisMonthDate.getFullYear(), "DRAFT");
+
+  // Library
+  const bookSeeds: { title: string; author: string; category: string; totalCopies: number }[] = [
+    { title: "Things Fall Apart", author: "Chinua Achebe", category: "Fiction", totalCopies: 5 },
+    { title: "Half of a Yellow Sun", author: "Chimamanda Ngozi Adichie", category: "Fiction", totalCopies: 4 },
+    { title: "Concise Oxford English Dictionary", author: "Oxford University Press", category: "Reference", totalCopies: 10 },
+    { title: "Introduction to Mathematics", author: "Ministry of Education", category: "Textbook", totalCopies: 20 },
+    { title: "Basic Science for Primary Schools", author: "Ministry of Education", category: "Textbook", totalCopies: 20 },
+    { title: "Nigerian History for Young Readers", author: "Tunde Fagbenle", category: "History", totalCopies: 6 },
+  ];
+  const seededBooks = await prisma.book.createManyAndReturn({ data: bookSeeds.map((b) => ({ schoolId: school.id, ...b })) });
+
+  for (const [i, student] of enrolledStudents.slice(0, 6).entries()) {
+    const book = seededBooks[i % seededBooks.length];
+    const issuedAt = new Date();
+    issuedAt.setDate(issuedAt.getDate() - (5 + i));
+    const dueAt = new Date(issuedAt);
+    dueAt.setDate(dueAt.getDate() + 14);
+    const alreadyReturned = i % 3 === 0;
+    await prisma.bookLoan.create({
+      data: {
+        schoolId: school.id,
+        bookId: book.id,
+        borrowerStudentId: student.id,
+        issuedById: librarian.id,
+        issuedAt,
+        dueAt,
+        status: alreadyReturned ? "RETURNED" : "ISSUED",
+        returnedAt: alreadyReturned ? new Date() : null,
+      },
+    });
+  }
+  await prisma.bookLoan.create({
+    data: {
+      schoolId: school.id,
+      bookId: seededBooks[0].id,
+      borrowerUserId: teacher1.id,
+      issuedById: librarian.id,
+      dueAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+      status: "ISSUED",
+    },
+  });
+
+  // Transport
+  const vehicle1 = await prisma.vehicle.create({
+    data: { schoolId: school.id, name: "Bus 1", plateNumber: "LND-234-XY", capacity: 30, driverName: "Musa Garba", driverPhone: "+234 802 111 2222" },
+  });
+  const vehicle2 = await prisma.vehicle.create({
+    data: { schoolId: school.id, name: "Bus 2", plateNumber: "LND-567-AB", capacity: 25, driverName: "Peter Okoro", driverPhone: "+234 803 333 4444" },
+  });
+
+  const route1 = await prisma.transportRoute.create({ data: { schoolId: school.id, name: "Route A - Ikeja", vehicleId: vehicle1.id } });
+  const route1Stops = await prisma.routeStop.createManyAndReturn({
+    data: [
+      { schoolId: school.id, routeId: route1.id, name: "Allen Avenue Junction", order: 0, pickupTime: "06:45", dropoffTime: "15:15" },
+      { schoolId: school.id, routeId: route1.id, name: "Opebi Road", order: 1, pickupTime: "06:55", dropoffTime: "15:05" },
+    ],
+  });
+  const route2 = await prisma.transportRoute.create({ data: { schoolId: school.id, name: "Route B - Lekki", vehicleId: vehicle2.id } });
+  const route2Stops = await prisma.routeStop.createManyAndReturn({
+    data: [{ schoolId: school.id, routeId: route2.id, name: "Lekki Phase 1 Gate", order: 0, pickupTime: "06:30", dropoffTime: "15:30" }],
+  });
+
+  for (const [i, student] of enrolledStudents.slice(6, 16).entries()) {
+    const onRouteOne = i % 2 === 0;
+    await prisma.studentTransportAssignment.create({
+      data: {
+        schoolId: school.id,
+        studentId: student.id,
+        routeId: onRouteOne ? route1.id : route2.id,
+        stopId: onRouteOne ? pick(route1Stops).id : pick(route2Stops).id,
+      },
+    });
+  }
+
+  // Hostel
+  const hostel1 = await prisma.hostel.create({
+    data: { schoolId: school.id, name: "Unity Hostel", type: "MALE", wardenName: "Mr. Bassey", wardenPhone: "+234 804 555 6666" },
+  });
+  const hostel2 = await prisma.hostel.create({
+    data: { schoolId: school.id, name: "Grace Hostel", type: "FEMALE", wardenName: "Mrs. Adeyemi", wardenPhone: "+234 805 777 8888" },
+  });
+  const rooms1 = await prisma.hostelRoom.createManyAndReturn({
+    data: [
+      { schoolId: school.id, hostelId: hostel1.id, roomNumber: "A1", capacity: 4 },
+      { schoolId: school.id, hostelId: hostel1.id, roomNumber: "A2", capacity: 4 },
+    ],
+  });
+  const rooms2 = await prisma.hostelRoom.createManyAndReturn({
+    data: [
+      { schoolId: school.id, hostelId: hostel2.id, roomNumber: "B1", capacity: 4 },
+      { schoolId: school.id, hostelId: hostel2.id, roomNumber: "B2", capacity: 4 },
+    ],
+  });
+
+  for (const [i, student] of enrolledStudents.slice(16, 24).entries()) {
+    const rooms = i % 2 === 0 ? rooms1 : rooms2;
+    await prisma.hostelBedAssignment.create({
+      data: { schoolId: school.id, studentId: student.id, roomId: rooms[i % rooms.length].id },
+    });
+  }
+
   console.log("Setting up portal accounts, announcements and messages...");
 
-  const principal = userByEmail.get("principal@winfield.demo")!;
   const PORTAL_PASSWORD_HASH = passwordHash;
 
   const parentUser = await prisma.user.create({

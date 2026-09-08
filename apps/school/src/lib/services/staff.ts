@@ -30,6 +30,18 @@ export async function listStaff(schoolId: string, page = 1) {
   return { staff, total, page: currentPage, pageCount: Math.max(1, Math.ceil(total / STAFF_PAGE_SIZE)) };
 }
 
+/// Unpaginated, for dropdowns (payroll structure assignment, book loan
+/// borrower picker, etc.) rather than the main directory table — a
+/// school's staff count is bounded the same way its class/fee-structure
+/// lists are.
+export async function listAllStaff(schoolId: string) {
+  return prisma.user.findMany({
+    where: { schoolId, role: { key: { notIn: ["PARENT", "STUDENT"] } } },
+    include: { role: true },
+    orderBy: { name: "asc" },
+  });
+}
+
 export async function listPendingInvites(schoolId: string) {
   return prisma.staffInvite.findMany({
     where: { schoolId, status: "PENDING" },
