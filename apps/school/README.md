@@ -7,8 +7,11 @@ onboarded the same way later). This app is being built in phases (see
 [the root README](../../README.md) for the full architecture assessment and
 roadmap); this commit implements **Phase 1 (Foundation)**, **Phase 2
 (Academics)**, **Phase 3 (Finance)**, **Phase 4 (Communication & portals)**,
-**Phase 5 (AI assistant)**, **Phase 6 (Advanced ERP)** and **Phase 7 (SaaS
-billing & platform admin)** — every phase in the original brief:
+**Phase 5 (AI assistant)**, **Phase 6 (Advanced ERP)**, **Phase 7 (SaaS
+billing & platform admin)** — every phase in the original brief — plus a
+new **Administration** module reorganizing the sidebar into nested
+submenus, matching a reference school-management system's information
+architecture, starting with the **Administration** menu group:
 
 **Phase 1 — Foundation**
 - Multi-tenant data model (every tenant-owned table carries `schoolId`)
@@ -149,6 +152,26 @@ billing & platform admin)** — every phase in the original brief:
   from Phase 3's Invoice/Payment, which bills a *student's family* for
   school fees. The two never touch each other
 
+**Administration — nested navigation, admission, calendar, feedback**
+- The sidebar (dashboard, portal and platform, desktop and mobile) now
+  supports arbitrary-depth collapsible groups, not just a flat list —
+  built once as a shared `NavTree` component so every nav surface stays
+  visually and behaviourally consistent
+- User: an **All Users** directory across every role (staff and portal
+  accounts) and a **Reset Password** tool, both gated by `users.manage`
+- Admission: a public, unauthenticated application form at `/apply/[slug]`
+  (share the link with prospective parents — no login required) *and* a
+  staff-facing **Applicants** pipeline
+  (`Applied → Under review → Offered → Accepted/Rejected`), with an
+  optional admission fee (bank-transfer, confirmed by staff) and a **Full
+  Admission Process** action that admits an accepted applicant into a real
+  student record
+- Calendar: school events/activities with an optional class, term and
+  parent/staff notification, and an automatic **archive** of past events —
+  nothing to mark manually
+- Feedback: any signed-in user — staff, parent or student — can submit a
+  suggestion or concern; staff with `feedback.manage` mark it reviewed
+
 ## Stack
 
 Next.js 16 (App Router) · TypeScript · Tailwind CSS v4 · PostgreSQL + Prisma ·
@@ -181,10 +204,13 @@ published announcements (school-wide, staff-only, parents-only and one
 class-scoped), a sample parent↔school conversation, salary structures and
 two payroll runs (one paid, one still draft) for six staff members, a small
 book catalog with a few loans issued, two transport routes with stops and
-assigned students, two hostels with rooms and assigned students, and (Phase
-7) the three default subscription plans plus this school's own subscription
-with two paid platform invoices and one pending — plus these accounts, all
-with password `Passw0rd!23`:
+assigned students, two hostels with rooms and assigned students, (Phase 7)
+the three default subscription plans plus this school's own subscription
+with two paid platform invoices and one pending, and (Administration) a
+configured admission fee with six applicants spanning every pipeline
+stage (including one already admitted into a real student record), a mix
+of upcoming and archived calendar events, and a handful of feedback
+submissions — plus these accounts, all with password `Passw0rd!23`:
 
 | Role | Email |
 |---|---|

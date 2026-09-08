@@ -2,26 +2,19 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { Logo } from "@/components/brand/logo";
+import { NavTree, type NavItem } from "@/components/ui/nav-tree";
 
-export interface NavDrawerItem {
-  href: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  exact?: boolean;
-}
+export type { NavItem };
 
 /// Renders both the mobile hamburger trigger and its slide-out drawer as one
 /// unit so open/close state doesn't need to be lifted into the server-rendered
 /// layout. The drawer uses fixed positioning, so it's safe to mount this
 /// wherever in the tree — it doesn't need to sit inside the (desktop-only,
 /// `hidden md:flex`) sidebar it mirrors.
-export function NavDrawer({ items, homeHref }: { items: NavDrawerItem[]; homeHref: string }) {
+export function NavDrawer({ items, homeHref }: { items: NavItem[]; homeHref: string }) {
   const [open, setOpen] = useState(false);
-  const pathname = usePathname();
 
   useEffect(() => {
     if (!open) return;
@@ -59,25 +52,8 @@ export function NavDrawer({ items, homeHref }: { items: NavDrawerItem[]; homeHre
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-              {items.map((item) => {
-                const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    className={cn(
-                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                      active ? "bg-accent-soft text-accent" : "text-muted hover:bg-muted-surface hover:text-foreground"
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {item.label}
-                  </Link>
-                );
-              })}
+            <nav className="flex-1 overflow-y-auto p-3">
+              <NavTree items={items} onNavigate={() => setOpen(false)} />
             </nav>
           </aside>
         </div>

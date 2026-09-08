@@ -563,9 +563,88 @@ carved out of `SCHOOL_ADMIN`'s `ALL_PERMISSIONS` shortcut the same way
 `students.create`/`roles.manage` are — a school's relationship with the
 platform is more sensitive than its own internal finance module.
 
+## Administration: nested navigation, admission, calendar, feedback
+
+The sidebar moved from a flat list to arbitrary-depth nested groups,
+modelled on a reference school-management system's IA. `NavItem` (`src/components/ui/nav-tree.tsx`)
+is either a leaf (`href`) or a group (`children`, no `href`); `NavTree` renders
+both recursively and is shared, unchanged, by all three sidebars
+(dashboard, portal, platform) and their mobile drawer counterparts via
+`NavDrawer` — one component owns "does this route make the group open,"
+so the desktop and mobile nav can never drift out of sync. A group
+auto-expands if the active route is inside it and otherwise stays exactly
+as the user last toggled it (local `useState<Set<string>>`, not derived
+from the route on every render). Permission filtering happens *before*
+items reach `NavTree`: `filterNav()` in `sidebar.tsx` walks the tree,
+drops any leaf whose `requiredPermission` the user lacks, and drops a
+group once filtering empties out its children — `NavTree` itself has no
+concept of permissions at all, keeping the two concerns separate. As
+before, this is a UX layer only; every route it hides is independently
+enforced server-side by `requirePermission()`.
+
+**Administration** is the first nested group built out, with four
+children: User (enhancements to existing staff management — Reset
+Password and an All-Users directory across every role, portal accounts
+included), Admission, Calendar and Feedback. Seven new permission keys
+(`users.manage`, `admission.view`/`admission.manage`,
+`calendar.view`/`calendar.manage`, `feedback.view`/`feedback.manage`) slot
+into the existing `module.action` scheme; `HR_STAFF` — the role Winfield
+labels "HR / Admin Staff" — picks up the broadest set of them by default,
+matching its purpose.
+
+**Calendar** (`CalendarEvent`) has no `isArchived` flag. Archived is
+computed at query time (`endAt < now()`), the same "derive, don't
+duplicate" choice already used for `Book.availableCopies` — a manual flag
+can drift from reality; a computed one cannot. `sessionId` on an event is
+derived server-side from whichever `termId` was chosen, so the create/edit
+form only exposes one dropdown, not two that could disagree.
+
+**Feedback** is deliberately simple per the brief actually shipped
+(general suggestions, not a complaints/ticket system): free text plus a
+two-state `NEW`/`REVIEWED` status, no assignment or threading. Anyone
+signed in — staff, parent or student — can submit
+(`requireSchoolUser()`, not a `feedback.*` permission, since submitting
+isn't an administrative act); only `feedback.manage` can mark one
+reviewed. One `SubmitFeedbackForm` component is imported across three
+route groups (dashboard, parent portal, student portal) rather than
+duplicated three times.
+
+**Admission** is the most involved of the four, because it was scoped to
+support *both* public online applications and staff-entered ones rather
+than picking one. `Applicant` is deliberately a separate model from
+`Student`, not a `Student` with a draft status — an applicant who is
+rejected, or who never completes the process, should never appear
+anywhere a real enrolled student would (attendance, results, invoices).
+The public, unauthenticated flow lives at `/apply/[slug]` (keyed by the
+school's slug, the same pattern already used for `/pay/[token]` and
+`/portal-invite/[token]`) and reuses that flow's shape closely: a
+`submitApplication()` service call redirects to
+`/apply/[slug]/[applicantId]`, which — if `School.admissionFeeMinor` is
+set — offers a bank-transfer "I've made this transfer" button
+(`markApplicationFeePendingConfirmation`) built on the exact same
+`action.bind(null, id)` + `useActionState` pattern `PayOnlineButton`
+already established, rather than inventing a second one. Staff then
+confirm receipt (`confirmApplicationFeePaid`) from the applicant detail
+page. `admissionFeeMinor` is snapshotted onto the `Applicant` row at
+submission time — a school raising or lowering its fee later must never
+silently rewrite the amount an in-flight applicant already agreed to pay.
+
+The pipeline itself is a small explicit state machine
+(`APPLIED → UNDER_REVIEW → OFFERED → ACCEPTED/REJECTED`) enforced in
+`updateApplicantStatus()`, not left to the UI to get right. "Full
+Admission Process" — converting an `ACCEPTED` applicant into a real
+`Student` — calls `createStudent()`, the exact same function real
+enrollment uses, so admission-number generation and guardian creation
+can't drift between the two paths; the applicant is then stamped
+`ENROLLED` and linked via `Applicant.enrolledStudentId` (a `@unique`
+FK), so a second attempt to admit the same applicant is a guaranteed,
+not just conventional, error.
+
 ## Phased roadmap
 
 Matches the brief exactly: Phase 1 Foundation → Phase 2 Academics → Phase 3
 Finance → Phase 4 Communication/parent & student portals → Phase 5 AI →
 Phase 6 Advanced ERP (payroll/library/transport/hostel) → Phase 7 SaaS
-billing & platform admin (this).
+billing & platform admin → Administration (nested nav, admission, calendar,
+feedback), built out menu-group by menu-group as the reference IA is
+shared.

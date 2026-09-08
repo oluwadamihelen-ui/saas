@@ -778,6 +778,123 @@ async function main() {
     },
   });
 
+  console.log("Setting up administration (calendar, feedback, admission)...");
+
+  await prisma.school.update({ where: { id: school.id }, data: { admissionFeeMinor: 1_500_00 } });
+
+  const calendarEventSeeds: {
+    title: string;
+    description: string;
+    daysFromNow: number;
+    durationHours: number;
+    classArmId?: string;
+    termId?: string;
+    notifyAudience?: "PARENTS" | "STAFF" | "BOTH";
+  }[] = [
+    { title: "Mid-term break", description: "School closed for mid-term break.", daysFromNow: 10, durationHours: 96, notifyAudience: "BOTH" },
+    { title: "PTA meeting", description: "Termly PTA meeting in the school hall.", daysFromNow: 5, durationHours: 2, notifyAudience: "PARENTS" },
+    { title: "Staff development day", description: "In-service training for teaching staff.", daysFromNow: 14, durationHours: 6, notifyAudience: "STAFF" },
+    { title: "Inter-house sports", description: "Annual inter-house sports competition.", daysFromNow: 21, durationHours: 5, notifyAudience: "BOTH" },
+    { title: "Resumption for next term", description: "Students resume for the new term.", daysFromNow: -30, durationHours: 8, notifyAudience: "BOTH" },
+    { title: "First term examinations", description: "End-of-term examinations begin.", daysFromNow: -14, durationHours: 40, termId: currentTerm.id, notifyAudience: "PARENTS" },
+  ];
+  for (const e of calendarEventSeeds) {
+    const startAt = new Date();
+    startAt.setDate(startAt.getDate() + e.daysFromNow);
+    const endAt = new Date(startAt);
+    endAt.setHours(endAt.getHours() + e.durationHours);
+    await prisma.calendarEvent.create({
+      data: {
+        schoolId: school.id,
+        title: e.title,
+        description: e.description,
+        startAt,
+        endAt,
+        classArmId: e.classArmId ?? null,
+        termId: e.termId ?? currentTerm.id,
+        sessionId: session.id,
+        notifyAudience: e.notifyAudience ?? null,
+        createdById: admin.id,
+      },
+    });
+  }
+
+  const feedbackSeeds: { user: { id: string }; message: string; reviewed: boolean }[] = [
+    { user: parentUser, message: "Could the school consider extending the aftercare programme to 6pm? Pickup at 5pm is tight for working parents.", reviewed: true },
+    { user: studentUser, message: "The library could use more storybooks for younger pupils.", reviewed: false },
+    { user: teacher1, message: "Suggestion: a shared supply cupboard for Nursery and Primary 1 classrooms would save time between lessons.", reviewed: false },
+    { user: parentUser, message: "Thank you to the staff for organising the excursion — the children really enjoyed it!", reviewed: true },
+  ];
+  for (const f of feedbackSeeds) {
+    await prisma.feedback.create({
+      data: {
+        schoolId: school.id,
+        submittedById: f.user.id,
+        message: f.message,
+        status: f.reviewed ? "REVIEWED" : "NEW",
+        reviewedById: f.reviewed ? admin.id : null,
+        reviewedAt: f.reviewed ? new Date() : null,
+      },
+    });
+  }
+
+  // Admission pipeline — applicants at every stage, so the "Applicants"
+  // list has something real to filter and the ENROLLED example shows the
+  // Full Admission Process having already run for one of them.
+  const applicantSeeds: {
+    childFirstName: string; childLastName: string; parentName: string; parentEmail: string; parentPhone: string;
+    status: "APPLIED" | "UNDER_REVIEW" | "OFFERED" | "ACCEPTED" | "REJECTED" | "ENROLLED";
+    feeStatus: "UNPAID" | "PENDING_CONFIRMATION" | "PAID";
+    desiredClassGroupId: string;
+  }[] = [
+    { childFirstName: "Chidera", childLastName: "Nnamdi", parentName: "Kene Nnamdi", parentEmail: "kene.nnamdi@example.com", parentPhone: "+234 803 111 2200", status: "APPLIED", feeStatus: "UNPAID", desiredClassGroupId: classGroups[0].id },
+    { childFirstName: "Sarah", childLastName: "Bello", parentName: "Musa Bello", parentEmail: "musa.bello@example.com", parentPhone: "+234 805 222 3300", status: "UNDER_REVIEW", feeStatus: "PENDING_CONFIRMATION", desiredClassGroupId: classGroups[1].id },
+    { childFirstName: "David", childLastName: "Okafor", parentName: "Ijeoma Okafor", parentEmail: "ijeoma.okafor@example.com", parentPhone: "+234 806 333 4400", status: "OFFERED", feeStatus: "PAID", desiredClassGroupId: classGroups[2].id },
+    { childFirstName: "Zara", childLastName: "Aliyu", parentName: "Fatima Aliyu", parentEmail: "fatima.aliyu@example.com", parentPhone: "+234 807 444 5500", status: "ACCEPTED", feeStatus: "PAID", desiredClassGroupId: classGroups[3].id },
+    { childFirstName: "Michael", childLastName: "Eze", parentName: "Grace Eze", parentEmail: "grace.eze@example.com", parentPhone: "+234 808 555 6600", status: "REJECTED", feeStatus: "PAID", desiredClassGroupId: classGroups[4].id },
+  ];
+  for (const a of applicantSeeds) {
+    await prisma.applicant.create({
+      data: {
+        schoolId: school.id,
+        childFirstName: a.childFirstName,
+        childLastName: a.childLastName,
+        gender: Math.random() > 0.5 ? "MALE" : "FEMALE",
+        desiredClassGroupId: a.desiredClassGroupId,
+        parentName: a.parentName,
+        parentEmail: a.parentEmail,
+        parentPhone: a.parentPhone,
+        status: a.status,
+        admissionFeeMinor: 1_500_00,
+        feeStatus: a.feeStatus,
+        feePaidAt: a.feeStatus === "PAID" ? new Date() : null,
+        reviewedById: a.status === "APPLIED" ? null : admin.id,
+      },
+    });
+  }
+  // One already-completed application, linked to a real seeded student, so
+  // the "Enrolled" filter and the applicant detail page's admitted-state
+  // both have a genuine example to show.
+  const admittedStudent = enrolledStudents[enrolledStudents.length - 1];
+  await prisma.applicant.create({
+    data: {
+      schoolId: school.id,
+      childFirstName: "Precious",
+      childLastName: "Adeyemi",
+      gender: "FEMALE",
+      desiredClassGroupId: classGroups[0].id,
+      parentName: "Tolu Adeyemi",
+      parentEmail: "tolu.adeyemi@example.com",
+      parentPhone: "+234 809 666 7700",
+      status: "ENROLLED",
+      admissionFeeMinor: 1_500_00,
+      feeStatus: "PAID",
+      feePaidAt: new Date(),
+      reviewedById: admin.id,
+      enrolledStudentId: admittedStudent.id,
+    },
+  });
+
   console.log("Setting up platform billing (Super Admin, plans, subscription)...");
 
   // Mirrors ensureDefaultPlans()/ensureSuperAdminRole() in

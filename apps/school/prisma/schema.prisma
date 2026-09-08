@@ -52,6 +52,11 @@ model School {
   bankAccountName   String?
   bankAccountNumber String?
 
+  /// Charged on the public admission application form. Null hides the fee
+  /// step entirely rather than showing a placeholder ₦0 — same "unset means
+  /// not configured, not zero" pattern as the bank fields above.
+  admissionFeeMinor Int?
+
   // Onboarding wizard progress (brief section 4). Nullable timestamps double
   // as both a "is this step done" flag and a record of when it happened.
   accountCreatedAt         DateTime  @default(now())
@@ -114,6 +119,10 @@ model School {
 
   subscription     Subscription?
   platformInvoices PlatformInvoice[]
+
+  applicants     Applicant[]
+  calendarEvents CalendarEvent[]
+  feedback       Feedback[]
 
   @@index([status])
 }
@@ -205,6 +214,11 @@ model User {
   /// Set only for the platform Super Admin, marking which platform invoices
   /// they personally confirmed as paid.
   platformInvoicesMarkedPaid PlatformInvoice[] @relation("PlatformInvoiceMarkedPaidBy")
+
+  applicantsReviewed    Applicant[]     @relation("ApplicantReviewedBy")
+  calendarEventsCreated CalendarEvent[] @relation("CalendarEventCreatedBy")
+  feedbackSubmitted     Feedback[]      @relation("FeedbackSubmittedBy")
+  feedbackReviewed      Feedback[]      @relation("FeedbackReviewedBy")
 
   @@index([schoolId])
 }
@@ -299,7 +313,8 @@ model AcademicSession {
 
   createdAt DateTime @default(now())
 
-  terms Term[]
+  terms          Term[]
+  calendarEvents CalendarEvent[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
@@ -325,6 +340,7 @@ model Term {
   reportCards       ReportCard[]
   feeStructures     FeeStructure[]
   invoices          Invoice[]
+  calendarEvents    CalendarEvent[]
 
   @@unique([academicSessionId, name])
   @@index([schoolId])
@@ -357,6 +373,7 @@ model ClassGroup {
 
   arms          ClassArm[]
   feeStructures FeeStructure[]
+  applicants    Applicant[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
@@ -384,6 +401,7 @@ model ClassArm {
   timetableSlots     TimetableSlot[]
   assignments        Assignment[]
   announcements      Announcement[]
+  calendarEvents     CalendarEvent[]
 
   @@unique([classGroupId, name])
   @@index([schoolId])
@@ -477,6 +495,10 @@ model Student {
   bookLoans            BookLoan[]
   transportAssignments StudentTransportAssignment[]
   hostelAssignments    HostelBedAssignment[]
+
+  /// Set only for a student admitted through the Applicant pipeline — the
+  /// opposite side of Applicant.enrolledStudentId.
+  admittedFrom Applicant? @relation("ApplicantEnrolledStudent")
 
   @@unique([schoolId, admissionNumber])
   @@index([schoolId])
@@ -1632,5 +1654,143 @@ model PlatformInvoice {
 
   @@index([schoolId])
   @@index([subscriptionId])
+  @@index([schoolId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Administration: admission pipeline, calendar, feedback
+// ---------------------------------------------------------------------------
+
+enum ApplicantStatus {
+  APPLIED
+  UNDER_REVIEW
+  OFFERED
+  ACCEPTED
+  REJECTED
+  ENROLLED
+}
+
+enum ApplicationFeeStatus {
+  UNPAID
+  PENDING_CONFIRMATION
+  PAID
+}
+
+/// A prospective student, before they exist as a Student row. Reachable two
+/// ways: a public, unauthenticated application form (mirrors the /pay/[token]
+/// and /portal-invite/[token] pattern — no login required) and staff adding
+/// one manually from a paper form or phone call. admissionFeeMinor is
+/// snapshotted from School.admissionFeeMinor at submission time, so a later
+/// fee change never rewrites an in-flight application. "Full admission" is
+/// the ACCEPTED -> ENROLLED transition, which creates the real Student row
+/// and links back here via enrolledStudentId.
+model Applicant {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  childFirstName String
+  childLastName  String
+  dateOfBirth    DateTime?
+  gender         Gender?
+
+  desiredClassGroupId String?
+  desiredClassGroup   ClassGroup? @relation(fields: [desiredClassGroupId], references: [id])
+
+  parentName  String
+  parentEmail String
+  parentPhone String
+  addressLine String?
+
+  status ApplicantStatus @default(APPLIED)
+  notes  String?
+
+  /// Null when the school has no admission fee configured at submission
+  /// time — the application simply has no fee step, not a ₦0 fee.
+  admissionFeeMinor Int?
+  feeStatus         ApplicationFeeStatus @default(UNPAID)
+  feePaidAt         DateTime?
+
+  reviewedById String?
+  reviewedBy   User?   @relation("ApplicantReviewedBy", fields: [reviewedById], references: [id])
+
+  enrolledStudentId String?  @unique
+  enrolledStudent   Student? @relation("ApplicantEnrolledStudent", fields: [enrolledStudentId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([schoolId, status])
+}
+
+/// startAt/endAt drive both display and the "archive" split — an event
+/// with endAt in the past is archived automatically (View Archive), rather
+/// than needing its own manual flag to fall out of sync with reality.
+model CalendarEvent {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  startAt     DateTime
+  endAt       DateTime
+
+  classArmId String?
+  classArm   ClassArm?        @relation(fields: [classArmId], references: [id])
+  termId     String?
+  term       Term?            @relation(fields: [termId], references: [id])
+  sessionId  String?
+  session    AcademicSession? @relation(fields: [sessionId], references: [id])
+
+  /// Schema-level only for now, the same "extensibility without a real
+  /// delivery pipeline yet" precedent as Notification's channel fields —
+  /// nothing sends a reminder off this today.
+  notifyAudience NotifyAudience?
+
+  createdById String
+  createdBy   User   @relation("CalendarEventCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([schoolId, startAt])
+}
+
+enum NotifyAudience {
+  PARENTS
+  STAFF
+  BOTH
+}
+
+enum FeedbackStatus {
+  NEW
+  REVIEWED
+}
+
+/// Any authenticated user — staff or a parent/student portal account — can
+/// submit one. There's no separate "submit feedback" permission because
+/// submitting isn't an administrative action; only the review list is
+/// gated (feedback.view/feedback.manage).
+model Feedback {
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+
+  submittedById String
+  submittedBy   User   @relation("FeedbackSubmittedBy", fields: [submittedById], references: [id])
+
+  message String
+  status  FeedbackStatus @default(NEW)
+
+  reviewedById String?
+  reviewedBy   User?     @relation("FeedbackReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
   @@index([schoolId, status])
 }

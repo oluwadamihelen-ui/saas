@@ -55,6 +55,13 @@ export const PERMISSIONS = {
   HOSTEL_VIEW: "hostel.view",
   HOSTEL_MANAGE: "hostel.manage",
   BILLING_VIEW: "billing.view",
+  USERS_MANAGE: "users.manage",
+  ADMISSION_VIEW: "admission.view",
+  ADMISSION_MANAGE: "admission.manage",
+  CALENDAR_VIEW: "calendar.view",
+  CALENDAR_MANAGE: "calendar.manage",
+  FEEDBACK_VIEW: "feedback.view",
+  FEEDBACK_MANAGE: "feedback.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -106,6 +113,13 @@ export const PERMISSION_CATALOG: { key: PermissionKey; module: string; descripti
   { key: PERMISSIONS.HOSTEL_VIEW, module: "hostel", description: "View hostels, rooms and student room assignments" },
   { key: PERMISSIONS.HOSTEL_MANAGE, module: "hostel", description: "Manage hostels, rooms and student room assignments" },
   { key: PERMISSIONS.BILLING_VIEW, module: "billing", description: "View the school's own platform subscription and billing history" },
+  { key: PERMISSIONS.USERS_MANAGE, module: "administration", description: "View every account on the school (staff and portal) and reset a user's password" },
+  { key: PERMISSIONS.ADMISSION_VIEW, module: "administration", description: "View admission applicants" },
+  { key: PERMISSIONS.ADMISSION_MANAGE, module: "administration", description: "Set the admission fee, process applicants and admit them as students" },
+  { key: PERMISSIONS.CALENDAR_VIEW, module: "administration", description: "View the school calendar" },
+  { key: PERMISSIONS.CALENDAR_MANAGE, module: "administration", description: "Create, edit and remove calendar events" },
+  { key: PERMISSIONS.FEEDBACK_VIEW, module: "administration", description: "View feedback submitted by staff and parents" },
+  { key: PERMISSIONS.FEEDBACK_MANAGE, module: "administration", description: "Mark submitted feedback as reviewed" },
 ];
 
 /// System roles seeded into every new school (brief section 3's role list).
@@ -184,6 +198,8 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.LIBRARY_VIEW,
     PERMISSIONS.TRANSPORT_VIEW,
     PERMISSIONS.HOSTEL_VIEW,
+    PERMISSIONS.CALENDAR_VIEW,
+    PERMISSIONS.ADMISSION_VIEW,
   ],
   TEACHER: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -197,6 +213,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.RESULTS_ENTER,
     PERMISSIONS.ANNOUNCEMENTS_VIEW,
     PERMISSIONS.ASSISTANT_USE,
+    PERMISSIONS.CALENDAR_VIEW,
   ],
   ACCOUNTANT: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -211,6 +228,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.ASSISTANT_USE,
     PERMISSIONS.PAYROLL_VIEW,
     PERMISSIONS.PAYROLL_MANAGE,
+    PERMISSIONS.CALENDAR_VIEW,
   ],
   HR_STAFF: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -223,6 +241,13 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.PAYROLL_MANAGE,
     PERMISSIONS.HOSTEL_VIEW,
     PERMISSIONS.HOSTEL_MANAGE,
+    PERMISSIONS.USERS_MANAGE,
+    PERMISSIONS.ADMISSION_VIEW,
+    PERMISSIONS.ADMISSION_MANAGE,
+    PERMISSIONS.CALENDAR_VIEW,
+    PERMISSIONS.CALENDAR_MANAGE,
+    PERMISSIONS.FEEDBACK_VIEW,
+    PERMISSIONS.FEEDBACK_MANAGE,
   ],
   LIBRARIAN: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -230,6 +255,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.ASSISTANT_USE,
     PERMISSIONS.LIBRARY_VIEW,
     PERMISSIONS.LIBRARY_MANAGE,
+    PERMISSIONS.CALENDAR_VIEW,
   ],
   TRANSPORT_MANAGER: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -237,6 +263,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.ASSISTANT_USE,
     PERMISSIONS.TRANSPORT_VIEW,
     PERMISSIONS.TRANSPORT_MANAGE,
+    PERMISSIONS.CALENDAR_VIEW,
   ],
   PARENT: [],
   STUDENT: [],
