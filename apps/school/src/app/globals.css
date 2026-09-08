@@ -73,3 +73,50 @@ body {
     padding-right: 1.5rem;
   }
 }
+
+/* Marketing homepage: gentle scroll-reveal + hero float, both inert
+   under prefers-reduced-motion. Kept plain-CSS (no JS animation
+   library) — Reveal (src/components/marketing/reveal.tsx) only toggles
+   these two classes. */
+.reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.reveal-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@keyframes gentle-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.animate-float {
+  animation: gentle-float 5s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: gentle-float 5s ease-in-out infinite;
+  animation-delay: 1.2s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .animate-float,
+  .animate-float-delayed {
+    animation: none;
+  }
+}
