@@ -20,6 +20,8 @@ export default async function DashboardPage() {
   const perms = await getUserPermissions(user.id);
   const canViewAttendance = perms.has(PERMISSIONS.ATTENDANCE_VIEW);
   const canViewFinance = perms.has(PERMISSIONS.FINANCE_VIEW);
+  const canEnroll = perms.has(PERMISSIONS.STUDENTS_CREATE);
+  const canUseAssistant = perms.has(PERMISSIONS.ASSISTANT_USE);
   const [stats, attendanceToday, school] = await Promise.all([
     getDashboardStats(user.schoolId),
     canViewAttendance ? getTodayAttendanceSummary(user.schoolId) : Promise.resolve(null),
@@ -38,9 +40,11 @@ export default async function DashboardPage() {
               : "No active academic session"}
           </p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/students/new">Enroll a student</Link>
-        </Button>
+        {canEnroll && (
+          <Button asChild>
+            <Link href="/dashboard/students/new">Enroll a student</Link>
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -64,11 +68,13 @@ export default async function DashboardPage() {
             {stats.recentStudents.length === 0 ? (
               <EmptyState
                 title="No students yet"
-                description="Enroll your first student to see them here."
+                description={canEnroll ? "Enroll your first student to see them here." : "No students enrolled yet."}
                 action={
-                  <Button asChild size="sm">
-                    <Link href="/dashboard/students/new">Enroll a student</Link>
-                  </Button>
+                  canEnroll ? (
+                    <Button asChild size="sm">
+                      <Link href="/dashboard/students/new">Enroll a student</Link>
+                    </Button>
+                  ) : undefined
                 }
               />
             ) : (
@@ -164,11 +170,23 @@ export default async function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-sm">
-                <CalendarClock className="h-4 w-4" /> AI insights
+                <CalendarClock className="h-4 w-4" /> AI Assistant
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <EmptyState title="Coming in Phase 5" description="AI-generated insights need attendance and results data to reason over." />
+              {canUseAssistant ? (
+                <EmptyState
+                  title="Ask about your school"
+                  description="Get answers about students, attendance, results and finance."
+                  action={
+                    <Button asChild size="sm">
+                      <Link href="/dashboard/assistant">Open assistant</Link>
+                    </Button>
+                  }
+                />
+              ) : (
+                <EmptyState title="No access" description="You don't have permission to use the AI assistant." />
+              )}
             </CardContent>
           </Card>
         </div>

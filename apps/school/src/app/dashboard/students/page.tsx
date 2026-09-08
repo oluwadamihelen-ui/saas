@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSchoolUser } from "@/lib/auth/require";
+import { getUserPermissions } from "@/lib/auth/permissions-resolve";
+import { PERMISSIONS } from "@/lib/permissions";
 import { listStudents } from "@/lib/services/students";
 import { listClassArms } from "@/lib/services/academics";
 import type { StudentStatus } from "@/generated/prisma/client";
@@ -24,6 +26,8 @@ export default async function StudentsPage({
   searchParams: Promise<{ q?: string; classArmId?: string; status?: string; page?: string }>;
 }) {
   const user = await requireSchoolUser();
+  const perms = await getUserPermissions(user.id);
+  const canEnroll = perms.has(PERMISSIONS.STUDENTS_CREATE);
   const params = await searchParams;
 
   const [{ students, total, page, pageCount }, classArms] = await Promise.all([
@@ -43,9 +47,11 @@ export default async function StudentsPage({
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Students</h1>
           <p className="text-sm text-muted">{total} student{total === 1 ? "" : "s"}</p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/students/new">Enroll a student</Link>
-        </Button>
+        {canEnroll && (
+          <Button asChild>
+            <Link href="/dashboard/students/new">Enroll a student</Link>
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -81,11 +87,13 @@ export default async function StudentsPage({
             <EmptyState
               icon={<Users className="h-6 w-6" />}
               title="No students found"
-              description="Try a different search, or enroll a new student."
+              description={canEnroll ? "Try a different search, or enroll a new student." : "Try a different search."}
               action={
-                <Button asChild size="sm">
-                  <Link href="/dashboard/students/new">Enroll a student</Link>
-                </Button>
+                canEnroll ? (
+                  <Button asChild size="sm">
+                    <Link href="/dashboard/students/new">Enroll a student</Link>
+                  </Button>
+                ) : undefined
               }
             />
           ) : (

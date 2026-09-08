@@ -1,11 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { requireSchoolUser } from "@/lib/auth/require";
+import { requirePermission } from "@/lib/auth/require";
+import { PERMISSIONS } from "@/lib/permissions";
 import { listClassArms } from "@/lib/services/academics";
 import { StudentForm } from "../student-form";
 import { createStudentAction } from "../actions";
 
 export default async function NewStudentPage() {
-  const user = await requireSchoolUser();
+  const user = await requirePermission(PERMISSIONS.STUDENTS_CREATE);
   const classArms = await listClassArms(user.schoolId);
 
   return (

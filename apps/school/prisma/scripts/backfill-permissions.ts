@@ -4,26 +4,31 @@ import { PERMISSION_CATALOG, ROLE_DEFAULT_PERMISSIONS, SYSTEM_ROLE_KEYS } from "
 
 // Standalone script (not imported from src/lib/school-provisioning.ts, which
 // has `import "server-only"` and throws outside Next's server bundle — same
-// constraint prisma/seed/index.ts already works around) that tops up every
-// existing school's system roles with any default permission added to the
-// catalog since that school was created.
+// constraint prisma/seed/index.ts already works around) that syncs every
+// existing school's system roles to today's ROLE_DEFAULT_PERMISSIONS:
+// granting anything missing, and revoking anything a role's defaults no
+// longer include.
 //
-// Every phase since Phase 1 has occasionally added a new default permission
-// to an existing role (Phase 2 added attendance/timetable, Phase 4 added
-// announcements/messages, Phase 5 added assistant.use, ...), but
 // ROLE_DEFAULT_PERMISSIONS is only ever applied once, at school-creation
-// time. A school provisioned before one of those additions never
-// automatically gains it, so a role that should now see a page throws
-// "Missing permission" instead. This is purely additive — it never removes
-// a grant — which is safe because there's no role-editing UI yet
-// (ARCHITECTURE.md), so there's no intentional customization to clobber.
+// time. Two things have happened since Phase 1: a later phase adding a new
+// default permission to an existing role (Phase 2 added attendance/
+// timetable, Phase 4 added announcements/messages, Phase 5 added
+// assistant.use, ...), and a later phase deliberately narrowing one (e.g.
+// restricting students.create to just SCHOOL_OWNER/PRINCIPAL). Neither
+// retroactively applies to a school that already existed — the first
+// leaves a role short a permission it should have (a "Missing permission"
+// error on a page that role should now reach); the second leaves a role
+// holding a permission it shouldn't have anymore. Syncing in both
+// directions is safe only because there's no role-editing UI yet
+// (ARCHITECTURE.md) — there's no intentional per-school customization this
+// could ever clobber.
 //
 // Run with: npm run db:backfill-permissions
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("Backfilling role permissions...");
+  console.log("Syncing role permissions to current defaults...");
 
   await Promise.all(
     PERMISSION_CATALOG.map((p) =>
@@ -42,32 +47,54 @@ async function main() {
     include: { rolePermissions: true, school: true },
   });
 
-  const missing = roles.flatMap((role) => {
-    const key = role.key as (typeof SYSTEM_ROLE_KEYS)[number];
-    const already = new Set(role.rolePermissions.map((rp) => rp.permissionId));
-    const defaults = ROLE_DEFAULT_PERMISSIONS[key] ?? [];
-    return defaults
-      .map((permKey) => permissionByKey.get(permKey))
-      .filter((id): id is string => id !== undefined && !already.has(id))
-      .map((permissionId) => ({ roleId: role.id, permissionId, schoolName: role.school?.name ?? "?", roleKey: key }));
-  });
+  const toGrant: { roleId: string; permissionId: string; schoolName: string; roleKey: string }[] = [];
+  const toRevoke: { roleId: string; permissionId: string; schoolName: string; roleKey: string }[] = [];
 
-  if (missing.length > 0) {
-    await prisma.rolePermission.createMany({
-      data: missing.map(({ roleId, permissionId }) => ({ roleId, permissionId })),
-      skipDuplicates: true,
-    });
-    const bySchool = new Map<string, Set<string>>();
-    for (const m of missing) {
-      if (!bySchool.has(m.schoolName)) bySchool.set(m.schoolName, new Set());
-      bySchool.get(m.schoolName)!.add(m.roleKey);
+  for (const role of roles) {
+    const key = role.key as (typeof SYSTEM_ROLE_KEYS)[number];
+    const schoolName = role.school?.name ?? "?";
+    const defaultIds = new Set(
+      (ROLE_DEFAULT_PERMISSIONS[key] ?? []).map((permKey) => permissionByKey.get(permKey)).filter((id): id is string => id !== undefined)
+    );
+    const currentIds = new Set(role.rolePermissions.map((rp) => rp.permissionId));
+
+    for (const id of defaultIds) {
+      if (!currentIds.has(id)) toGrant.push({ roleId: role.id, permissionId: id, schoolName, roleKey: key });
     }
-    for (const [school, roleKeys] of bySchool) {
-      console.log(`  ${school}: granted new permissions to ${[...roleKeys].join(", ")}`);
+    for (const id of currentIds) {
+      if (!defaultIds.has(id)) toRevoke.push({ roleId: role.id, permissionId: id, schoolName, roleKey: key });
     }
   }
 
-  console.log(`\nChecked ${roles.length} role(s) across all schools, granted ${missing.length} missing permission(s).`);
+  if (toGrant.length > 0) {
+    await prisma.rolePermission.createMany({
+      data: toGrant.map(({ roleId, permissionId }) => ({ roleId, permissionId })),
+      skipDuplicates: true,
+    });
+  }
+  for (const r of toRevoke) {
+    await prisma.rolePermission.delete({ where: { roleId_permissionId: { roleId: r.roleId, permissionId: r.permissionId } } });
+  }
+
+  const summarize = (changes: { schoolName: string; roleKey: string }[]) => {
+    const bySchool = new Map<string, Set<string>>();
+    for (const c of changes) {
+      if (!bySchool.has(c.schoolName)) bySchool.set(c.schoolName, new Set());
+      bySchool.get(c.schoolName)!.add(c.roleKey);
+    }
+    return bySchool;
+  };
+
+  for (const [school, roleKeys] of summarize(toGrant)) {
+    console.log(`  ${school}: granted new permissions to ${[...roleKeys].join(", ")}`);
+  }
+  for (const [school, roleKeys] of summarize(toRevoke)) {
+    console.log(`  ${school}: revoked outdated permissions from ${[...roleKeys].join(", ")}`);
+  }
+
+  console.log(
+    `\nChecked ${roles.length} role(s) across all schools — granted ${toGrant.length}, revoked ${toRevoke.length}.`
+  );
 }
 
 main()

@@ -104,6 +104,29 @@ nothing in Phase 1's UI creates or uses such a user yet.
   of, not instead of, the page-level check: a crafted direct request to a
   hidden URL still gets a proper 500 from `requirePermission`, same as
   before.
+- **Enrolling a student (`students.create`) is deliberately restricted to
+  `SCHOOL_OWNER` and `PRINCIPAL` ("Head of School" — the role key stays
+  `PRINCIPAL` in code/data; only its display label changed) — not even
+  `SCHOOL_ADMIN` gets it by default.** `SCHOOL_ADMIN`'s permission set is
+  otherwise "everything except `roles.manage`"
+  (`ALL_PERMISSIONS.filter(...)` in `src/lib/permissions.ts`), so this is
+  the one deliberate carve-out from that shortcut, not a separately
+  maintained list. `/dashboard/students/new` gates on `students.create`
+  (it previously only checked the user was signed in, relying on the
+  Server Action alone — the same page-vs-action gap `attendance`/`results`
+  had); the "Enroll a student" button/links on the students list and main
+  dashboard are hidden without it, matching the sidebar's permission-aware
+  pattern above.
+- **`prisma/scripts/backfill-permissions.ts` syncs in both directions, not
+  just additively.** It originally only granted permissions a role's
+  current defaults included but the database didn't (see "Enforcement is
+  server-side only" history above); restricting `students.create` away
+  from `SCHOOL_ADMIN` needed the reverse too — revoking a permission a
+  role used to default to but no longer does — so the script now diffs a
+  role's current grants against `ROLE_DEFAULT_PERMISSIONS` and both grants
+  what's missing and revokes what's no longer there. Still safe for the
+  same reason as before: no role-editing UI exists yet, so there's no
+  intentional per-school customization to lose.
 
 ## Data model
 

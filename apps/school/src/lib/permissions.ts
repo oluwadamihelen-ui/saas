@@ -110,7 +110,7 @@ export type SystemRoleKey = (typeof SYSTEM_ROLE_KEYS)[number];
 export const SYSTEM_ROLE_LABELS: Record<SystemRoleKey, string> = {
   SCHOOL_OWNER: "School Owner",
   SCHOOL_ADMIN: "School Administrator",
-  PRINCIPAL: "Principal / Head Teacher",
+  PRINCIPAL: "Head of School",
   TEACHER: "Teacher",
   ACCOUNTANT: "Accountant / Bursar",
   HR_STAFF: "HR / Admin Staff",
@@ -122,12 +122,17 @@ export const SYSTEM_ROLE_LABELS: Record<SystemRoleKey, string> = {
 
 const ALL_PERMISSIONS = PERMISSION_CATALOG.map((p) => p.key);
 
+/// Enrolling a student (students.create) is deliberately restricted to
+/// SCHOOL_OWNER and PRINCIPAL ("Head of School") only — not even
+/// SCHOOL_ADMIN gets it by default, so the ALL_PERMISSIONS shortcut below
+/// explicitly carves it out alongside ROLES_MANAGE.
 export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = {
   SCHOOL_OWNER: ALL_PERMISSIONS,
-  SCHOOL_ADMIN: ALL_PERMISSIONS.filter((p) => p !== PERMISSIONS.ROLES_MANAGE),
+  SCHOOL_ADMIN: ALL_PERMISSIONS.filter((p) => p !== PERMISSIONS.ROLES_MANAGE && p !== PERMISSIONS.STUDENTS_CREATE),
   PRINCIPAL: [
     PERMISSIONS.DASHBOARD_VIEW,
     PERMISSIONS.STUDENTS_VIEW,
+    PERMISSIONS.STUDENTS_CREATE,
     PERMISSIONS.STUDENTS_EDIT,
     PERMISSIONS.GUARDIANS_MANAGE,
     PERMISSIONS.STAFF_VIEW,

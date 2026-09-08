@@ -152,7 +152,7 @@ accounts, all with password `Passw0rd!23`:
 |---|---|
 | School Owner | owner@winfield.demo |
 | School Administrator | admin@winfield.demo |
-| Principal | principal@winfield.demo |
+| Head of School | principal@winfield.demo |
 | Teacher | teacher1@winfield.demo / teacher2@winfield.demo |
 | Accountant | accountant@winfield.demo |
 | HR Staff | hr@winfield.demo |
