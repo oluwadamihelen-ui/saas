@@ -13,7 +13,7 @@ export type { NavItem };
 /// layout. The drawer uses fixed positioning, so it's safe to mount this
 /// wherever in the tree — it doesn't need to sit inside the (desktop-only,
 /// `hidden md:flex`) sidebar it mirrors.
-export function NavDrawer({ items, homeHref }: { items: NavItem[]; homeHref: string }) {
+export function NavDrawer({ items, homeHref, logo }: { items: NavItem[]; homeHref: string; logo?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -41,7 +41,7 @@ export function NavDrawer({ items, homeHref }: { items: NavItem[]; homeHref: str
           <aside className="fixed inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-border bg-surface shadow-xl">
             <div className="flex h-16 items-center justify-between border-b border-border px-4">
               <Link href={homeHref} onClick={() => setOpen(false)}>
-                <Logo height={24} />
+                {logo ?? <Logo height={24} />}
               </Link>
               <button
                 type="button"

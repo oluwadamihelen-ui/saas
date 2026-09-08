@@ -640,11 +640,98 @@ can't drift between the two paths; the applicant is then stamped
 FK), so a second attempt to admit the same applicant is a guaranteed,
 not just conventional, error.
 
+## Multi-provider payments & portal branding
+
+Two related, separately-toggleable capabilities: schools bring their own
+online payment gateway (instead of the platform running one shared
+gateway for everyone), and schools can make their dashboard/portal/public
+pages look like their own school rather than Winfield's demo styling.
+
+**Why per-school gateway credentials, not a platform-wide `PAYMENT_PROVIDER`
+env var.** The brief change here is a real shift: the original Phase 3
+design had one process-wide payment provider (`PAYMENT_PROVIDER=mock`,
+selected once for the whole deployment) that every school's invoices ran
+through. That doesn't fit a real SaaS — each school has its *own*
+merchant relationship with Paystack/Flutterwave/Korapay and needs the
+money to land in *their* account, not a shared platform account. So
+`getPaymentProvider()` is gone; `resolvePaymentProvider(schoolId)` in
+`src/lib/payments/registry.ts` replaces it, reading
+`School.activePaymentProvider` and that school's own
+`PaymentGatewayCredential` row. A school with nothing connected still
+gets a fully working "Pay online" button — it transparently falls back
+to the same built-in mock/simulated gateway Phase 3 always had — so
+connecting a real gateway is purely additive, never a precondition for
+the rest of the app to work (matches the AI assistant's "no key set,
+say so plainly" philosophy from Phase 5, just phrased as a fallback
+instead of a blocked feature).
+
+**Secrets are encrypted at rest, never displayed again.** A gateway's
+secret API key is encrypted (`src/lib/crypto.ts`, AES-256-GCM, key
+derived from `PAYMENT_KEYS_SECRET`, falling back to `AUTH_SECRET` so
+local dev needs no extra setup) before it touches the database — the
+public key is stored in the clear, since gateways treat it as safe to
+expose client-side anyway. The settings form never re-populates a saved
+secret key field; leaving it blank on an update keeps the existing one,
+the same "don't re-ask for what you already have" pattern a real
+payment dashboard uses. `payment_gateways.manage` is owner-only,
+carved out of `SCHOOL_ADMIN`'s `ALL_PERMISSIONS` shortcut the same way
+`billing.view` is — these are live keys that redirect where a school's
+money goes, at least as sensitive as its platform billing relationship.
+
+**One `Payment.provider` field turns "was this real or simulated" into a
+stored fact, not an inference.** Set when a payment is initiated (from
+whatever `resolvePaymentProvider` resolved *at that moment*), it's what
+the confirm page branches on — a real gateway has already charged (or
+declined) the card by the time the payer is redirected back, so that
+page calls `provider.verify()` server-side and shows the outcome
+immediately; the mock gateway has nothing to verify against, so it keeps
+Phase 3's original "click to simulate paying" button. Critically,
+confirming a payment re-resolves credentials by the specific provider
+*that payment* recorded, not whatever the school's active provider
+happens to be *now* — so a school switching gateways mid-flight can
+never strand an in-progress payment. The same reference-based,
+verify-before-trust design is mirrored for the admission application fee
+(`Applicant.feePaymentReference`/`feePaymentProvider`), which has no
+`Invoice` to hang a `Payment` row off, so it tracks the same two fields
+directly on `Applicant` instead of joining through one. Webhook
+endpoints (`/api/webhooks/{paystack,flutterwave,korapay}`) exist as a
+defense-in-depth confirmation path — each verifies the gateway's own
+signature scheme (HMAC-over-body for Paystack/Korapay,
+a shared secret-hash comparison for Flutterwave, which doesn't sign the
+body at all) before calling the same idempotent confirm functions the
+redirect-based flow uses, so a webhook arriving before, after, or
+instead of the payer's redirect is never a double-charge risk.
+
+**Branding reuses the CSS custom properties already there, never a
+per-school Tailwind rebuild.** `--accent`/`--accent-soft`/
+`--accent-foreground` already drive every button, badge, link and active
+nav state in `globals.css`; `src/components/brand/brand-style.tsx`
+recomputes those three values from one school-chosen hex
+(`src/lib/color.ts` — a soft tint mixed toward white, and a black-or-white
+foreground picked by WCAG relative luminance so an arbitrary brand color
+never picks an unreadable text color) and overrides them with an inline
+`<style>` tag mounted once per school-facing layout. Nothing below that
+layout needs to know branding exists. It's deliberately scoped to
+tenant-facing surfaces only — dashboard, parent/student portal, and the
+public `/apply/[slug]` and `/pay/[token]` pages (each via its own nested
+layout, since those routes need the school resolved from a slug/token
+before they can brand anything) — never the login/register/onboarding
+pages or `/platform`, which are Winfield's own product chrome, not any
+one school's. `<SchoolLogo>` is `<Logo>`'s tenant-branded counterpart:
+an uploaded image if `School.logoUrl` is set, otherwise a lettermark
+generated from the school's own name/initial (never "Winfield") — so an
+unbranded school still looks like itself. There's no object storage
+(S3/Cloudinary) in this app, so an uploaded logo is stored as a `data:`
+URL directly on `School.logoUrl` (capped at 2MB, validated to an image
+MIME type in `src/lib/logo-upload.ts`) — simpler than standing up file
+storage for a small crest image, and just as durable as a file on disk
+would be in this single-instance deployment.
+
 ## Phased roadmap
 
 Matches the brief exactly: Phase 1 Foundation → Phase 2 Academics → Phase 3
 Finance → Phase 4 Communication/parent & student portals → Phase 5 AI →
 Phase 6 Advanced ERP (payroll/library/transport/hostel) → Phase 7 SaaS
 billing & platform admin → Administration (nested nav, admission, calendar,
-feedback), built out menu-group by menu-group as the reference IA is
-shared.
+feedback) → multi-provider payments & portal branding, each landing as the
+brief's own priorities evolved.

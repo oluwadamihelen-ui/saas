@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Logo } from "@/components/brand/logo";
 import { getSchoolBySlug } from "@/lib/services/admission";
 import { listClassGroups } from "@/lib/services/academics";
 import { formatMoney } from "@/lib/money";
@@ -15,9 +14,6 @@ export default async function ApplyPage({ params }: { params: Promise<{ slug: st
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <Logo height={28} />
-      </div>
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">{school.name} — Admission Application</h1>
         <p className="text-sm text-muted">Tell us about your child to begin the admission process.</p>

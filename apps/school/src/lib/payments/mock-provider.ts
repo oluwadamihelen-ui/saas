@@ -16,8 +16,14 @@ export const mockPaymentProvider: PaymentProvider = {
 
   async verify(reference) {
     const payment = await prisma.payment.findUnique({ where: { reference } });
-    if (!payment) return { status: "failed", amountMinor: 0 };
-    const status = payment.status === "CONFIRMED" ? "success" : payment.status === "FAILED" ? "failed" : "pending";
-    return { status, amountMinor: payment.amountMinor };
+    if (payment) {
+      const status = payment.status === "CONFIRMED" ? "success" : payment.status === "FAILED" ? "failed" : "pending";
+      return { status, amountMinor: payment.amountMinor };
+    }
+    // No matching Payment row — this is an admission application fee
+    // (tracked on Applicant, not Payment). The mock has nothing to read
+    // back from there, so it reports success outright, same as clicking
+    // "Confirm" does for an invoice.
+    return { status: "success", amountMinor: 0 };
   },
 };

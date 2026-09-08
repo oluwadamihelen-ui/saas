@@ -1,6 +1,8 @@
 import "server-only";
+import crypto from "crypto";
 import { prisma } from "@/lib/db";
 import { createStudent } from "@/lib/services/students";
+import { resolvePaymentProvider, resolveCredentialedProvider } from "@/lib/payments/registry";
 import type { Gender, Prisma, ApplicantStatus } from "@/generated/prisma/client";
 
 export async function getAdmissionFee(schoolId: string) {
@@ -18,6 +20,7 @@ export async function getSchoolBySlug(slug: string) {
       name: true,
       slug: true,
       logoUrl: true,
+      brandColor: true,
       currency: true,
       admissionFeeMinor: true,
       bankName: true,
@@ -151,6 +154,51 @@ export async function confirmApplicationFeePaid(schoolId: string, id: string) {
   const applicant = await prisma.applicant.findFirst({ where: { id, schoolId } });
   if (!applicant) throw new Error("Application not found.");
   return prisma.applicant.update({ where: { id }, data: { feeStatus: "PAID", feePaidAt: new Date() } });
+}
+
+/// The applicant's "Pay online" alternative to the bank-transfer flow
+/// above — same gateway-resolution and reference pattern as an invoice's
+/// initiateOnlinePayment, just keyed by Applicant instead of Payment
+/// (there's no Invoice for an admission fee to hang a Payment row off).
+export async function initiateApplicationFeePayment(schoolId: string, id: string, callbackUrl: string) {
+  const applicant = await prisma.applicant.findFirst({ where: { id, schoolId } });
+  if (!applicant) throw new Error("Application not found.");
+  if (!applicant.admissionFeeMinor) throw new Error("No admission fee is required for this application.");
+  if (applicant.feeStatus !== "UNPAID") throw new Error("This fee isn't awaiting payment.");
+
+  const school = await prisma.school.findUniqueOrThrow({ where: { id: schoolId }, select: { currency: true } });
+  const { provider, providerName, credentials } = await resolvePaymentProvider(schoolId);
+
+  const reference = crypto.randomBytes(12).toString("hex");
+  await prisma.applicant.update({
+    where: { id },
+    data: { feePaymentReference: reference, feePaymentProvider: providerName },
+  });
+
+  const { authorizationUrl } = await provider.initialize(
+    { amountMinor: applicant.admissionFeeMinor, currency: school.currency, reference, callbackUrl, payerEmail: applicant.parentEmail },
+    credentials
+  );
+  return { authorizationUrl, reference };
+}
+
+/// Mirrors confirmOnlinePayment: the mock gateway trusts the redirect
+/// (nothing to verify against for an Applicant), a real gateway is
+/// verified server-side against its own API before marking the fee PAID.
+export async function confirmApplicationFeeOnlinePayment(reference: string) {
+  const applicant = await prisma.applicant.findUnique({ where: { feePaymentReference: reference } });
+  if (!applicant) throw new Error("Application not found.");
+  if (applicant.feeStatus !== "UNPAID") return applicant;
+
+  if (applicant.feePaymentProvider) {
+    const resolved = await resolveCredentialedProvider(applicant.schoolId, applicant.feePaymentProvider);
+    if (!resolved) throw new Error("This school's payment gateway is no longer connected — contact the school to confirm your payment.");
+
+    const result = await resolved.provider.verify(reference, resolved.credentials);
+    if (result.status !== "success") return applicant;
+  }
+
+  return prisma.applicant.update({ where: { id: applicant.id }, data: { feeStatus: "PAID", feePaidAt: new Date() } });
 }
 
 /// "Full Admission Process": creates the real Student row (reusing the

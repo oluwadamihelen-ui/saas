@@ -62,6 +62,7 @@ export const PERMISSIONS = {
   CALENDAR_MANAGE: "calendar.manage",
   FEEDBACK_VIEW: "feedback.view",
   FEEDBACK_MANAGE: "feedback.manage",
+  PAYMENT_GATEWAYS_MANAGE: "payment_gateways.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -120,6 +121,7 @@ export const PERMISSION_CATALOG: { key: PermissionKey; module: string; descripti
   { key: PERMISSIONS.CALENDAR_MANAGE, module: "administration", description: "Create, edit and remove calendar events" },
   { key: PERMISSIONS.FEEDBACK_VIEW, module: "administration", description: "View feedback submitted by staff and parents" },
   { key: PERMISSIONS.FEEDBACK_MANAGE, module: "administration", description: "Mark submitted feedback as reviewed" },
+  { key: PERMISSIONS.PAYMENT_GATEWAYS_MANAGE, module: "finance", description: "Connect and manage the school's own online payment gateway credentials" },
 ];
 
 /// System roles seeded into every new school (brief section 3's role list).
@@ -161,11 +163,18 @@ const ALL_PERMISSIONS = PERMISSION_CATALOG.map((p) => p.key);
 /// SCHOOL_ADMIN gets it by default, so the ALL_PERMISSIONS shortcut below
 /// explicitly carves it out alongside ROLES_MANAGE. billing.view is
 /// carved out the same way — the school's relationship with the platform
-/// (plan, invoices) is owner-only, not even school-admin-visible by default.
+/// (plan, invoices) is owner-only, not even school-admin-visible by
+/// default. payment_gateways.manage gets the same owner-only treatment:
+/// these are live secret API keys that can redirect where the school's
+/// money goes, at least as sensitive as the billing relationship.
 export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = {
   SCHOOL_OWNER: ALL_PERMISSIONS,
   SCHOOL_ADMIN: ALL_PERMISSIONS.filter(
-    (p) => p !== PERMISSIONS.ROLES_MANAGE && p !== PERMISSIONS.STUDENTS_CREATE && p !== PERMISSIONS.BILLING_VIEW
+    (p) =>
+      p !== PERMISSIONS.ROLES_MANAGE &&
+      p !== PERMISSIONS.STUDENTS_CREATE &&
+      p !== PERMISSIONS.BILLING_VIEW &&
+      p !== PERMISSIONS.PAYMENT_GATEWAYS_MANAGE
   ),
   PRINCIPAL: [
     PERMISSIONS.DASHBOARD_VIEW,

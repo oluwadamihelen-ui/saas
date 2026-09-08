@@ -895,6 +895,39 @@ async function main() {
     },
   });
 
+  console.log("Setting up branding and a sample connected payment gateway...");
+
+  // A visibly different color than globals.css's default Winfield blue,
+  // so the branding feature is obviously live rather than a no-op.
+  await prisma.school.update({ where: { id: school.id }, data: { brandColor: "#0f766e" } });
+
+  // Mirrors encryptSecret() in src/lib/crypto.ts — duplicated here for the
+  // same import "server-only" reason as everything else in this script
+  // (confirmed: that import throws under tsx, not just under webpack).
+  function seedEncryptSecret(plainText: string): string {
+    const secret = process.env.PAYMENT_KEYS_SECRET || process.env.AUTH_SECRET || "insecure-dev-only-seed-key";
+    const key = crypto.createHash("sha256").update(secret).digest();
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+    const encrypted = Buffer.concat([cipher.update(plainText, "utf8"), cipher.final()]);
+    const authTag = cipher.getAuthTag();
+    return [iv.toString("hex"), authTag.toString("hex"), encrypted.toString("hex")].join(":");
+  }
+
+  // A connected-but-not-active example, so Settings has something real to
+  // show — School.activePaymentProvider is deliberately left null, so
+  // "Pay online" keeps using the safe simulated gateway rather than
+  // trying (and failing) to call Paystack with a fake demo key.
+  await prisma.paymentGatewayCredential.create({
+    data: {
+      schoolId: school.id,
+      provider: "PAYSTACK",
+      publicKey: "pk_test_demo_00000000000000000000000000",
+      secretKeyEnc: seedEncryptSecret("sk_test_demo_00000000000000000000000000"),
+      isEnabled: true,
+    },
+  });
+
   console.log("Setting up platform billing (Super Admin, plans, subscription)...");
 
   // Mirrors ensureDefaultPlans()/ensureSuperAdminRole() in

@@ -28,7 +28,7 @@ import {
   MessageCircle,
   Archive,
 } from "lucide-react";
-import { Logo } from "@/components/brand/logo";
+import { SchoolLogo } from "@/components/brand/school-logo";
 import { PERMISSIONS, type PermissionKey } from "@/lib/permissions";
 import { NavDrawer } from "@/components/ui/nav-drawer";
 import { NavTree, type NavItem } from "@/components/ui/nav-tree";
@@ -127,17 +127,23 @@ function visibleNavFor(perms: string[]): NavItem[] {
 /// aside) so the trigger button and drawer are visible below the md
 /// breakpoint. Shares the same permission-filtered nav tree as the desktop
 /// sidebar.
-export function DashboardMobileNav({ perms }: { perms: string[] }) {
-  return <NavDrawer items={visibleNavFor(perms)} homeHref="/dashboard" />;
+export function DashboardMobileNav({ perms, school }: { perms: string[]; school: { name: string; logoUrl: string | null } }) {
+  return (
+    <NavDrawer
+      items={visibleNavFor(perms)}
+      homeHref="/dashboard"
+      logo={<SchoolLogo name={school.name} logoUrl={school.logoUrl} height={24} />}
+    />
+  );
 }
 
-export function Sidebar({ perms }: { perms: string[] }) {
+export function Sidebar({ perms, school }: { perms: string[]; school: { name: string; logoUrl: string | null } }) {
   const visibleNav = visibleNavFor(perms);
 
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-surface md:flex">
       <div className="flex h-16 items-center border-b border-border px-6">
-        <Link href="/dashboard"><Logo height={26} /></Link>
+        <Link href="/dashboard"><SchoolLogo name={school.name} logoUrl={school.logoUrl} height={26} /></Link>
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
         <NavTree items={visibleNav} />

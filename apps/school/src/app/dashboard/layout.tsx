@@ -6,6 +6,7 @@ import { getSchool, nextOnboardingStep } from "@/lib/services/school";
 import { listNotifications, unreadNotificationCount } from "@/lib/services/notifications";
 import { Sidebar, DashboardMobileNav } from "@/components/dashboard/sidebar";
 import { DashboardTopbar } from "@/components/dashboard/topbar";
+import { BrandStyle } from "@/components/brand/brand-style";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   // Checked before requireSchoolUser(), which would otherwise throw for a
@@ -36,7 +37,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar perms={[...perms]} />
+      <BrandStyle color={school.brandColor} />
+      <Sidebar perms={[...perms]} school={{ name: school.name, logoUrl: school.logoUrl }} />
       <div className="flex min-w-0 flex-1 flex-col">
         <DashboardTopbar
           name={user.name}
@@ -44,7 +46,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           roleName={user.role.name}
           notifications={notifications}
           unreadCount={unreadCount}
-          mobileNav={<DashboardMobileNav perms={[...perms]} />}
+          mobileNav={<DashboardMobileNav perms={[...perms]} school={{ name: school.name, logoUrl: school.logoUrl }} />}
         />
         <main className="container-shell min-w-0 flex-1 py-6 sm:py-8">{children}</main>
       </div>

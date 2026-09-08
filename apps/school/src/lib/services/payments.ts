@@ -1,9 +1,23 @@
 import "server-only";
 import crypto from "crypto";
 import { prisma } from "@/lib/db";
-import { getPaymentProvider } from "@/lib/payments/registry";
+import { resolvePaymentProvider, resolveCredentialedProvider } from "@/lib/payments/registry";
 import { recalculateInvoiceStatus, invoiceBalanceMinor } from "@/lib/services/invoices";
 import { notifyPaymentConfirmed } from "@/lib/services/notifications";
+
+/// Real gateways need an email address for their hosted checkout — prefers
+/// the student's primary guardian, then any guardian on file, then falls
+/// back to the school's own contact address rather than failing outright
+/// (the mock gateway never looks at this, so it's only exercised once a
+/// school connects a real one).
+async function resolveInvoicePayerEmail(studentId: string, schoolEmail: string | null): Promise<string> {
+  const link = await prisma.studentGuardian.findFirst({
+    where: { studentId, guardian: { email: { not: null } } },
+    orderBy: { isPrimary: "desc" },
+    include: { guardian: true },
+  });
+  return link?.guardian.email || schoolEmail || "payer@no-email.invalid";
+}
 
 /// Staff directly recording a payment they already have evidence of
 /// (cash in hand, a bank alert) — confirmed immediately, no gateway
@@ -59,7 +73,11 @@ export async function notifyBankTransfer(payToken: string) {
 }
 
 /// The payer has clicked "Pay online" — creates a PENDING payment and asks
-/// the configured provider (mock by default) where to send them next.
+/// whichever gateway this school has connected and activated (or, absent
+/// that, the built-in mock/simulated gateway) where to send them next.
+/// Which provider answered is recorded on the payment itself, so
+/// confirmation later re-resolves the *same* gateway even if the school
+/// switches its active one in the meantime.
 export async function initiateOnlinePayment(payToken: string, callbackUrl: string) {
   const invoice = await prisma.invoice.findUnique({ where: { payToken }, include: { payments: true, school: true } });
   if (!invoice) throw new Error("Invoice not found");
@@ -67,27 +85,50 @@ export async function initiateOnlinePayment(payToken: string, callbackUrl: strin
   const balance = invoiceBalanceMinor(invoice);
   if (balance <= 0) throw new Error("This invoice is already fully paid.");
 
+  const { provider, providerName, credentials } = await resolvePaymentProvider(invoice.schoolId);
+  const payerEmail = await resolveInvoicePayerEmail(invoice.studentId, invoice.school.email);
+
   const reference = crypto.randomBytes(12).toString("hex");
   await prisma.payment.create({
-    data: { schoolId: invoice.schoolId, invoiceId: invoice.id, amountMinor: balance, method: "ONLINE", status: "PENDING", reference },
+    data: {
+      schoolId: invoice.schoolId,
+      invoiceId: invoice.id,
+      amountMinor: balance,
+      method: "ONLINE",
+      status: "PENDING",
+      reference,
+      provider: providerName,
+    },
   });
 
-  const provider = getPaymentProvider();
-  const { authorizationUrl } = await provider.initialize({
-    amountMinor: balance,
-    currency: invoice.school.currency,
-    reference,
-    callbackUrl,
-  });
+  const { authorizationUrl } = await provider.initialize(
+    { amountMinor: balance, currency: invoice.school.currency, reference, callbackUrl, payerEmail },
+    credentials
+  );
   return { authorizationUrl, reference };
 }
 
-/// Called from the (mock) provider's confirmation page — marks the
-/// PENDING online payment CONFIRMED and recalculates the invoice.
+/// Called from the pay confirmation page once the payer lands back from
+/// checkout. For the mock gateway (provider: null) this trusts the click,
+/// same simulated round trip as before; for a real gateway it verifies
+/// server-side against that gateway's own API first — never trusting the
+/// redirect alone — before marking the payment CONFIRMED.
 export async function confirmOnlinePayment(reference: string) {
   const payment = await prisma.payment.findUnique({ where: { reference } });
   if (!payment || payment.method !== "ONLINE") throw new Error("Payment not found");
   if (payment.status !== "PENDING") return payment;
+
+  if (payment.provider) {
+    const resolved = await resolveCredentialedProvider(payment.schoolId, payment.provider);
+    if (!resolved) throw new Error("This school's payment gateway is no longer connected — contact the school to confirm your payment.");
+
+    const result = await resolved.provider.verify(reference, resolved.credentials);
+    if (result.status === "failed") {
+      await prisma.payment.update({ where: { id: payment.id }, data: { status: "FAILED" } });
+      return prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
+    }
+    if (result.status === "pending") return payment;
+  }
 
   await prisma.payment.update({ where: { id: payment.id }, data: { status: "CONFIRMED", paidAt: new Date() } });
   await recalculateInvoiceStatus(payment.invoiceId);

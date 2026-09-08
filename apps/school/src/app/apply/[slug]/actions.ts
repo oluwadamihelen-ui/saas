@@ -2,7 +2,22 @@
 
 import { z } from "zod";
 import { redirect } from "next/navigation";
-import { submitApplication, markApplicationFeePendingConfirmation, getSchoolBySlug } from "@/lib/services/admission";
+import { headers } from "next/headers";
+import {
+  submitApplication,
+  markApplicationFeePendingConfirmation,
+  initiateApplicationFeePayment,
+  confirmApplicationFeeOnlinePayment,
+  getSchoolBySlug,
+} from "@/lib/services/admission";
+
+async function currentOrigin() {
+  if (process.env.APP_URL) return process.env.APP_URL;
+  const h = await headers();
+  const host = h.get("host");
+  const proto = h.get("x-forwarded-proto") ?? "http";
+  return `${proto}://${host}`;
+}
 
 export interface ApplyFormState {
   status: "idle" | "error";
@@ -51,6 +66,25 @@ export async function submitApplicationAction(slug: string, _prev: ApplyFormStat
   });
 
   redirect(`/apply/${slug}/${applicant.id}`);
+}
+
+export async function payApplicationFeeOnlineAction(slug: string, applicantId: string, _prev: ApplyFormState, _formData: FormData): Promise<ApplyFormState> {
+  const school = await getSchoolBySlug(slug);
+  if (!school) return { status: "error", message: "This school could not be found." };
+
+  let authorizationUrl: string;
+  try {
+    const origin = await currentOrigin();
+    const result = await initiateApplicationFeePayment(school.id, applicantId, `${origin}/apply/${slug}/${applicantId}/confirm`);
+    authorizationUrl = result.authorizationUrl;
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Could not start payment." };
+  }
+  redirect(authorizationUrl);
+}
+
+export async function confirmApplicationFeeOnlineAction(reference: string) {
+  await confirmApplicationFeeOnlinePayment(reference);
 }
 
 export async function notifyApplicationFeeTransferAction(slug: string, applicantId: string, _prev: ApplyFormState, _formData: FormData): Promise<ApplyFormState> {

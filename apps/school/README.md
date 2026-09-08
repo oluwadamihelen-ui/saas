@@ -8,10 +8,12 @@ onboarded the same way later). This app is being built in phases (see
 roadmap); this commit implements **Phase 1 (Foundation)**, **Phase 2
 (Academics)**, **Phase 3 (Finance)**, **Phase 4 (Communication & portals)**,
 **Phase 5 (AI assistant)**, **Phase 6 (Advanced ERP)**, **Phase 7 (SaaS
-billing & platform admin)** — every phase in the original brief — plus a
-new **Administration** module reorganizing the sidebar into nested
-submenus, matching a reference school-management system's information
-architecture, starting with the **Administration** menu group:
+billing & platform admin)** — every phase in the original brief — plus an
+**Administration** module reorganizing the sidebar into nested submenus,
+matching a reference school-management system's information architecture,
+and **multi-provider payments & portal branding**, letting each school
+connect its own online payment gateway and make its portal look like its
+own:
 
 **Phase 1 — Foundation**
 - Multi-tenant data model (every tenant-owned table carries `schoolId`)
@@ -172,6 +174,27 @@ architecture, starting with the **Administration** menu group:
 - Feedback: any signed-in user — staff, parent or student — can submit a
   suggestion or concern; staff with `feedback.manage` mark it reviewed
 
+**Multi-provider payments & portal branding**
+- Each school connects its own **Paystack**, **Flutterwave** or **Korapay**
+  account from Dashboard → Settings — secret keys are encrypted at rest
+  and never re-displayed once saved, only the owner role
+  (`payment_gateways.manage`) can manage them, and a school picks which
+  connected gateway "Pay online" actually uses. The original manual
+  (staff-recorded) and bank-transfer options are unchanged
+- A school that hasn't connected a gateway keeps working exactly as
+  before — "Pay online" runs a simulated demo payment, on both an
+  invoice's pay page and the admission application fee, so nothing about
+  the existing flow requires setup to keep functioning
+- A real gateway payment is verified server-side against that gateway's
+  own API when the payer is redirected back (never trusted on the
+  redirect alone), with webhook endpoints
+  (`/api/webhooks/{paystack,flutterwave,korapay}`) as an additional,
+  signature-verified confirmation path
+- Branding (Dashboard → Settings): upload a logo and pick a brand color —
+  recolors buttons, links and highlights across your dashboard, portals,
+  and the public `/apply/[slug]` and `/pay/[token]` pages. Nothing to set
+  up keeps the default Winfield look
+
 ## Stack
 
 Next.js 16 (App Router) · TypeScript · Tailwind CSS v4 · PostgreSQL + Prisma ·
@@ -206,11 +229,15 @@ two payroll runs (one paid, one still draft) for six staff members, a small
 book catalog with a few loans issued, two transport routes with stops and
 assigned students, two hostels with rooms and assigned students, (Phase 7)
 the three default subscription plans plus this school's own subscription
-with two paid platform invoices and one pending, and (Administration) a
+with two paid platform invoices and one pending, (Administration) a
 configured admission fee with six applicants spanning every pipeline
 stage (including one already admitted into a real student record), a mix
 of upcoming and archived calendar events, and a handful of feedback
-submissions — plus these accounts, all with password `Passw0rd!23`:
+submissions, and a distinct brand color plus a connected-but-inactive
+demo Paystack credential (a fake test key — "Pay online" still runs the
+simulated gateway; connecting it as *active* would only work with a
+real Paystack account) so Settings has real examples of both features
+to look at — plus these accounts, all with password `Passw0rd!23`:
 
 | Role | Email |
 |---|---|
@@ -254,6 +281,8 @@ beyond the usual `npx prisma migrate dev`:
 npx prisma migrate dev              # applies new tables/columns
 npm run db:backfill-permissions     # syncs each role to the current default permission matrix
 ```
+
+If your `.env` predates multi-provider payments, also add `PAYMENT_KEYS_SECRET` (see `.env.example`) — it falls back to `AUTH_SECRET` if you skip it, so this is optional, not required, to keep running.
 
 Each phase has occasionally changed the default permission matrix for an
 existing role — added a permission (e.g. Phase 4 added `announcements.view`

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { getSchoolBySlug, getApplicantPublic } from "@/lib/services/admission";
 import { formatMoney } from "@/lib/money";
 import { NotifyTransferButton } from "./notify-transfer-button";
+import { PayApplicationFeeOnlineButton } from "./pay-online-button";
 
 const FEE_STATUS_VARIANT = { UNPAID: "warning", PENDING_CONFIRMATION: "accent", PAID: "success" } as const;
 
@@ -39,18 +40,21 @@ export default async function ApplicationConfirmationPage({
             </div>
             <CardDescription>{formatMoney(applicant.admissionFeeMinor, school.currency)}</CardDescription>
           </CardHeader>
-          {applicant.feeStatus === "UNPAID" && hasBankDetails && (
+          {applicant.feeStatus === "UNPAID" && (
             <CardContent className="space-y-3">
-              <div className="space-y-3 rounded-md border border-dashed border-border p-4">
-                <p className="text-sm font-medium text-foreground">Pay by bank transfer</p>
-                <div className="text-sm text-muted">
-                  <p>Bank: {school.bankName}</p>
-                  <p>Account name: {school.bankAccountName}</p>
-                  <p>Account number: {school.bankAccountNumber}</p>
+              <PayApplicationFeeOnlineButton slug={slug} applicantId={applicant.id} />
+              {hasBankDetails && (
+                <div className="space-y-3 rounded-md border border-dashed border-border p-4">
+                  <p className="text-sm font-medium text-foreground">Or pay by bank transfer</p>
+                  <div className="text-sm text-muted">
+                    <p>Bank: {school.bankName}</p>
+                    <p>Account name: {school.bankAccountName}</p>
+                    <p>Account number: {school.bankAccountNumber}</p>
+                  </div>
+                  <NotifyTransferButton slug={slug} applicantId={applicant.id} />
+                  <p className="text-xs text-muted">The school will confirm your payment once it&apos;s received.</p>
                 </div>
-                <NotifyTransferButton slug={slug} applicantId={applicant.id} />
-                <p className="text-xs text-muted">The school will confirm your payment once it&apos;s received.</p>
-              </div>
+              )}
             </CardContent>
           )}
           {applicant.feeStatus === "PENDING_CONFIRMATION" && (

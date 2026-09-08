@@ -57,6 +57,21 @@ model School {
   /// not configured, not zero" pattern as the bank fields above.
   admissionFeeMinor Int?
 
+  /// Portal branding. logoUrl holds a data: URL (uploaded image, no
+  /// external object storage in this app) — null falls back to the
+  /// Winfield lettermark generated from the school's own name/initial.
+  /// brandColor recolors --accent (and its derived soft/foreground
+  /// tokens) across the dashboard, portals and the public apply/pay
+  /// pages for this school only; null keeps the default Winfield blue.
+  brandColor String?
+
+  /// Which connected gateway "Pay online" uses for this school. Null (the
+  /// default for every school until an owner connects one) falls back to
+  /// the built-in mock/simulated gateway, so the pay -> receipt flow keeps
+  /// working with zero setup — connecting a real one here is additive,
+  /// never required.
+  activePaymentProvider PaymentGatewayProvider?
+
   // Onboarding wizard progress (brief section 4). Nullable timestamps double
   // as both a "is this step done" flag and a record of when it happened.
   accountCreatedAt         DateTime  @default(now())
@@ -123,6 +138,8 @@ model School {
   applicants     Applicant[]
   calendarEvents CalendarEvent[]
   feedback       Feedback[]
+
+  paymentGatewayCredentials PaymentGatewayCredential[]
 
   @@index([status])
 }
@@ -916,6 +933,44 @@ enum PaymentMethod {
   ONLINE
 }
 
+enum PaymentGatewayProvider {
+  PAYSTACK
+  FLUTTERWAVE
+  KORAPAY
+}
+
+/// A school's own gateway credentials, brought and managed by the school
+/// itself — never a platform-wide key. secretKeyEnc is the secret API key
+/// encrypted at rest (src/lib/crypto.ts); publicKey is stored in the
+/// clear since gateways treat it as safe to expose client-side. At most
+/// one row per (school, provider); School.activePaymentProvider names
+/// which configured, enabled row "Pay online" actually uses.
+model PaymentGatewayCredential {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  provider     PaymentGatewayProvider
+  publicKey    String
+  secretKeyEnc String
+  isEnabled    Boolean @default(true)
+
+  /// Flutterwave-only: the separate "secret hash" a school sets in their
+  /// Flutterwave dashboard's webhook settings (distinct from the secret
+  /// API key) — Flutterwave's verif-hash webhook header is compared
+  /// against this value directly, not derived from the API key the way
+  /// Paystack/Korapay's signatures are. Null for Paystack/Korapay, and
+  /// for a school that hasn't set up webhooks at all (the pay-confirm
+  /// page's own server-side verify() call still works without it).
+  webhookSecretEnc String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, provider])
+  @@index([schoolId])
+}
+
 enum PaymentStatus {
   PENDING
   CONFIRMED
@@ -936,6 +991,14 @@ model Payment {
   paidAt       DateTime?
   recordedById String?
   recordedBy   User?         @relation("PaymentRecordedBy", fields: [recordedById], references: [id])
+
+  /// Which real gateway processed this — null for a MANUAL/BANK_TRANSFER
+  /// payment, and also null for an ONLINE payment that ran through the
+  /// built-in mock gateway (no school-connected provider yet). Lets the
+  /// confirm page tell a real, already-charged gateway payment (verify
+  /// server-side, no user action needed) apart from the mock's simulated
+  /// "click to confirm" round trip.
+  provider PaymentGatewayProvider?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1710,6 +1773,12 @@ model Applicant {
   admissionFeeMinor Int?
   feeStatus         ApplicationFeeStatus @default(UNPAID)
   feePaidAt         DateTime?
+
+  /// Set while an online fee payment is in flight, so the public
+  /// confirmation page can look the applicant back up by reference alone
+  /// (no session, same as the invoice pay flow's Payment.reference).
+  feePaymentReference String?                  @unique
+  feePaymentProvider   PaymentGatewayProvider?
 
   reviewedById String?
   reviewedBy   User?   @relation("ApplicantReviewedBy", fields: [reviewedById], references: [id])
