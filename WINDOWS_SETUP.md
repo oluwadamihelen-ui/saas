@@ -117,7 +117,10 @@ http://localhost:3001
 
 Sign in with one of the seeded accounts (e.g. `owner@winfield.demo` /
 `Passw0rd!23`), or click **Set up your school** to run through the real
-onboarding wizard and create a brand-new school.
+onboarding wizard and create a brand-new school. The seeded school also
+comes with 110 generated invoices under **Finance → Invoices** — open one
+and copy its "Share with a parent" link into a private/incognito window to
+try the payer's side (no login) of paying online or by bank transfer.
 
 To stop the server, click back into the `cmd` window and press `Ctrl+C`.
 
