@@ -9,15 +9,17 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { listClassArms, listSubjects, getCurrentTerm } from "@/lib/services/academics";
 import { getScoreEntryGrid } from "@/lib/services/results";
 import { ScoreGridForm } from "./score-grid-form";
+import { ScoreGridReadOnly } from "./score-grid-readonly";
 
 export default async function ResultsPage({
   searchParams,
 }: {
   searchParams: Promise<{ classArmId?: string; subjectId?: string }>;
 }) {
-  const user = await requirePermission(PERMISSIONS.RESULTS_ENTER);
+  const user = await requirePermission(PERMISSIONS.RESULTS_VIEW);
   const perms = await getUserPermissions(user.id);
   const canManageGrading = perms.has(PERMISSIONS.GRADING_MANAGE);
+  const canEnter = perms.has(PERMISSIONS.RESULTS_ENTER);
 
   const params = await searchParams;
   const [classArms, subjects, currentTerm] = await Promise.all([
@@ -39,7 +41,7 @@ export default async function ResultsPage({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Results</h1>
           <p className="text-sm text-muted">
-            Enter scores for {currentTerm ? currentTerm.name : "the current term"}.
+            {canEnter ? "Enter scores for" : "View scores for"} {currentTerm ? currentTerm.name : "the current term"}.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -92,7 +94,7 @@ export default async function ResultsPage({
                 ) : undefined
               }
             />
-          ) : (
+          ) : canEnter ? (
             <ScoreGridForm
               classArmId={classArmId!}
               subjectId={subjectId!}
@@ -100,6 +102,8 @@ export default async function ResultsPage({
               components={grid.components}
               rows={grid.rows}
             />
+          ) : (
+            <ScoreGridReadOnly components={grid.components} rows={grid.rows} />
           )}
         </CardContent>
       </Card>

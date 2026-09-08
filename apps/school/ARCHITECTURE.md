@@ -79,6 +79,31 @@ nothing in Phase 1's UI creates or uses such a user yet.
   database on every call (no caching across requests) so a permission change
   takes effect immediately rather than waiting out a session's JWT lifetime.
   Nothing in the UI hides an action as its only form of access control.
+- **A page's own top-level gate must be its VIEW permission, never a
+  narrower action permission — a real bug this repo shipped and then
+  fixed.** `/dashboard/attendance` and `/dashboard/results` originally
+  gated on `attendance.mark`/`results.enter` (what the entry form needs)
+  instead of `attendance.view`/`results.view` (what merely opening the
+  page needs), so a role like `PRINCIPAL` — real `attendance.view` and
+  `results.view`, no marking/entry rights by design — got a hard 500
+  instead of a read-only page. Fixed by gating the page on the VIEW
+  permission and switching between the interactive form
+  (`RosterForm`/`ScoreGridForm`) and a read-only render
+  (`RosterReadOnly`/`ScoreGridReadOnly`) based on whether the signed-in
+  user also holds the action permission — the Server Action behind the
+  form still independently re-checks that action permission, so this is
+  presentation, not the security boundary.
+- **The sidebar (`src/components/dashboard/sidebar.tsx`) filters its own
+  links by permission**, fetched once in `dashboard/layout.tsx`
+  (`getUserPermissions`) and passed down as a plain string array (a Server
+  Component can't hand a client component a `Set`). Each nav entry
+  declares the same `PermissionKey` its target page's top-level
+  `requirePermission()` call checks — kept in sync by hand, the same way
+  the tool list in `src/lib/ai/tools.ts` mirrors dashboard permissions —
+  so a role never sees a link that would 500 if clicked. This is on top
+  of, not instead of, the page-level check: a crafted direct request to a
+  hidden URL still gets a proper 500 from `requirePermission`, same as
+  before.
 
 ## Data model
 

@@ -19,25 +19,33 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/brand/logo";
+import { PERMISSIONS, type PermissionKey } from "@/lib/permissions";
 
-const NAV = [
+/// requiredPermission mirrors what each page's own requirePermission()
+/// gate actually checks — kept in sync with them on purpose, so the
+/// sidebar never offers a link that would just throw "Missing permission"
+/// when clicked. No requiredPermission means the page only requires being
+/// signed in (requireSchoolUser), so it's shown to every role.
+const NAV: { href: string; label: string; icon: typeof LayoutDashboard; exact?: boolean; requiredPermission?: PermissionKey }[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/students", label: "Students", icon: GraduationCap },
-  { href: "/dashboard/academics", label: "Academics", icon: BookOpen },
-  { href: "/dashboard/attendance", label: "Attendance", icon: ClipboardCheck },
-  { href: "/dashboard/timetable", label: "Timetable", icon: CalendarDays },
-  { href: "/dashboard/assignments", label: "Assignments", icon: FileText },
-  { href: "/dashboard/results", label: "Results", icon: Award },
-  { href: "/dashboard/finance", label: "Finance", icon: Wallet },
-  { href: "/dashboard/announcements", label: "Announcements", icon: Megaphone },
-  { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
-  { href: "/dashboard/assistant", label: "AI Assistant", icon: Sparkles },
+  { href: "/dashboard/academics", label: "Academics", icon: BookOpen, requiredPermission: PERMISSIONS.ACADEMICS_MANAGE },
+  { href: "/dashboard/attendance", label: "Attendance", icon: ClipboardCheck, requiredPermission: PERMISSIONS.ATTENDANCE_VIEW },
+  { href: "/dashboard/timetable", label: "Timetable", icon: CalendarDays, requiredPermission: PERMISSIONS.TIMETABLE_VIEW },
+  { href: "/dashboard/assignments", label: "Assignments", icon: FileText, requiredPermission: PERMISSIONS.ASSIGNMENTS_VIEW },
+  { href: "/dashboard/results", label: "Results", icon: Award, requiredPermission: PERMISSIONS.RESULTS_VIEW },
+  { href: "/dashboard/finance", label: "Finance", icon: Wallet, requiredPermission: PERMISSIONS.FINANCE_VIEW },
+  { href: "/dashboard/announcements", label: "Announcements", icon: Megaphone, requiredPermission: PERMISSIONS.ANNOUNCEMENTS_VIEW },
+  { href: "/dashboard/messages", label: "Messages", icon: MessageSquare, requiredPermission: PERMISSIONS.MESSAGES_VIEW },
+  { href: "/dashboard/assistant", label: "AI Assistant", icon: Sparkles, requiredPermission: PERMISSIONS.ASSISTANT_USE },
   { href: "/dashboard/staff", label: "Staff", icon: Users },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
-export function Sidebar() {
+export function Sidebar({ perms }: { perms: string[] }) {
   const pathname = usePathname();
+  const permSet = new Set(perms);
+  const visibleNav = NAV.filter((item) => !item.requiredPermission || permSet.has(item.requiredPermission));
 
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-surface md:flex">
@@ -45,7 +53,7 @@ export function Sidebar() {
         <Link href="/dashboard"><Logo height={26} /></Link>
       </div>
       <nav className="flex-1 space-y-1 p-3">
-        {NAV.map((item) => {
+        {visibleNav.map((item) => {
           const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
           const Icon = item.icon;
           return (

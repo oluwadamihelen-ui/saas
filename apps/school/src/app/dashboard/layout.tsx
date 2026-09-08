@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireSchoolUser } from "@/lib/auth/require";
+import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { prisma } from "@/lib/db";
 import { getSchool, nextOnboardingStep } from "@/lib/services/school";
 import { listNotifications, unreadNotificationCount } from "@/lib/services/notifications";
@@ -19,15 +20,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect("/onboarding");
   }
 
-  const [user, notifications, unreadCount] = await Promise.all([
+  const [user, notifications, unreadCount, perms] = await Promise.all([
     prisma.user.findUniqueOrThrow({ where: { id: sessionUser.id }, include: { role: true } }),
     listNotifications(sessionUser.schoolId, sessionUser.id),
     unreadNotificationCount(sessionUser.schoolId, sessionUser.id),
+    getUserPermissions(sessionUser.id),
   ]);
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar />
+      <Sidebar perms={[...perms]} />
       <div className="flex flex-1 flex-col">
         <DashboardTopbar
           name={user.name}

@@ -3,10 +3,12 @@ import { Input, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requirePermission } from "@/lib/auth/require";
+import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { listClassArms } from "@/lib/services/academics";
 import { getRosterForDate } from "@/lib/services/attendance";
 import { RosterForm } from "./roster-form";
+import { RosterReadOnly } from "./roster-readonly";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -17,7 +19,9 @@ export default async function AttendancePage({
 }: {
   searchParams: Promise<{ classArmId?: string; date?: string }>;
 }) {
-  const user = await requirePermission(PERMISSIONS.ATTENDANCE_MARK);
+  const user = await requirePermission(PERMISSIONS.ATTENDANCE_VIEW);
+  const perms = await getUserPermissions(user.id);
+  const canMark = perms.has(PERMISSIONS.ATTENDANCE_MARK);
   const params = await searchParams;
   const classArms = await listClassArms(user.schoolId);
 
@@ -30,7 +34,7 @@ export default async function AttendancePage({
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Attendance</h1>
-        <p className="text-sm text-muted">Mark daily attendance for a class.</p>
+        <p className="text-sm text-muted">{canMark ? "Mark daily attendance for a class." : "View daily attendance for a class."}</p>
       </div>
 
       <Card>
@@ -56,8 +60,10 @@ export default async function AttendancePage({
               title="No active students in this class"
               description="Enroll students into this class arm before marking attendance."
             />
-          ) : (
+          ) : canMark ? (
             <RosterForm classArmId={classArmId!} date={date} roster={roster.students} />
+          ) : (
+            <RosterReadOnly roster={roster.students} />
           )}
         </CardContent>
       </Card>
