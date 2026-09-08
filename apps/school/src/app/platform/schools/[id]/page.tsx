@@ -6,13 +6,20 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSuperAdmin } from "@/lib/auth/require";
-import { getSchoolForPlatform, listPlans } from "@/lib/services/platform";
+import { getSchoolForPlatform, listPlans, planPriceForInterval } from "@/lib/services/platform";
 import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
 import { SchoolStatusForm, CreateSubscriptionForm, PlanChangeForm, SubscriptionStatusForm, GenerateInvoiceButton, InvoiceActions } from "../forms";
 
 const SCHOOL_STATUS_VARIANT = { TRIAL: "warning", ACTIVE: "success", SUSPENDED: "danger" } as const;
-const SUB_STATUS_VARIANT = { TRIALING: "warning", ACTIVE: "success", PAST_DUE: "danger", CANCELED: "neutral" } as const;
+const SUB_STATUS_VARIANT = {
+  TRIALING: "warning",
+  ACTIVE: "success",
+  PAST_DUE: "danger",
+  CANCELED: "neutral",
+  EXPIRED: "neutral",
+  SUSPENDED: "danger",
+} as const;
 const INVOICE_STATUS_VARIANT = { PENDING: "warning", PAID: "success", OVERDUE: "danger", VOID: "neutral" } as const;
 
 export default async function PlatformSchoolDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -52,8 +59,20 @@ export default async function PlatformSchoolDetailPage({ params }: { params: Pro
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted">
-              {school.subscription.plan.name} — {formatMoney(school.subscription.plan.priceMinor, "NGN")}/
-              {school.subscription.plan.billingInterval === "MONTHLY" ? "mo" : "yr"} · current period{" "}
+              {school.subscription.plan.name}
+              {school.subscription.plan.isCustomPricing ? (
+                " — custom pricing"
+              ) : (
+                <>
+                  {" — "}
+                  {formatMoney(
+                    planPriceForInterval(school.subscription.plan, school.subscription.billingInterval) ?? 0,
+                    school.subscription.plan.currency
+                  )}
+                  /{school.subscription.billingInterval === "YEARLY" ? "yr" : "mo"}
+                </>
+              )}
+              {" · current period "}
               {formatDate(school.subscription.currentPeriodStart)} – {formatDate(school.subscription.currentPeriodEnd)}
             </p>
             <PlanChangeForm schoolId={school.id} currentPlanId={school.subscription.planId} plans={plans} />

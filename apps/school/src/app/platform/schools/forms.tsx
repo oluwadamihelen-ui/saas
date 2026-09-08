@@ -80,7 +80,13 @@ export function PlanChangeForm({
   );
 }
 
-export function SubscriptionStatusForm({ schoolId, currentStatus }: { schoolId: string; currentStatus: "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED" }) {
+export function SubscriptionStatusForm({
+  schoolId,
+  currentStatus,
+}: {
+  schoolId: string;
+  currentStatus: "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED" | "EXPIRED" | "SUSPENDED";
+}) {
   const [state, formAction, isPending] = useActionState(updateSubscriptionStatusAction, initialState);
 
   return (
@@ -92,6 +98,8 @@ export function SubscriptionStatusForm({ schoolId, currentStatus }: { schoolId: 
           <option value="ACTIVE">Active</option>
           <option value="PAST_DUE">Past due</option>
           <option value="CANCELED">Canceled</option>
+          <option value="EXPIRED">Expired</option>
+          <option value="SUSPENDED">Suspended</option>
         </Select>
       </div>
       <Button type="submit" size="sm" variant="secondary" disabled={isPending}>{isPending ? "Saving..." : "Update subscription"}</Button>

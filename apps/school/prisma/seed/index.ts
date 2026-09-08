@@ -9,6 +9,7 @@ import {
   SYSTEM_ROLE_LABELS,
   type SystemRoleKey,
 } from "../../src/lib/permissions";
+import { PLAN_CATALOG, PLAN_TIERS, TRIAL_PERIOD_DAYS } from "../../src/lib/billing/plan-catalog";
 
 const prisma = new PrismaClient();
 const DEMO_PASSWORD = "Passw0rd!23";
@@ -928,33 +929,50 @@ async function main() {
     },
   });
 
-  console.log("Setting up platform billing (Super Admin, plans, subscription)...");
+  console.log("Setting up platform billing (Super Admin, plans, subscriptions)...");
 
-  // Mirrors ensureDefaultPlans()/ensureSuperAdminRole() in
-  // src/lib/platform-provisioning.ts — duplicated here for the same
-  // import "server-only" reason as everything else in this script.
-  const planSeeds: { name: string; priceMinor: number; billingInterval: "MONTHLY"; studentLimit: number | null }[] = [
-    { name: "Starter", priceMinor: 1_500_000, billingInterval: "MONTHLY", studentLimit: 150 },
-    { name: "Growth", priceMinor: 4_500_000, billingInterval: "MONTHLY", studentLimit: 500 },
-    { name: "Enterprise", priceMinor: 12_000_000, billingInterval: "MONTHLY", studentLimit: null },
-  ];
+  // Mirrors ensureDefaultPlans() in src/lib/platform-provisioning.ts —
+  // upserted directly here (rather than imported) for the same import
+  // "server-only" reason as everything else in this script; PLAN_CATALOG
+  // itself carries no server-only dependency, so it's imported as-is
+  // rather than re-typed, keeping this the single source of truth.
   const plans = await Promise.all(
-    planSeeds.map((p) =>
-      prisma.subscriptionPlan.upsert({ where: { name: p.name }, create: p, update: {} })
-    )
+    PLAN_TIERS.map((tier) => {
+      const entry = PLAN_CATALOG[tier];
+      return prisma.subscriptionPlan.upsert({
+        where: { slug: entry.slug },
+        create: {
+          slug: entry.slug,
+          name: entry.name,
+          tagline: entry.tagline,
+          priceMonthlyMinor: entry.priceMonthlyMinor,
+          priceAnnualMinor: entry.priceAnnualMinor,
+          currency: entry.currency,
+          isCustomPricing: entry.isCustomPricing,
+          studentLimit: entry.studentLimit,
+          isMostPopular: entry.isMostPopular,
+          sortOrder: entry.sortOrder,
+          features: entry.features as Prisma.InputJsonValue,
+        },
+        update: {},
+      });
+    })
   );
-  const growthPlan = plans.find((p) => p.name === "Growth")!;
+  const professionalPlan = plans.find((p) => p.slug === "PROFESSIONAL")!;
+  const starterPlan = plans.find((p) => p.slug === "STARTER")!;
 
   const currentPeriodStart = new Date();
   currentPeriodStart.setDate(1);
   const currentPeriodEnd = new Date(currentPeriodStart);
   currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
 
+  // The main demo school: an established, paying customer on Professional.
   const subscription = await prisma.subscription.create({
     data: {
       schoolId: school.id,
-      planId: growthPlan.id,
+      planId: professionalPlan.id,
       status: "ACTIVE",
+      billingInterval: "MONTHLY",
       currentPeriodStart,
       currentPeriodEnd,
     },
@@ -974,7 +992,9 @@ async function main() {
         subscriptionId: subscription.id,
         periodStart,
         periodEnd,
-        amountMinor: growthPlan.priceMinor,
+        amountMinor: professionalPlan.priceMonthlyMinor!,
+        currency: professionalPlan.currency,
+        billingInterval: "MONTHLY",
         dueDate: periodEnd,
         status: isPast ? "PAID" : "PENDING",
         paidAt: isPast ? periodEnd : null,
@@ -994,6 +1014,75 @@ async function main() {
     update: {},
   });
 
+  // A second, smaller demo school — a brand-new signup still inside its
+  // 14-day trial on Starter, so the platform admin/billing dashboards and
+  // the trial banner both have a real second tenant to show, distinct from
+  // Winfield's own paid-and-established Professional subscription above.
+  console.log("Seeding second demo school (trial)...");
+  const trialSchoolName = "Bright Path Academy";
+  const trialSlug = slugify(trialSchoolName);
+  await prisma.school.deleteMany({ where: { slug: trialSlug } });
+
+  const trialSchool = await prisma.school.create({
+    data: {
+      name: trialSchoolName,
+      slug: trialSlug,
+      status: "TRIAL",
+      email: "info@brightpath.demo",
+      city: "Abuja",
+      state: "FCT",
+      country: "Nigeria",
+      currency: "NGN",
+      timezone: "Africa/Lagos",
+      schoolInfoCompletedAt: new Date(),
+      onboardingCompletedAt: new Date(),
+    },
+  });
+
+  const trialRoles = await Promise.all(
+    SYSTEM_ROLE_KEYS.map((key) =>
+      prisma.role.create({ data: { schoolId: trialSchool.id, key, name: SYSTEM_ROLE_LABELS[key], isSystem: true } })
+    )
+  );
+  const trialRoleByKey = new Map(trialRoles.map((r) => [r.key, r]));
+  await prisma.rolePermission.createMany({
+    data: SYSTEM_ROLE_KEYS.flatMap((key) => {
+      const role = trialRoleByKey.get(key)!;
+      return ROLE_DEFAULT_PERMISSIONS[key]
+        .map((permKey) => permissionByKey.get(permKey))
+        .filter((id): id is string => Boolean(id))
+        .map((permissionId) => ({ roleId: role.id, permissionId }));
+    }),
+  });
+
+  const trialOwner = await prisma.user.create({
+    data: {
+      schoolId: trialSchool.id,
+      roleId: trialRoleByKey.get("SCHOOL_OWNER")!.id,
+      email: "owner@brightpath.demo",
+      name: "Bright Path Owner",
+      passwordHash,
+    },
+  });
+
+  const trialStart = new Date();
+  trialStart.setDate(trialStart.getDate() - 3);
+  const trialEnd = new Date(trialStart);
+  trialEnd.setDate(trialEnd.getDate() + TRIAL_PERIOD_DAYS);
+
+  await prisma.subscription.create({
+    data: {
+      schoolId: trialSchool.id,
+      planId: starterPlan.id,
+      status: "TRIALING",
+      billingInterval: "MONTHLY",
+      trialStart,
+      trialEnd,
+      currentPeriodStart: trialStart,
+      currentPeriodEnd: trialEnd,
+    },
+  });
+
   console.log(`\nSeeded "${schoolName}" with ${classArms.length} class arms and 110 students.`);
   console.log(`All staff accounts use the password: ${DEMO_PASSWORD}\n`);
   for (const s of staffSeeds) console.log(`  ${s.role.padEnd(16)} ${s.email}`);
@@ -1002,6 +1091,8 @@ async function main() {
   console.log(`  STUDENT          ${studentUser.email}`);
   console.log(`\nPlatform admin (same password: ${DEMO_PASSWORD}):`);
   console.log(`  SUPER_ADMIN      superadmin@winfield.demo`);
+  console.log(`\nSecond demo school "${trialSchoolName}" (Starter plan, 14-day trial, same password: ${DEMO_PASSWORD}):`);
+  console.log(`  SCHOOL_OWNER     ${trialOwner.email}`);
 }
 
 main()

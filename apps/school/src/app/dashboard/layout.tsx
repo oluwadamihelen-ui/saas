@@ -7,6 +7,9 @@ import { listNotifications, unreadNotificationCount } from "@/lib/services/notif
 import { Sidebar, DashboardMobileNav } from "@/components/dashboard/sidebar";
 import { DashboardTopbar } from "@/components/dashboard/topbar";
 import { BrandStyle } from "@/components/brand/brand-style";
+import { TrialBanner } from "@/components/billing/trial-banner";
+import { getEffectiveSubscription } from "@/lib/billing/entitlements";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   // Checked before requireSchoolUser(), which would otherwise throw for a
@@ -28,11 +31,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect("/onboarding");
   }
 
-  const [user, notifications, unreadCount, perms] = await Promise.all([
+  const [user, notifications, unreadCount, perms, effectiveSubscription] = await Promise.all([
     prisma.user.findUniqueOrThrow({ where: { id: sessionUser.id }, include: { role: true } }),
     listNotifications(sessionUser.schoolId, sessionUser.id),
     unreadNotificationCount(sessionUser.schoolId, sessionUser.id),
     getUserPermissions(sessionUser.id),
+    getEffectiveSubscription(sessionUser.schoolId),
   ]);
 
   return (
@@ -48,6 +52,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           unreadCount={unreadCount}
           mobileNav={<DashboardMobileNav perms={[...perms]} school={{ name: school.name, logoUrl: school.logoUrl }} />}
         />
+        <TrialBanner effective={effectiveSubscription} canViewBilling={perms.has(PERMISSIONS.BILLING_VIEW)} />
         <main className="container-shell min-w-0 flex-1 py-6 sm:py-8">{children}</main>
       </div>
     </div>

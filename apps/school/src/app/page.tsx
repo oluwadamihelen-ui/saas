@@ -9,6 +9,9 @@ export default function HomePage() {
         <Logo height={32} />
         <div className="flex items-center gap-3">
           <Button asChild variant="ghost">
+            <Link href="/pricing">Pricing</Link>
+          </Button>
+          <Button asChild variant="ghost">
             <Link href="/login">Sign in</Link>
           </Button>
           <Button asChild>

@@ -147,3 +147,149 @@ export async function notifyAttendanceAbsent(schoolId: string, studentId: string
     "/portal/parent"
   );
 }
+
+/// Subscription/billing recipients: whoever currently holds billing.manage
+/// for the school — same "whoever has the permission right now" pattern as
+/// notifyNewMessage's staff inbox, not a fixed assigned owner.
+async function billingManagerUserIds(schoolId: string): Promise<string[]> {
+  const staff = await prisma.user.findMany({
+    where: { schoolId, role: { rolePermissions: { some: { permission: { key: "billing.manage" } } } } },
+    select: { id: true },
+  });
+  return staff.map((s) => s.id);
+}
+
+export async function notifyPlanChanged(schoolId: string, planName: string, type: "PLAN_UPGRADED" | "PLAN_DOWNGRADED") {
+  const recipients = await billingManagerUserIds(schoolId);
+  await notifyRecipients(
+    schoolId,
+    recipients,
+    type,
+    type === "PLAN_UPGRADED" ? "Plan upgraded" : "Plan downgraded",
+    `Your subscription is now on the ${planName} plan.`,
+    "/dashboard/billing"
+  );
+}
+
+export async function notifySubscriptionCancelled(schoolId: string) {
+  const recipients = await billingManagerUserIds(schoolId);
+  await notifyRecipients(
+    schoolId,
+    recipients,
+    "SUBSCRIPTION_CANCELLED",
+    "Subscription cancelled",
+    "Your Winfield subscription has been cancelled.",
+    "/dashboard/billing"
+  );
+}
+
+export async function notifyTrialStarted(schoolId: string, trialEnd: Date) {
+  const recipients = await billingManagerUserIds(schoolId);
+  await notifyRecipients(
+    schoolId,
+    recipients,
+    "TRIAL_STARTED",
+    "Your trial has started",
+    `You have full access to Professional-tier features until ${trialEnd.toLocaleDateString()}.`,
+    "/dashboard/billing"
+  );
+}
+
+export async function notifyTrialEndingSoon(schoolId: string, trialEnd: Date) {
+  const recipients = await billingManagerUserIds(schoolId);
+  await notifyRecipients(
+    schoolId,
+    recipients,
+    "TRIAL_ENDING_SOON",
+    "Your trial is ending soon",
+    `Your trial ends on ${trialEnd.toLocaleDateString()}. Choose a plan to keep uninterrupted access.`,
+    "/dashboard/billing"
+  );
+}
+
+export async function notifyTrialExpired(schoolId: string) {
+  const recipients = await billingManagerUserIds(schoolId);
+  await notifyRecipients(
+    schoolId,
+    recipients,
+    "TRIAL_EXPIRED",
+    "Your trial has ended",
+    "Choose a plan to restore full access to your school's account.",
+    "/dashboard/billing"
+  );
+}
+
+export async function notifySubscriptionPaymentSuccess(schoolId: string, planName: string) {
+  const recipients = await billingManagerUserIds(schoolId);
+  await notifyRecipients(
+    schoolId,
+    recipients,
+    "SUBSCRIPTION_PAYMENT_SUCCESS",
+    "Payment received",
+    `Your payment for the ${planName} plan was successful.`,
+    "/dashboard/billing"
+  );
+}
+
+export async function notifySubscriptionPaymentFailed(schoolId: string, planName: string) {
+  const recipients = await billingManagerUserIds(schoolId);
+  await notifyRecipients(
+    schoolId,
+    recipients,
+    "SUBSCRIPTION_PAYMENT_FAILED",
+    "Payment failed",
+    `We couldn't process your payment for the ${planName} plan. Please update your payment details.`,
+    "/dashboard/billing"
+  );
+}
+
+export async function notifySubscriptionRenewed(schoolId: string, planName: string) {
+  const recipients = await billingManagerUserIds(schoolId);
+  await notifyRecipients(
+    schoolId,
+    recipients,
+    "SUBSCRIPTION_RENEWED",
+    "Subscription renewed",
+    `Your ${planName} subscription has been renewed.`,
+    "/dashboard/billing"
+  );
+}
+
+export async function notifyStudentLimitApproaching(schoolId: string, current: number, limit: number) {
+  const recipients = await billingManagerUserIds(schoolId);
+  await notifyRecipients(
+    schoolId,
+    recipients,
+    "STUDENT_LIMIT_APPROACHING",
+    "Approaching student limit",
+    `You have ${current} of ${limit} students on your current plan.`,
+    "/dashboard/billing"
+  );
+}
+
+export async function notifyStudentLimitReached(schoolId: string, limit: number) {
+  const recipients = await billingManagerUserIds(schoolId);
+  await notifyRecipients(
+    schoolId,
+    recipients,
+    "STUDENT_LIMIT_REACHED",
+    "Student limit reached",
+    `Your plan supports up to ${limit} students. Upgrade to add more.`,
+    "/dashboard/billing"
+  );
+}
+
+/// requireStudentCapacity (entitlements.ts) calls this every time an
+/// enrollment is blocked — which, unlike a one-time status transition,
+/// can happen repeatedly (a school retrying, or several staff hitting the
+/// same limit). Without a dedicated "already notified" flag on the
+/// subscription, this checks the Notification table itself for one already
+/// sent today rather than send one on every single blocked attempt.
+export async function notifyStudentLimitReachedOnce(schoolId: string, limit: number) {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const alreadySent = await prisma.notification.findFirst({
+    where: { schoolId, type: "STUDENT_LIMIT_REACHED", createdAt: { gte: since } },
+  });
+  if (alreadySent) return;
+  await notifyStudentLimitReached(schoolId, limit);
+}

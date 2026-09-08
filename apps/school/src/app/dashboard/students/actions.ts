@@ -8,6 +8,7 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { createStudent, updateStudent, withdrawStudent, addGuardianToStudent } from "@/lib/services/students";
 import { inviteGuardianToPortal, inviteStudentToPortal } from "@/lib/services/portal-invites";
 import { logAudit } from "@/lib/audit";
+import { StudentLimitError } from "@/lib/billing/entitlements";
 
 const genderEnum = z.enum(["MALE", "FEMALE"]);
 const relationshipEnum = z.enum(["FATHER", "MOTHER", "GUARDIAN", "OTHER"]);
@@ -39,6 +40,7 @@ const guardianFieldsSchema = z.object({
 export interface StudentFormState {
   status: "idle" | "error";
   message?: string;
+  limitReached?: boolean;
 }
 
 function extractStudentFields(formData: FormData) {
@@ -81,30 +83,38 @@ export async function createStudentAction(_prev: StudentFormState, formData: For
   const g = guardianParsed.data;
   const hasGuardian = Boolean(g.guardianFirstName && g.guardianLastName && g.guardianPhone && g.guardianRelationship);
 
-  const student = await createStudent(user.schoolId, {
-    firstName: parsed.data.firstName,
-    lastName: parsed.data.lastName,
-    otherNames: parsed.data.otherNames || null,
-    dateOfBirth: parsed.data.dateOfBirth ? new Date(parsed.data.dateOfBirth) : null,
-    gender: (parsed.data.gender as "MALE" | "FEMALE") || null,
-    bloodGroup: parsed.data.bloodGroup || null,
-    addressLine: parsed.data.addressLine || null,
-    city: parsed.data.city || null,
-    state: parsed.data.state || null,
-    medicalNotes: parsed.data.medicalNotes || null,
-    allergies: parsed.data.allergies || null,
-    emergencyContact: parsed.data.emergencyContact || null,
-    classArmId: parsed.data.classArmId || null,
-    guardian: hasGuardian
-      ? {
-          firstName: g.guardianFirstName!,
-          lastName: g.guardianLastName!,
-          phone: g.guardianPhone!,
-          email: g.guardianEmail || null,
-          relationship: g.guardianRelationship as "FATHER" | "MOTHER" | "GUARDIAN" | "OTHER",
-        }
-      : null,
-  });
+  let student;
+  try {
+    student = await createStudent(user.schoolId, {
+      firstName: parsed.data.firstName,
+      lastName: parsed.data.lastName,
+      otherNames: parsed.data.otherNames || null,
+      dateOfBirth: parsed.data.dateOfBirth ? new Date(parsed.data.dateOfBirth) : null,
+      gender: (parsed.data.gender as "MALE" | "FEMALE") || null,
+      bloodGroup: parsed.data.bloodGroup || null,
+      addressLine: parsed.data.addressLine || null,
+      city: parsed.data.city || null,
+      state: parsed.data.state || null,
+      medicalNotes: parsed.data.medicalNotes || null,
+      allergies: parsed.data.allergies || null,
+      emergencyContact: parsed.data.emergencyContact || null,
+      classArmId: parsed.data.classArmId || null,
+      guardian: hasGuardian
+        ? {
+            firstName: g.guardianFirstName!,
+            lastName: g.guardianLastName!,
+            phone: g.guardianPhone!,
+            email: g.guardianEmail || null,
+            relationship: g.guardianRelationship as "FATHER" | "MOTHER" | "GUARDIAN" | "OTHER",
+          }
+        : null,
+    });
+  } catch (error) {
+    if (error instanceof StudentLimitError) {
+      return { status: "error", message: error.message, limitReached: true };
+    }
+    return { status: "error", message: error instanceof Error ? error.message : "Could not enroll this student." };
+  }
 
   await logAudit({
     schoolId: user.schoolId,

@@ -7,7 +7,7 @@ import { Input, Label } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
 import { requireSuperAdmin } from "@/lib/auth/require";
-import { listSchoolsForPlatform } from "@/lib/services/platform";
+import { listSchoolsForPlatform, planPriceForInterval } from "@/lib/services/platform";
 import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
 
@@ -59,7 +59,14 @@ export default async function PlatformSchoolsPage({ searchParams }: { searchPara
                     </TableCell>
                     <TableCell><Badge variant={STATUS_VARIANT[s.status]}>{s.status}</Badge></TableCell>
                     <TableCell className="text-muted">
-                      {s.subscription ? `${s.subscription.plan.name} (${formatMoney(s.subscription.plan.priceMinor, "NGN")}/mo)` : "—"}
+                      {s.subscription
+                        ? s.subscription.plan.isCustomPricing
+                          ? `${s.subscription.plan.name} (custom)`
+                          : `${s.subscription.plan.name} (${formatMoney(
+                              planPriceForInterval(s.subscription.plan, s.subscription.billingInterval) ?? 0,
+                              s.subscription.plan.currency
+                            )}/${s.subscription.billingInterval === "YEARLY" ? "yr" : "mo"})`
+                        : "—"}
                     </TableCell>
                     <TableCell className="text-muted">{s._count.students}</TableCell>
                     <TableCell className="text-muted">{s._count.users}</TableCell>

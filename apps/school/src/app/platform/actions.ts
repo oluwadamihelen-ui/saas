@@ -13,6 +13,7 @@ import {
   voidPlatformInvoice,
   createPlan,
   updatePlan,
+  updatePlanFeatures,
   setPlanActive,
 } from "@/lib/services/platform";
 import { toMinorUnits } from "@/lib/money";
@@ -70,7 +71,10 @@ export async function createSubscriptionAction(_prev: PlatformFormState, formDat
   return { status: "success" };
 }
 
-const subStatusSchema = z.object({ schoolId: z.string().trim().min(1), status: z.enum(["TRIALING", "ACTIVE", "PAST_DUE", "CANCELED"]) });
+const subStatusSchema = z.object({
+  schoolId: z.string().trim().min(1),
+  status: z.enum(["TRIALING", "ACTIVE", "PAST_DUE", "CANCELED", "EXPIRED", "SUSPENDED"]),
+});
 
 export async function updateSubscriptionStatusAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
@@ -110,28 +114,48 @@ export async function voidPlatformInvoiceAction(invoiceId: string, schoolId: str
 
 const planSchema = z.object({
   name: z.string().trim().min(1, "Enter a plan name"),
-  price: z.coerce.number().positive("Enter a price greater than 0"),
-  billingInterval: z.enum(["MONTHLY", "YEARLY"]),
+  tagline: z.string().trim().max(200).optional().or(z.literal("")),
+  isCustomPricing: z.literal("on").optional(),
+  priceMonthly: z.string().trim().optional().or(z.literal("")),
+  priceAnnual: z.string().trim().optional().or(z.literal("")),
   studentLimit: z.string().trim().optional().or(z.literal("")),
+  isMostPopular: z.literal("on").optional(),
 });
+
+function parsePlanForm(formData: FormData) {
+  return planSchema.safeParse({
+    name: formData.get("name"),
+    tagline: formData.get("tagline") ?? "",
+    isCustomPricing: formData.get("isCustomPricing") ?? undefined,
+    priceMonthly: formData.get("priceMonthly") ?? "",
+    priceAnnual: formData.get("priceAnnual") ?? "",
+    studentLimit: formData.get("studentLimit") ?? "",
+    isMostPopular: formData.get("isMostPopular") ?? undefined,
+  });
+}
+
+function planInputFromParsed(parsed: z.infer<typeof planSchema>) {
+  const isCustomPricing = parsed.isCustomPricing === "on";
+  return {
+    name: parsed.name,
+    tagline: parsed.tagline || null,
+    isCustomPricing,
+    priceMonthlyMinor: !isCustomPricing && parsed.priceMonthly ? toMinorUnits(Number(parsed.priceMonthly)) : null,
+    priceAnnualMinor: !isCustomPricing && parsed.priceAnnual ? toMinorUnits(Number(parsed.priceAnnual)) : null,
+    studentLimit: parsed.studentLimit ? Number(parsed.studentLimit) : null,
+    isMostPopular: parsed.isMostPopular === "on",
+  };
+}
+
+const slugFromName = (name: string) => name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/(^_|_$)/g, "");
 
 export async function createPlanAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   await requireSuperAdmin();
-  const parsed = planSchema.safeParse({
-    name: formData.get("name"),
-    price: formData.get("price"),
-    billingInterval: formData.get("billingInterval"),
-    studentLimit: formData.get("studentLimit") ?? "",
-  });
+  const parsed = parsePlanForm(formData);
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
 
   try {
-    await createPlan({
-      name: parsed.data.name,
-      priceMinor: toMinorUnits(parsed.data.price),
-      billingInterval: parsed.data.billingInterval,
-      studentLimit: parsed.data.studentLimit ? Number(parsed.data.studentLimit) : null,
-    });
+    await createPlan(slugFromName(parsed.data.name), planInputFromParsed(parsed.data));
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not create this plan." };
   }
@@ -141,25 +165,16 @@ export async function createPlanAction(_prev: PlatformFormState, formData: FormD
 
 export async function updatePlanAction(planId: string, _prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   await requireSuperAdmin();
-  const parsed = planSchema.safeParse({
-    name: formData.get("name"),
-    price: formData.get("price"),
-    billingInterval: formData.get("billingInterval"),
-    studentLimit: formData.get("studentLimit") ?? "",
-  });
+  const parsed = parsePlanForm(formData);
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
 
   try {
-    await updatePlan(planId, {
-      name: parsed.data.name,
-      priceMinor: toMinorUnits(parsed.data.price),
-      billingInterval: parsed.data.billingInterval,
-      studentLimit: parsed.data.studentLimit ? Number(parsed.data.studentLimit) : null,
-    });
+    await updatePlan(planId, planInputFromParsed(parsed.data));
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not update this plan." };
   }
   revalidatePath("/platform/plans");
+  revalidatePath("/pricing");
   return { status: "success" };
 }
 
@@ -167,4 +182,20 @@ export async function setPlanActiveAction(planId: string, isActive: boolean) {
   await requireSuperAdmin();
   await setPlanActive(planId, isActive);
   revalidatePath("/platform/plans");
+  revalidatePath("/pricing");
+}
+
+export async function togglePlanFeatureAction(planId: string, featureKey: string, enabled: boolean) {
+  const admin = await requireSuperAdmin();
+  await updatePlanFeatures(planId, { [featureKey]: enabled });
+  await logAudit({
+    schoolId: null,
+    userId: admin.id,
+    action: "platform.plan_feature_toggled",
+    resourceType: "SubscriptionPlan",
+    resourceId: planId,
+    newValue: { [featureKey]: enabled },
+  });
+  revalidatePath("/platform/plans");
+  revalidatePath("/pricing");
 }

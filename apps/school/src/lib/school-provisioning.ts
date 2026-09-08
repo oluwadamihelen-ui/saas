@@ -7,7 +7,8 @@ import {
   SYSTEM_ROLE_KEYS,
   SYSTEM_ROLE_LABELS,
 } from "@/lib/permissions";
-import { ensureDefaultPlans, DEFAULT_SIGNUP_PLAN_NAME, TRIAL_PERIOD_DAYS } from "@/lib/platform-provisioning";
+import { ensureDefaultPlans, TRIAL_PLAN_TIER, TRIAL_PERIOD_DAYS } from "@/lib/platform-provisioning";
+import { notifyTrialStarted } from "@/lib/services/notifications";
 
 /// Idempotently ensures the global permission catalog exists. Safe to call
 /// on every school creation — it's a handful of upserts, not a migration.
@@ -67,9 +68,10 @@ export async function createSchoolWithOwner(input: {
   const passwordHash = await bcrypt.hash(input.password, 12);
 
   const plans = await ensureDefaultPlans();
-  const signupPlan = plans.find((p) => p.name === DEFAULT_SIGNUP_PLAN_NAME) ?? plans[0];
+  const signupPlan = plans.find((p) => p.slug === TRIAL_PLAN_TIER) ?? plans[0];
+  let trialEnd: Date | null = null;
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const school = await tx.school.create({
       data: { name: input.schoolName, slug },
     });
@@ -78,11 +80,15 @@ export async function createSchoolWithOwner(input: {
       const periodStart = new Date();
       const periodEnd = new Date(periodStart);
       periodEnd.setDate(periodEnd.getDate() + TRIAL_PERIOD_DAYS);
+      trialEnd = periodEnd;
       await tx.subscription.create({
         data: {
           schoolId: school.id,
           planId: signupPlan.id,
           status: "TRIALING",
+          billingInterval: "MONTHLY",
+          trialStart: periodStart,
+          trialEnd: periodEnd,
           currentPeriodStart: periodStart,
           currentPeriodEnd: periodEnd,
         },
@@ -154,4 +160,9 @@ export async function createSchoolWithOwner(input: {
 
     return { school, owner };
   });
+
+  if (trialEnd) {
+    await notifyTrialStarted(result.school.id, trialEnd);
+  }
+  return result;
 }

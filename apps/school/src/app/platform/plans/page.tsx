@@ -31,7 +31,7 @@ export default async function PlatformPlansPage() {
           ) : (
             <ul className="divide-y divide-border">
               {plans.map((p) => (
-                <PlanRow key={p.id} plan={p} currency="NGN" />
+                <PlanRow key={p.id} plan={p} />
               ))}
             </ul>
           )}

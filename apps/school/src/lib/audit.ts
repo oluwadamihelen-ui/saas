@@ -3,7 +3,10 @@ import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 
 export async function logAudit(entry: {
-  schoolId: string;
+  /// Null for a platform-wide action with no single tenant (e.g. a Super
+  /// Admin editing the shared plan catalog) — the column itself is
+  /// nullable for exactly this case.
+  schoolId: string | null;
   userId: string;
   action: string;
   resourceType: string;

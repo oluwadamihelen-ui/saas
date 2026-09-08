@@ -63,6 +63,7 @@ export const PERMISSIONS = {
   FEEDBACK_VIEW: "feedback.view",
   FEEDBACK_MANAGE: "feedback.manage",
   PAYMENT_GATEWAYS_MANAGE: "payment_gateways.manage",
+  BILLING_MANAGE: "billing.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -122,6 +123,7 @@ export const PERMISSION_CATALOG: { key: PermissionKey; module: string; descripti
   { key: PERMISSIONS.FEEDBACK_VIEW, module: "administration", description: "View feedback submitted by staff and parents" },
   { key: PERMISSIONS.FEEDBACK_MANAGE, module: "administration", description: "Mark submitted feedback as reviewed" },
   { key: PERMISSIONS.PAYMENT_GATEWAYS_MANAGE, module: "finance", description: "Connect and manage the school's own online payment gateway credentials" },
+  { key: PERMISSIONS.BILLING_MANAGE, module: "billing", description: "Upgrade, downgrade, cancel or renew the school's own Winfield subscription" },
 ];
 
 /// System roles seeded into every new school (brief section 3's role list).
@@ -174,7 +176,8 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
       p !== PERMISSIONS.ROLES_MANAGE &&
       p !== PERMISSIONS.STUDENTS_CREATE &&
       p !== PERMISSIONS.BILLING_VIEW &&
-      p !== PERMISSIONS.PAYMENT_GATEWAYS_MANAGE
+      p !== PERMISSIONS.PAYMENT_GATEWAYS_MANAGE &&
+      p !== PERMISSIONS.BILLING_MANAGE
   ),
   PRINCIPAL: [
     PERMISSIONS.DASHBOARD_VIEW,

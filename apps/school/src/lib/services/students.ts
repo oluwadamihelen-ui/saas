@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { requireStudentCapacity } from "@/lib/billing/entitlements";
 import type { Gender, GuardianRelationship, Prisma, StudentStatus } from "@/generated/prisma/client";
 
 const PAGE_SIZE = 20;
@@ -98,7 +99,11 @@ export interface StudentInput {
   } | null;
 }
 
+/// Every path that creates a student — direct enrollment and admission's
+/// admitApplicant — funnels through here, so requireStudentCapacity() only
+/// needs to be called in this one place to cover both (spec section 10).
 export async function createStudent(schoolId: string, input: StudentInput) {
+  await requireStudentCapacity(schoolId);
   const admissionNumber = await generateAdmissionNumber(schoolId);
 
   return prisma.$transaction(async (tx) => {

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/button";
 export interface StudentFormState {
   status: "idle" | "error";
   message?: string;
+  limitReached?: boolean;
 }
 
 export interface StudentFormDefaults {
@@ -160,9 +162,17 @@ export function StudentForm({
       )}
 
       <div className="flex items-center gap-3">
-        <Button type="submit" disabled={isPending}>{isPending ? "Saving..." : submitLabel}</Button>
-        {state.status === "error" && <p className="text-sm text-danger">{state.message}</p>}
+        <Button type="submit" disabled={isPending || state.limitReached}>{isPending ? "Saving..." : submitLabel}</Button>
+        {state.status === "error" && !state.limitReached && <p className="text-sm text-danger">{state.message}</p>}
       </div>
+      {state.status === "error" && state.limitReached && (
+        <div className="rounded-md border border-warning-soft bg-warning-soft p-4">
+          <p className="text-sm font-medium text-foreground">{state.message}</p>
+          <Button asChild size="sm" className="mt-3">
+            <Link href="/dashboard/billing">Upgrade Plan</Link>
+          </Button>
+        </div>
+      )}
     </form>
   );
 }

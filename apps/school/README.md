@@ -141,18 +141,63 @@ own:
 
 **Phase 7 — SaaS billing & platform admin**
 - A platform Super Admin — one global account, not tied to any school —
-  gets its own app at `/platform`: an overview (schools by status, total
-  students, MRR, trial/overdue counts), a schools list/detail (change a
-  school's account status, its subscription plan and status, generate and
-  mark platform invoices paid), and subscription plan management. There is
-  no self-serve way to become one — `npm run platform:create-admin` is the
-  only way to create this account
-- Every new school created via `/register` is automatically enrolled on the
-  `Starter` plan with a 30-day trial subscription; the school's own owner
-  can see their plan and billing history (read-only) at `/dashboard/billing`
+  gets its own app at `/platform`: an overview, a schools list/detail
+  (change a school's account status, subscription plan and status, generate
+  and mark platform invoices paid), subscription plan management, a
+  dedicated billing dashboard, and an Enterprise inquiries inbox (see
+  "Subscription & billing system" below). There is no self-serve way to
+  become one — `npm run platform:create-admin` is the only way to create
+  this account
 - This bills the *school* for using Winfield — a completely separate thing
   from Phase 3's Invoice/Payment, which bills a *student's family* for
   school fees. The two never touch each other
+
+**Subscription & billing system**
+- Four plans — `Starter` (₦25,000/mo, ₦250,000/yr, up to 150 students),
+  `Professional` (₦60,000/mo, ₦600,000/yr, up to 500 students, most
+  popular), `Premium` (₦120,000/mo, ₦1,200,000/yr, up to 1,500 students)
+  and `Enterprise` (custom pricing, unlimited students) — with a public,
+  monthly/annual comparison page at `/pricing`, feature-by-feature
+  ("Compare plans" table) against a fixed catalog in
+  `src/lib/billing/features.ts`
+- What each plan actually unlocks is centralized in
+  `src/lib/billing/entitlements.ts` (`hasFeature`/`requireFeature`,
+  `getStudentLimit`/`requireStudentCapacity`) — the one place any
+  page/action/AI tool checks entitlement, never a scattered
+  `if (plan === "professional")`. A plan's feature matrix
+  (`SubscriptionPlan.features`) is Super-Admin-editable at
+  `/platform/plans` without a deploy
+- Every new school gets a 14-day trial with full **Professional**-tier
+  access, no card required (`createSchoolWithOwner` in
+  `src/lib/school-provisioning.ts`); status transitions (trial → expired,
+  active → past-due → expired) are computed lazily the next time anything
+  reads the subscription — this app has no background job runner, so
+  there's no cron to drift out of sync with the database
+- Schools manage their own plan at `/dashboard/billing` — upgrade/downgrade
+  (a downgrade below the new plan's student limit is refused, never
+  auto-deletes anyone), cancel/renew, and pay an outstanding invoice online
+  (`/dashboard/billing/confirm` mirrors the parent-facing pay/confirm flow,
+  inside the dashboard's own layout throughout)
+- Schools pay Winfield through the same `PaymentProvider` abstraction the
+  parent-facing gateways use (`src/lib/payments/types.ts`), resolved
+  against Winfield's *own* Paystack keys
+  (`PLATFORM_PAYSTACK_PUBLIC_KEY`/`PLATFORM_PAYSTACK_SECRET_KEY` — a
+  different thing entirely from a school's own gateway credentials) via
+  `src/lib/billing/payment-provider.ts`; unset in dev, so it falls back to
+  a simulated checkout, same principle as every other payment flow in this
+  app. `/api/webhooks/platform-paystack` is signature-verified and
+  idempotent (`BillingEvent`, unique on provider + external event id)
+- The platform billing dashboard (`/platform/billing`) shows MRR/ARR,
+  subscriptions by status, revenue by billing interval, plan mix, a 30-day
+  churn rate, trials ending within 7 days, and overdue invoices — all
+  computed from real data, no synthetic figures. `/platform/inquiries` is
+  the inbox for the pricing page's Enterprise "talk to us" form — it only
+  ever records an inquiry, never auto-creates a subscription
+- `npm test` (vitest) covers plan pricing, student-limit boundaries (150th
+  allowed/151st blocked, and so on per tier), feature access per tier,
+  cross-school isolation, trial/status lazy-reconciliation, the
+  upgrade/downgrade/cancel/renew service layer (downgrade-never-deletes),
+  and the webhook's signature check + idempotency
 
 **Administration — nested navigation, admission, calendar, feedback**
 - The sidebar (dashboard, portal and platform, desktop and mobile) now
@@ -228,8 +273,9 @@ class-scoped), a sample parent↔school conversation, salary structures and
 two payroll runs (one paid, one still draft) for six staff members, a small
 book catalog with a few loans issued, two transport routes with stops and
 assigned students, two hostels with rooms and assigned students, (Phase 7)
-the three default subscription plans plus this school's own subscription
-with two paid platform invoices and one pending, (Administration) a
+the four default subscription plans plus this school's own **Professional**
+subscription with two paid platform invoices and one pending, a second demo
+school ("Bright Path Academy") on a 14-day **Starter** trial, (Administration) a
 configured admission fee with six applicants spanning every pipeline
 stage (including one already admitted into a real student record), a mix
 of upcoming and archived calendar events, and a handful of feedback
@@ -252,13 +298,15 @@ to look at — plus these accounts, all with password `Passw0rd!23`:
 | Parent (portal) | parent@winfield.demo |
 | Student (portal) | student@winfield.demo |
 | Platform Super Admin | superadmin@winfield.demo |
+| School Owner (Bright Path Academy, Starter trial) | owner@brightpath.demo |
 
 The parent and student accounts are both linked to the same seeded child, so
 signing in as either shows the same class/attendance/results/fees data from
 each side. The Super Admin account lands on `/platform`, not `/dashboard` —
 it isn't attached to any school. Or go to `/register` to walk through the
 real onboarding wizard and create a brand-new school from scratch (it's
-automatically enrolled on the Starter plan with a 30-day trial).
+automatically enrolled on the Professional-tier 14-day trial described
+above).
 
 ## Scripts
 
@@ -266,6 +314,7 @@ automatically enrolled on the Starter plan with a 30-day trial).
 npm run dev        # start the app on :3001
 npm run build       # production build
 npm run lint         # eslint
+npm test             # vitest — billing/entitlements/webhook suite (needs DATABASE_URL, uses vitest-* prefixed throwaway schools)
 npm run db:seed      # (re)seed the demo school — wipes any existing school with the same slug first
 npm run db:backfill-permissions   # top up existing schools' roles with any permission added since they were created
 npm run platform:create-admin -- --email=you@example.com --password=... --name="Your Name"

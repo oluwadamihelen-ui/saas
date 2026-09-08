@@ -230,7 +230,8 @@ model User {
 
   /// Set only for the platform Super Admin, marking which platform invoices
   /// they personally confirmed as paid.
-  platformInvoicesMarkedPaid PlatformInvoice[] @relation("PlatformInvoiceMarkedPaidBy")
+  platformInvoicesMarkedPaid  PlatformInvoice[]   @relation("PlatformInvoiceMarkedPaidBy")
+  enterpriseInquiriesReviewed EnterpriseInquiry[] @relation("EnterpriseInquiryReviewedBy")
 
   applicantsReviewed    Applicant[]     @relation("ApplicantReviewedBy")
   calendarEventsCreated CalendarEvent[] @relation("CalendarEventCreatedBy")
@@ -953,7 +954,7 @@ model PaymentGatewayCredential {
   provider     PaymentGatewayProvider
   publicKey    String
   secretKeyEnc String
-  isEnabled    Boolean @default(true)
+  isEnabled    Boolean                @default(true)
 
   /// Flutterwave-only: the separate "secret hash" a school sets in their
   /// Flutterwave dashboard's webhook settings (distinct from the secret
@@ -1151,6 +1152,17 @@ enum NotificationType {
   PAYMENT_CONFIRMED
   ATTENDANCE_ABSENT
   MESSAGE
+  TRIAL_STARTED
+  TRIAL_ENDING_SOON
+  TRIAL_EXPIRED
+  SUBSCRIPTION_PAYMENT_SUCCESS
+  SUBSCRIPTION_PAYMENT_FAILED
+  SUBSCRIPTION_RENEWED
+  SUBSCRIPTION_CANCELLED
+  STUDENT_LIMIT_APPROACHING
+  STUDENT_LIMIT_REACHED
+  PLAN_UPGRADED
+  PLAN_DOWNGRADED
 }
 
 model Notification {
@@ -1644,16 +1656,36 @@ enum BillingInterval {
 
 /// Platform-level catalog, not tenant-scoped — the same handful of plans
 /// apply across every school, the same role Permission plays for
-/// module.action strings.
+/// module.action strings. slug is the stable programmatic key (matches a
+/// PlanTier in src/lib/billing/plan-catalog.ts); name is just display text
+/// a Super Admin can freely rename without breaking anything that
+/// references the plan. A plan carries both a monthly AND an annual price
+/// (either may be null — Enterprise has neither, isCustomPricing instead)
+/// rather than one row per interval, since switching interval is a
+/// property of a school's Subscription, not a different plan.
 model SubscriptionPlan {
-  id              String          @id @default(cuid())
-  name            String          @unique
-  priceMinor      Int
-  billingInterval BillingInterval
-  studentLimit    Int?
-  isActive        Boolean         @default(true)
+  id                String  @id @default(cuid())
+  slug              String  @unique
+  name              String  @unique
+  tagline           String?
+  priceMonthlyMinor Int?
+  priceAnnualMinor  Int?
+  currency          String  @default("NGN")
+  isCustomPricing   Boolean @default(false)
+  studentLimit      Int?
+  isMostPopular     Boolean @default(false)
+  sortOrder         Int     @default(0)
+  isActive          Boolean @default(true)
+
+  /// Record<FeatureKey, boolean> — see src/lib/billing/features.ts for the
+  /// canonical key list. The tenant-editable part of entitlement, the same
+  /// way RolePermission is the tenant-editable part of the fixed
+  /// PERMISSIONS catalog: Super Admin can flip a flag here per plan
+  /// without a code change or deploy.
+  features Json @default("{}")
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   subscriptions Subscription[]
 }
@@ -1663,12 +1695,21 @@ enum SubscriptionStatus {
   ACTIVE
   PAST_DUE
   CANCELED
+  EXPIRED
+  SUSPENDED
 }
 
 /// One per school. Deliberately separate from School.status
 /// (TRIAL/ACTIVE/SUSPENDED), which is an account-access flag a Super Admin
 /// sets independently — a school can be billing-ACTIVE but access-SUSPENDED
 /// (abuse/ToS issue unrelated to payment) or vice versa.
+///
+/// status is a cache, not the source of truth for "is this school
+/// currently entitled" — getEffectiveSubscription() in
+/// src/lib/billing/entitlements.ts reconciles it lazily against
+/// trialEnd/currentPeriodEnd/graceEndsAt on every read (this app has no
+/// background job runner), so a stale TRIALING row past its trialEnd is
+/// still treated as expired even before anything writes EXPIRED back.
 model Subscription {
   id       String           @id @default(cuid())
   schoolId String           @unique
@@ -1676,15 +1717,38 @@ model Subscription {
   planId   String
   plan     SubscriptionPlan @relation(fields: [planId], references: [id])
 
-  status             SubscriptionStatus @default(TRIALING)
+  status          SubscriptionStatus @default(TRIALING)
+  billingInterval BillingInterval    @default(MONTHLY)
+
+  /// Null once the school is on a real paid period (or was never given a
+  /// trial — a Super Admin can create a subscription directly onto ACTIVE).
+  trialStart DateTime?
+  trialEnd   DateTime?
+
   currentPeriodStart DateTime
   currentPeriodEnd   DateTime
   canceledAt         DateTime?
 
+  /// Set the moment a renewal charge fails (status becomes PAST_DUE);
+  /// graceEndsAt is pastDueSince + the configurable grace window
+  /// (BILLING_GRACE_PERIOD_DAYS, see src/lib/billing/config.ts). Past
+  /// graceEndsAt with no successful retry, the subscription is treated as
+  /// EXPIRED the same lazy way trial expiry is.
+  pastDueSince DateTime?
+  graceEndsAt  DateTime?
+
+  /// Which platform gateway (if any) is billing this school for its OWN
+  /// subscription — distinct from PaymentGatewayCredential, which is a
+  /// school's own gateway for collecting money FROM its parents.
+  provider               PaymentGatewayProvider?
+  providerCustomerId     String?
+  providerSubscriptionId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  invoices PlatformInvoice[]
+  invoices      PlatformInvoice[]
+  billingEvents BillingEvent[]
 
   @@index([status])
 }
@@ -1703,12 +1767,17 @@ model PlatformInvoice {
   subscriptionId String
   subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
-  periodStart DateTime
-  periodEnd   DateTime
-  amountMinor Int
-  status      PlatformInvoiceStatus @default(PENDING)
-  dueDate     DateTime
-  paidAt      DateTime?
+  periodStart     DateTime
+  periodEnd       DateTime
+  amountMinor     Int
+  currency        String                @default("NGN")
+  billingInterval BillingInterval?
+  status          PlatformInvoiceStatus @default(PENDING)
+  dueDate         DateTime
+  paidAt          DateTime?
+
+  provider          PaymentGatewayProvider?
+  providerReference String?                 @unique
 
   markedPaidById String?
   markedPaidBy   User?   @relation("PlatformInvoiceMarkedPaidBy", fields: [markedPaidById], references: [id])
@@ -1718,6 +1787,75 @@ model PlatformInvoice {
   @@index([schoolId])
   @@index([subscriptionId])
   @@index([schoolId, status])
+}
+
+enum BillingEventStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
+/// Audit + idempotency log for every platform-billing webhook delivery.
+/// The (provider, externalEventId) unique constraint is the idempotency
+/// guarantee — a retried or duplicate delivery from the gateway finds its
+/// own prior row and is a no-op rather than double-applying a payment.
+/// Kept even for events that don't map to a known subscription (schoolId/
+/// subscriptionId nullable) so a bad or unexpected delivery is still on
+/// record instead of silently dropped.
+model BillingEvent {
+  id              String                 @id @default(cuid())
+  provider        PaymentGatewayProvider
+  externalEventId String
+  eventType       String
+
+  schoolId       String?
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  payload      Json
+  status       BillingEventStatus @default(RECEIVED)
+  errorMessage String?
+
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  @@unique([provider, externalEventId])
+  @@index([schoolId])
+  @@index([subscriptionId])
+}
+
+enum EnterpriseInquiryStatus {
+  NEW
+  CONTACTED
+  CONVERTED
+  DECLINED
+}
+
+/// "Let's build a plan for your school" — never auto-creates an Enterprise
+/// subscription; a Super Admin reviews and converts manually (see
+/// EnterpriseInquiryStatus.CONVERTED), same "human decides" pattern as
+/// Applicant admission.
+model EnterpriseInquiry {
+  id                String  @id @default(cuid())
+  schoolOrGroupName String
+  contactName       String
+  email             String
+  phone             String
+  studentCount      Int?
+  campusCount       Int?
+  currentSoftware   String?
+  requiredModules   String?
+  message           String?
+
+  status       EnterpriseInquiryStatus @default(NEW)
+  reviewedById String?
+  reviewedBy   User?                   @relation("EnterpriseInquiryReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([status])
 }
 
 // ---------------------------------------------------------------------------
@@ -1777,8 +1915,8 @@ model Applicant {
   /// Set while an online fee payment is in flight, so the public
   /// confirmation page can look the applicant back up by reference alone
   /// (no session, same as the invoice pay flow's Payment.reference).
-  feePaymentReference String?                  @unique
-  feePaymentProvider   PaymentGatewayProvider?
+  feePaymentReference String?                 @unique
+  feePaymentProvider  PaymentGatewayProvider?
 
   reviewedById String?
   reviewedBy   User?   @relation("ApplicantReviewedBy", fields: [reviewedById], references: [id])

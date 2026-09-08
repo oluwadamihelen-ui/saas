@@ -548,8 +548,10 @@ still current on its subscription, or vice versa. Collapsing these into one
 status would eventually force a workaround for exactly that case.
 
 **`createSchoolWithOwner`** (the `/register` signup flow) now also enrolls
-every new school on the `Starter` plan with `Subscription.status:
-TRIALING` and a 30-day period — `ensureDefaultPlans()` in
+every new school on a trial subscription — originally the `Starter` plan
+with a 30-day period; see "Subscription & billing system" below for the
+current shape (a 14-day, Professional-tier trial) — `ensureDefaultPlans()`
+in
 `src/lib/platform-provisioning.ts` is called before creating the tenant,
 the same "idempotent upsert, safe to call every time" shape as
 `ensurePermissionCatalog()`. This only applies going forward: a school
@@ -557,11 +559,110 @@ created before this code existed has no `Subscription` row at all, which
 the schools list/detail pages render as a real, handled state (a `—` plan
 column, an empty-state card) rather than crashing — and
 `createSubscriptionForSchool()` gives a Super Admin a real way to onboard
-one from the UI rather than that being a dead end. `billing.view` (the
-school's own read-only `/dashboard/billing`) is owner-only by default,
-carved out of `SCHOOL_ADMIN`'s `ALL_PERMISSIONS` shortcut the same way
-`students.create`/`roles.manage` are — a school's relationship with the
+one from the UI rather than that being a dead end. `billing.view`/
+`billing.manage` (the school's own `/dashboard/billing`) are owner-only by
+default, carved out of `SCHOOL_ADMIN`'s `ALL_PERMISSIONS` shortcut the same
+way `students.create`/`roles.manage` are — a school's relationship with the
 platform is more sensitive than its own internal finance module.
+
+## Subscription & billing system
+
+Phase 7 above laid the schema/Super-Admin foundation; this is a full
+rebuild on top of it into an actually plan-enforcing, self-serve, payable
+subscription system — four real-priced tiers, a centralized entitlement
+gate, self-serve upgrade/downgrade, and Winfield's own payment collection
+from schools, not just a Super Admin's manual dashboard.
+
+**Pricing/limits/features live in one place** —
+`src/lib/billing/plan-catalog.ts` (`PLAN_CATALOG`) and
+`src/lib/billing/features.ts` (`FEATURE_CATALOG` +
+`PLAN_TIER_DEFAULT_FEATURES`) — and only *seed* the database
+(`ensureDefaultPlans()`, `prisma/seed`); every runtime read goes through
+`SubscriptionPlan` rows via `listPlans()`, so a Super Admin can edit a
+live price or flip one feature per plan at `/platform/plans` without a
+deploy. This deliberately mirrors `PERMISSIONS`/`PERMISSION_CATALOG`/
+`RolePermission`'s exact shape: a fixed catalog in code, a database table
+that's the actual runtime source of truth.
+
+**`src/lib/billing/entitlements.ts` is the single server-side gate.**
+`hasFeature`/`requireFeature` and `getStudentLimit`/`requireStudentCapacity`
+are the only functions anything else calls to ask "is this school entitled"
+— never a scattered `if (plan === "professional")`. The two fail in
+opposite directions on purpose: a school with no `Subscription` row at all
+(legacy, or a broken provisioning state) is fail-*open* for student
+capacity (an operational gap to fix, not a reason to suddenly block
+enrollment) but fail-*closed* for premium features (safety default). The
+one real choke point for the limit is `createStudent()` in
+`src/lib/services/students.ts` — admission's `admitApplicant` goes through
+the same function rather than re-implementing the check.
+
+**Lazy status reconciliation, not a cron job.** This app has no background
+job runner, so `TRIALING → EXPIRED`, `ACTIVE → PAST_DUE` (grace period
+starts) and `PAST_DUE → EXPIRED` are computed — and persisted — the next
+time anything calls `getEffectiveSubscription()`, not on a schedule. It
+only ever moves a subscription *toward* restricted access as time passes;
+it never reverses a Super Admin's own manual status change (`CANCELED`/
+`SUSPENDED` are untouched). The two transitions that represent a real,
+one-time event (`TRIALING → EXPIRED`, `ACTIVE → PAST_DUE`) also fire a
+notification from inside `reconcile()` itself — safe to do because the
+`WHERE status = <old status>` shape of the branch means it can only match
+once per actual transition, not on every subsequent read.
+
+**Self-serve billing (`/dashboard/billing`,
+`src/lib/services/billing.ts`)** — `changePlanSelfServe` applies a plan/
+interval change immediately in both directions, no proration; a downgrade
+that would drop the school under its current active-student count is
+refused outright (`DowngradeBlockedError`) rather than silently archiving
+anyone, and student data is never touched by any plan change, cancellation,
+or expiry — only `Subscription`/`PlatformInvoice` rows move. Changing plan
+voids any still-outstanding `PENDING` invoice before creating the new
+period's invoice, so a school never ends up with two open invoices for
+different prices.
+
+**Schools pay Winfield through the same `PaymentProvider` abstraction**
+the parent-facing gateways use (`src/lib/payments/types.ts`) — but resolved
+against Winfield's *own* Paystack keys
+(`src/lib/billing/payment-provider.ts`, `PLATFORM_PAYSTACK_SECRET_KEY`/
+`PLATFORM_PAYSTACK_PUBLIC_KEY`), never a school's own
+`PaymentGatewayCredential` rows, which exist for the opposite direction
+(a school collecting fees from its parents). Unset in dev — falls back to
+a simulated checkout (`/dashboard/billing/confirm`), same principle as
+every other payment flow in this app requiring zero setup to demo.
+`/api/webhooks/platform-paystack` is the school-pays-Winfield counterpart
+to `/api/webhooks/{paystack,flutterwave,korapay}` — signed against one
+platform-wide secret (not a per-school lookup, since there's exactly one
+merchant account on this side) and idempotent via `BillingEvent`'s
+`@@unique([provider, externalEventId])`, which doubles as an audit log:
+every delivery is recorded (`RECEIVED` → `PROCESSED`/`IGNORED`/`FAILED`),
+including ones that don't match a known invoice.
+
+**Real data only, everywhere.** `/platform/billing` (MRR/ARR/plan mix/
+churn/expiring trials/overdue invoices) and `/pricing`'s comparison table
+are both computed from the live database — nothing here is a hardcoded or
+synthetic figure. Churn is deliberately narrow rather than approximate-but-
+wrong: only `CANCELED` subscriptions have a precise timestamp
+(`canceledAt`) to window against; a lazily-reconciled `EXPIRED` transition
+doesn't record *when* it happened, so it's excluded from the 30-day figure
+rather than guessed at.
+
+**Enterprise inquiries never auto-create a subscription.** The pricing
+page's "Let's build a plan for your school" form
+(`src/app/pricing/enterprise-form.tsx`) writes one `EnterpriseInquiry` row
+— reviewed and actioned by a human at `/platform/inquiries`
+(`markEnterpriseInquiryReviewed`), never wired to provision anything on
+its own.
+
+**Testing (`npm test`, vitest)** hits the real database directly — there's
+no mocking layer anywhere else in this codebase, so the test suite doesn't
+invent one either. `server-only` (which unconditionally throws under plain
+Node/vitest, not just under a bare `tsx` run — confirmed the same way
+`prisma/seed` already had to work around it) is aliased to an empty stub
+in `vitest.config.ts` so tests can import the real service modules
+unmodified, rather than duplicating their logic. Every fixture school gets
+a `vitest-`-prefixed slug and is deleted in `afterAll`; `fileParallelism:
+false` is required precisely because that cleanup is a blanket
+prefix-delete — a concurrently-running file's still-in-progress fixtures
+would otherwise get deleted out from under it.
 
 ## Administration: nested navigation, admission, calendar, feedback
 
@@ -733,5 +834,8 @@ Matches the brief exactly: Phase 1 Foundation → Phase 2 Academics → Phase 3
 Finance → Phase 4 Communication/parent & student portals → Phase 5 AI →
 Phase 6 Advanced ERP (payroll/library/transport/hostel) → Phase 7 SaaS
 billing & platform admin → Administration (nested nav, admission, calendar,
-feedback) → multi-provider payments & portal branding, each landing as the
-brief's own priorities evolved.
+feedback) → multi-provider payments & portal branding → Subscription &
+billing system (four real-priced tiers, centralized entitlements,
+self-serve upgrade/downgrade, platform-billing Paystack + webhook, billing
+dashboard, Enterprise inquiries), each landing as the brief's own
+priorities evolved.

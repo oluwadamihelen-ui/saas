@@ -1,88 +1,151 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Input, Label, Select } from "@/components/ui/input";
+import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatMoney } from "@/lib/money";
-import { createPlanAction, updatePlanAction, setPlanActiveAction, type PlatformFormState } from "../actions";
+import { FEATURE_CATALOG, FEATURE_CATEGORIES } from "@/lib/billing/features";
+import { createPlanAction, updatePlanAction, setPlanActiveAction, togglePlanFeatureAction, type PlatformFormState } from "../actions";
 
 const initialState: PlatformFormState = { status: "idle" };
 
-export function CreatePlanForm() {
-  const [state, formAction, isPending] = useActionState(createPlanAction, initialState);
-  const formRef = useRef<HTMLFormElement>(null);
-  useEffect(() => { if (state.status === "success") formRef.current?.reset(); }, [state.status]);
+export interface PlanBrief {
+  id: string;
+  name: string;
+  tagline: string | null;
+  priceMonthlyMinor: number | null;
+  priceAnnualMinor: number | null;
+  currency: string;
+  studentLimit: number | null;
+  isCustomPricing: boolean;
+  isMostPopular: boolean;
+  isActive: boolean;
+  features: unknown;
+}
+
+function PlanFields({ plan }: { plan?: PlanBrief }) {
+  const [isCustom, setIsCustom] = useState(plan?.isCustomPricing ?? false);
 
   return (
-    <form ref={formRef} action={formAction} className="space-y-4">
+    <>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <Label htmlFor="name">Plan name</Label>
-          <Input id="name" name="name" required placeholder="Growth" />
+          <Label htmlFor={`name-${plan?.id ?? "new"}`}>Plan name</Label>
+          <Input id={`name-${plan?.id ?? "new"}`} name="name" required defaultValue={plan?.name} placeholder="Growth" />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="billingInterval">Billing interval</Label>
-          <Select id="billingInterval" name="billingInterval" defaultValue="MONTHLY">
-            <option value="MONTHLY">Monthly</option>
-            <option value="YEARLY">Yearly</option>
-          </Select>
+          <Label htmlFor={`tagline-${plan?.id ?? "new"}`}>Tagline</Label>
+          <Input id={`tagline-${plan?.id ?? "new"}`} name="tagline" defaultValue={plan?.tagline ?? ""} placeholder="For growing schools." />
         </div>
       </div>
+
+      <label className="flex items-center gap-2 text-sm text-foreground">
+        <input
+          type="checkbox"
+          name="isCustomPricing"
+          checked={isCustom}
+          onChange={(e) => setIsCustom(e.target.checked)}
+          className="h-4 w-4 rounded border-border"
+        />
+        Custom pricing (Enterprise-style — no fixed price shown)
+      </label>
+
+      {!isCustom && (
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor={`priceMonthly-${plan?.id ?? "new"}`}>Monthly price</Label>
+            <Input
+              id={`priceMonthly-${plan?.id ?? "new"}`}
+              name="priceMonthly"
+              type="number"
+              min={0}
+              step="0.01"
+              defaultValue={plan?.priceMonthlyMinor != null ? plan.priceMonthlyMinor / 100 : ""}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`priceAnnual-${plan?.id ?? "new"}`}>Annual price</Label>
+            <Input
+              id={`priceAnnual-${plan?.id ?? "new"}`}
+              name="priceAnnual"
+              type="number"
+              min={0}
+              step="0.01"
+              defaultValue={plan?.priceAnnualMinor != null ? plan.priceAnnualMinor / 100 : ""}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <Label htmlFor="price">Price</Label>
-          <Input id="price" name="price" type="number" min={0} step="0.01" required />
+          <Label htmlFor={`studentLimit-${plan?.id ?? "new"}`}>Student limit (optional)</Label>
+          <Input
+            id={`studentLimit-${plan?.id ?? "new"}`}
+            name="studentLimit"
+            type="number"
+            min={1}
+            placeholder="Unlimited"
+            defaultValue={plan?.studentLimit ?? ""}
+          />
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="studentLimit">Student limit (optional)</Label>
-          <Input id="studentLimit" name="studentLimit" type="number" min={1} placeholder="Unlimited" />
-        </div>
+        <label className="flex items-center gap-2 self-end pb-2.5 text-sm text-foreground">
+          <input type="checkbox" name="isMostPopular" defaultChecked={plan?.isMostPopular ?? false} className="h-4 w-4 rounded border-border" />
+          Mark as &quot;Most popular&quot;
+        </label>
       </div>
+    </>
+  );
+}
+
+export function CreatePlanForm() {
+  const [state, formAction, isPending] = useActionState(createPlanAction, initialState);
+
+  return (
+    <form action={formAction} className="space-y-4">
+      <PlanFields />
       <Button type="submit" disabled={isPending}>{isPending ? "Creating..." : "Create plan"}</Button>
       {state.status === "error" && <p className="text-sm text-danger">{state.message}</p>}
     </form>
   );
 }
 
-export interface PlanBrief {
-  id: string;
-  name: string;
-  priceMinor: number;
-  billingInterval: "MONTHLY" | "YEARLY";
-  studentLimit: number | null;
-  isActive: boolean;
-}
-
-/// One row per plan — either the summary view (name/price, Edit and
-/// Activate/Deactivate buttons) or, once Edit is clicked, the same
-/// fields CreatePlanForm uses, pre-filled and wired to updatePlanAction
-/// instead. Local isEditing state, so switching one row into edit mode
-/// never touches the others.
-export function PlanRow({ plan, currency }: { plan: PlanBrief; currency: string }) {
+export function PlanRow({ plan }: { plan: PlanBrief }) {
   const [isEditing, setIsEditing] = useState(false);
+  const [isManagingFeatures, setIsManagingFeatures] = useState(false);
 
   if (isEditing) {
     return <EditPlanForm plan={plan} onDone={() => setIsEditing(false)} />;
   }
 
   return (
-    <li className="flex items-center justify-between gap-3 p-4 text-sm">
-      <div>
-        <p className="flex items-center gap-2 font-medium text-foreground">
-          {plan.name}
-          {!plan.isActive && <Badge variant="neutral">Inactive</Badge>}
-        </p>
-        <p className="text-xs text-muted">
-          {formatMoney(plan.priceMinor, currency)}/{plan.billingInterval === "MONTHLY" ? "mo" : "yr"} ·{" "}
-          {plan.studentLimit ? `up to ${plan.studentLimit} students` : "unlimited students"}
-        </p>
+    <li className="space-y-3 p-4 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="flex items-center gap-2 font-medium text-foreground">
+            {plan.name}
+            {plan.isMostPopular && <Badge variant="accent">Most popular</Badge>}
+            {!plan.isActive && <Badge variant="neutral">Inactive</Badge>}
+          </p>
+          <p className="text-xs text-muted">
+            {plan.isCustomPricing
+              ? "Custom pricing"
+              : `${plan.priceMonthlyMinor != null ? formatMoney(plan.priceMonthlyMinor, plan.currency) : "—"}/mo · ${plan.priceAnnualMinor != null ? formatMoney(plan.priceAnnualMinor, plan.currency) : "—"}/yr`}
+            {" · "}
+            {plan.studentLimit ? `up to ${plan.studentLimit} students` : "unlimited students"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="ghost" onClick={() => setIsManagingFeatures((v) => !v)}>
+            {isManagingFeatures ? "Hide features" : "Manage features"}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setIsEditing(true)}>Edit</Button>
+          <PlanActiveToggle planId={plan.id} isActive={plan.isActive} />
+        </div>
       </div>
-      <div className="flex items-center gap-2">
-        <Button size="sm" variant="ghost" onClick={() => setIsEditing(true)}>Edit</Button>
-        <PlanActiveToggle planId={plan.id} isActive={plan.isActive} />
-      </div>
+      {isManagingFeatures && <FeatureMatrixEditor planId={plan.id} features={(plan.features as Record<string, boolean>) ?? {}} />}
     </li>
   );
 }
@@ -93,43 +156,13 @@ function EditPlanForm({ plan, onDone }: { plan: PlanBrief; onDone: () => void })
 
   useEffect(() => {
     if (state.status === "success") onDone();
-    // onDone is a fresh closure each render (setIsEditing(false)) — only re-run when the save actually succeeds.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onDone (setIsEditing(false)) is a fresh closure each render; only re-run when the save actually succeeds.
   }, [state.status]);
 
   return (
     <li className="p-4 text-sm">
       <form action={formAction} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label htmlFor={`name-${plan.id}`}>Plan name</Label>
-            <Input id={`name-${plan.id}`} name="name" required defaultValue={plan.name} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`billingInterval-${plan.id}`}>Billing interval</Label>
-            <Select id={`billingInterval-${plan.id}`} name="billingInterval" defaultValue={plan.billingInterval}>
-              <option value="MONTHLY">Monthly</option>
-              <option value="YEARLY">Yearly</option>
-            </Select>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label htmlFor={`price-${plan.id}`}>Price</Label>
-            <Input id={`price-${plan.id}`} name="price" type="number" min={0} step="0.01" required defaultValue={plan.priceMinor / 100} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`studentLimit-${plan.id}`}>Student limit (optional)</Label>
-            <Input
-              id={`studentLimit-${plan.id}`}
-              name="studentLimit"
-              type="number"
-              min={1}
-              placeholder="Unlimited"
-              defaultValue={plan.studentLimit ?? ""}
-            />
-          </div>
-        </div>
+        <PlanFields plan={plan} />
         <div className="flex items-center gap-3">
           <Button type="submit" size="sm" disabled={isPending}>{isPending ? "Saving..." : "Save changes"}</Button>
           <Button type="button" size="sm" variant="ghost" onClick={onDone}>Cancel</Button>
@@ -158,5 +191,47 @@ export function PlanActiveToggle({ planId, isActive }: { planId: string; isActiv
     >
       {isActive ? "Deactivate" : "Activate"}
     </Button>
+  );
+}
+
+function FeatureMatrixEditor({ planId, features }: { planId: string; features: Record<string, boolean> }) {
+  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+  const [local, setLocal] = useState(features);
+
+  function toggle(key: string) {
+    const next = !local[key];
+    setLocal((prev) => ({ ...prev, [key]: next }));
+    startTransition(async () => {
+      await togglePlanFeatureAction(planId, key, next);
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="space-y-4 rounded-md border border-border bg-muted-surface p-4">
+      {FEATURE_CATEGORIES.map((category) => {
+        const categoryFeatures = FEATURE_CATALOG.filter((f) => f.category === category);
+        return (
+          <div key={category}>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{category}</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
+              {categoryFeatures.map((f) => (
+                <label key={f.key} className="flex items-center gap-2 text-sm text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(local[f.key])}
+                    disabled={isPending}
+                    onChange={() => toggle(f.key)}
+                    className="h-4 w-4 rounded border-border"
+                  />
+                  {f.label}
+                </label>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
