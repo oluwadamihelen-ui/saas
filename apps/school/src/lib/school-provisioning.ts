@@ -120,6 +120,19 @@ export async function createSchoolWithOwner(input: {
       ],
     });
 
+    await tx.feeCategory.createMany({
+      data: ["Tuition", "Boarding", "Transport", "Meals", "Uniform", "Books", "Other"].map((name) => ({
+        schoolId: school.id,
+        name,
+      })),
+    });
+    await tx.expenseCategory.createMany({
+      data: ["Salaries", "Utilities", "Maintenance", "Supplies", "Transport", "Other"].map((name) => ({
+        schoolId: school.id,
+        name,
+      })),
+    });
+
     return { school, owner };
   });
 }

@@ -33,6 +33,13 @@ export const PERMISSIONS = {
   RESULTS_APPROVE: "results.approve",
   RESULTS_PUBLISH: "results.publish",
   GRADING_MANAGE: "grading.manage",
+  FINANCE_VIEW: "finance.view",
+  FINANCE_MANAGE: "finance.manage",
+  PAYMENTS_VIEW: "payments.view",
+  PAYMENTS_RECORD: "payments.record",
+  EXPENSES_VIEW: "expenses.view",
+  EXPENSES_CREATE: "expenses.create",
+  EXPENSES_APPROVE: "expenses.approve",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -62,6 +69,13 @@ export const PERMISSION_CATALOG: { key: PermissionKey; module: string; descripti
   { key: PERMISSIONS.RESULTS_APPROVE, module: "results", description: "Approve report cards" },
   { key: PERMISSIONS.RESULTS_PUBLISH, module: "results", description: "Publish report cards" },
   { key: PERMISSIONS.GRADING_MANAGE, module: "results", description: "Configure grading scale and assessment components" },
+  { key: PERMISSIONS.FINANCE_VIEW, module: "finance", description: "View fee structures and invoices" },
+  { key: PERMISSIONS.FINANCE_MANAGE, module: "finance", description: "Configure fee structures and generate invoices" },
+  { key: PERMISSIONS.PAYMENTS_VIEW, module: "finance", description: "View payments received" },
+  { key: PERMISSIONS.PAYMENTS_RECORD, module: "finance", description: "Record manual payments against an invoice" },
+  { key: PERMISSIONS.EXPENSES_VIEW, module: "finance", description: "View expense records" },
+  { key: PERMISSIONS.EXPENSES_CREATE, module: "finance", description: "Record a new expense" },
+  { key: PERMISSIONS.EXPENSES_APPROVE, module: "finance", description: "Approve or reject expenses above the approval threshold" },
 ];
 
 /// System roles seeded into every new school (brief section 3's role list).
@@ -117,6 +131,10 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.RESULTS_APPROVE,
     PERMISSIONS.RESULTS_PUBLISH,
     PERMISSIONS.GRADING_MANAGE,
+    PERMISSIONS.FINANCE_VIEW,
+    PERMISSIONS.PAYMENTS_VIEW,
+    PERMISSIONS.EXPENSES_VIEW,
+    PERMISSIONS.EXPENSES_APPROVE,
   ],
   TEACHER: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -129,7 +147,16 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.RESULTS_VIEW,
     PERMISSIONS.RESULTS_ENTER,
   ],
-  ACCOUNTANT: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.STUDENTS_VIEW],
+  ACCOUNTANT: [
+    PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.STUDENTS_VIEW,
+    PERMISSIONS.FINANCE_VIEW,
+    PERMISSIONS.FINANCE_MANAGE,
+    PERMISSIONS.PAYMENTS_VIEW,
+    PERMISSIONS.PAYMENTS_RECORD,
+    PERMISSIONS.EXPENSES_VIEW,
+    PERMISSIONS.EXPENSES_CREATE,
+  ],
   HR_STAFF: [
     PERMISSIONS.DASHBOARD_VIEW,
     PERMISSIONS.STAFF_VIEW,

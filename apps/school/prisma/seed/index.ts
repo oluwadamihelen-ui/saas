@@ -1,4 +1,5 @@
 import "dotenv/config";
+import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "../../src/generated/prisma/client";
 import {
@@ -84,6 +85,9 @@ async function main() {
       country: "Nigeria",
       currency: "NGN",
       timezone: "Africa/Lagos",
+      bankName: "GTBank",
+      bankAccountName: schoolName,
+      bankAccountNumber: "0123456789",
       schoolInfoCompletedAt: new Date(),
       academicStructureSetupAt: new Date(),
       staffInvitedAt: new Date(),
@@ -128,6 +132,8 @@ async function main() {
   const userByEmail = new Map(staffUsers.map((u) => [u.email, u]));
   const teacher1 = userByEmail.get("teacher1@winfield.demo")!;
   const teacher2 = userByEmail.get("teacher2@winfield.demo")!;
+  const accountant = userByEmail.get("accountant@winfield.demo")!;
+  const owner = userByEmail.get("owner@winfield.demo")!;
 
   const thisYear = new Date().getFullYear();
   const session = await prisma.academicSession.create({
@@ -187,12 +193,14 @@ async function main() {
     { name: "Primary 5", arms: ["A"], typicalAge: 10 },
     { name: "Primary 6", arms: ["A"], typicalAge: 11 },
   ];
-  const classArms: { id: string; typicalAge: number }[] = [];
+  const classArms: { id: string; classGroupId: string; typicalAge: number }[] = [];
+  const classGroups: { id: string; order: number }[] = [];
   for (const [index, group] of classPlan.entries()) {
     const classGroup = await prisma.classGroup.create({ data: { schoolId: school.id, name: group.name, order: index } });
+    classGroups.push({ id: classGroup.id, order: index });
     for (const armName of group.arms) {
       const arm = await prisma.classArm.create({ data: { schoolId: school.id, classGroupId: classGroup.id, name: armName } });
-      classArms.push({ id: arm.id, typicalAge: group.typicalAge });
+      classArms.push({ id: arm.id, classGroupId: classGroup.id, typicalAge: group.typicalAge });
     }
   }
 
@@ -339,6 +347,142 @@ async function main() {
       )
     ),
   });
+
+  console.log("Setting up fees, invoices, payments and expenses...");
+
+  const feeCategoryRows = await prisma.feeCategory.createManyAndReturn({
+    data: ["Tuition", "Boarding", "Transport", "Meals", "Uniform", "Books", "Other"].map((name) => ({ schoolId: school.id, name })),
+  });
+  const tuitionCategory = feeCategoryRows.find((c) => c.name === "Tuition")!;
+  const booksCategory = feeCategoryRows.find((c) => c.name === "Books")!;
+
+  const expenseCategoryRows = await prisma.expenseCategory.createManyAndReturn({
+    data: ["Salaries", "Utilities", "Maintenance", "Supplies", "Transport", "Other"].map((name) => ({ schoolId: school.id, name })),
+  });
+
+  const vendor = await prisma.vendor.create({
+    data: { schoolId: school.id, name: "Lagos Facilities Services", contactInfo: "+234 802 555 0100" },
+  });
+
+  // Tuition scales with class level; a flat book levy applies to everyone.
+  const feeStructuresByGroup = new Map<string, { id: string; amountMinor: number }[]>();
+  for (const group of classGroups) {
+    const tuition = await prisma.feeStructure.create({
+      data: {
+        schoolId: school.id,
+        categoryId: tuitionCategory.id,
+        classGroupId: group.id,
+        termId: currentTerm.id,
+        name: "Tuition - " + currentTerm.name,
+        amountMinor: 8_000_000 + group.order * 500_000, // NGN 80,000 rising with class level
+      },
+    });
+    feeStructuresByGroup.set(group.id, [{ id: tuition.id, amountMinor: tuition.amountMinor }]);
+  }
+  const books = await prisma.feeStructure.create({
+    data: {
+      schoolId: school.id,
+      categoryId: booksCategory.id,
+      classGroupId: null,
+      termId: currentTerm.id,
+      name: "Books & Learning Materials",
+      amountMinor: 2_000_000, // NGN 20,000
+    },
+  });
+
+  let invoiceSeq = 1;
+  const invoiceDueDate = new Date(currentTerm.startDate);
+  invoiceDueDate.setDate(invoiceDueDate.getDate() + 14);
+
+  for (const arm of classArms) {
+    const groupStructures = feeStructuresByGroup.get(arm.classGroupId) ?? [];
+    const lineItems = [...groupStructures, { id: books.id, amountMinor: books.amountMinor }];
+    const subtotalMinor = lineItems.reduce((sum, item) => sum + item.amountMinor, 0);
+    const armStudentIds = studentsByArm.get(arm.id) ?? [];
+
+    for (const studentId of armStudentIds) {
+      const invoice = await prisma.invoice.create({
+        data: {
+          schoolId: school.id,
+          studentId,
+          termId: currentTerm.id,
+          invoiceNumber: `INV-${thisYear}-${String(invoiceSeq++).padStart(5, "0")}`,
+          subtotalMinor,
+          totalMinor: subtotalMinor,
+          dueDate: invoiceDueDate,
+          payToken: crypto.randomBytes(20).toString("hex"),
+          items: {
+            create: lineItems.map((item) => ({
+              feeStructureId: item.id,
+              description: item.id === books.id ? "Books & Learning Materials" : `Tuition - ${currentTerm.name}`,
+              amountMinor: item.amountMinor,
+            })),
+          },
+        },
+      });
+
+      // Realistic payment mix: most parents have paid in full, some paid
+      // half, a few haven't paid yet, and one has a transfer awaiting
+      // confirmation — so the finance dashboard has something to show.
+      const roll = Math.random();
+      if (roll < 0.6) {
+        await prisma.payment.create({
+          data: {
+            schoolId: school.id, invoiceId: invoice.id, amountMinor: subtotalMinor,
+            method: "MANUAL", status: "CONFIRMED", reference: crypto.randomBytes(12).toString("hex"),
+            paidAt: new Date(), recordedById: accountant.id,
+          },
+        });
+        await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "PAID" } });
+      } else if (roll < 0.85) {
+        const partial = Math.round(subtotalMinor * 0.5);
+        await prisma.payment.create({
+          data: {
+            schoolId: school.id, invoiceId: invoice.id, amountMinor: partial,
+            method: "BANK_TRANSFER", status: "CONFIRMED", reference: crypto.randomBytes(12).toString("hex"),
+            paidAt: new Date(), recordedById: accountant.id,
+          },
+        });
+        await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "PARTIALLY_PAID" } });
+      } else if (roll < 0.92) {
+        await prisma.payment.create({
+          data: {
+            schoolId: school.id, invoiceId: invoice.id, amountMinor: subtotalMinor,
+            method: "BANK_TRANSFER", status: "PENDING", reference: crypto.randomBytes(12).toString("hex"),
+          },
+        });
+      }
+      // else: left ISSUED with no payment at all.
+    }
+  }
+
+  const expenseSeeds: { category: string; description: string; amountMinor: number; daysAgo: number }[] = [
+    { category: "Salaries", description: "Teaching staff salaries - " + currentTerm.name, amountMinor: 120_000_000, daysAgo: 20 },
+    { category: "Utilities", description: "Electricity bill", amountMinor: 1_800_000, daysAgo: 12 },
+    { category: "Maintenance", description: "Playground equipment repair", amountMinor: 3_500_000, daysAgo: 8 },
+    { category: "Supplies", description: "Classroom stationery restock", amountMinor: 900_000, daysAgo: 5 },
+    { category: "Transport", description: "School bus fuel", amountMinor: 1_200_000, daysAgo: 3 },
+  ];
+  for (const e of expenseSeeds) {
+    const category = expenseCategoryRows.find((c) => c.name === e.category)!;
+    const needsApproval = e.amountMinor >= school.expenseApprovalThresholdMinor;
+    const incurredAt = new Date();
+    incurredAt.setDate(incurredAt.getDate() - e.daysAgo);
+    await prisma.expense.create({
+      data: {
+        schoolId: school.id,
+        categoryId: category.id,
+        vendorId: vendor.id,
+        description: e.description,
+        amountMinor: e.amountMinor,
+        incurredAt,
+        createdById: accountant.id,
+        status: needsApproval ? "PENDING" : "APPROVED",
+        approvedById: needsApproval ? null : owner.id,
+        approvedAt: needsApproval ? null : new Date(),
+      },
+    });
+  }
 
   console.log(`\nSeeded "${schoolName}" with ${classArms.length} class arms and 110 students.`);
   console.log(`All staff accounts use the password: ${DEMO_PASSWORD}\n`);

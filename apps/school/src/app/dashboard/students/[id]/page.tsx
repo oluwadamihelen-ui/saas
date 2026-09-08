@@ -13,6 +13,9 @@ import { getStudent } from "@/lib/services/students";
 import { getStudentAttendanceHistory } from "@/lib/services/attendance";
 import { computeReportCard } from "@/lib/services/results";
 import { getCurrentTerm } from "@/lib/services/academics";
+import { listInvoicesForStudent, invoiceBalanceMinor } from "@/lib/services/invoices";
+import { formatMoney } from "@/lib/money";
+import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import { WithdrawButton } from "./withdraw-button";
 import { AddGuardianForm } from "./add-guardian-form";
@@ -20,6 +23,8 @@ import { AddGuardianForm } from "./add-guardian-form";
 const ATTENDANCE_BADGE = { PRESENT: "success", LATE: "warning", EXCUSED: "neutral", ABSENT: "danger" } as const;
 
 const STATUS_VARIANT = { ACTIVE: "success", GRADUATED: "neutral", WITHDRAWN: "warning", SUSPENDED: "danger" } as const;
+
+const INVOICE_STATUS_VARIANT = { ISSUED: "warning", PARTIALLY_PAID: "accent", PAID: "success", CANCELLED: "neutral" } as const;
 
 export default async function StudentProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -34,6 +39,11 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
 
   const currentTerm = perms.has(PERMISSIONS.RESULTS_VIEW) ? await getCurrentTerm(user.schoolId) : null;
   const currentReportCard = currentTerm ? await computeReportCard(user.schoolId, student.id, currentTerm.id) : null;
+
+  const canViewFinance = perms.has(PERMISSIONS.FINANCE_VIEW);
+  const [invoices, school] = canViewFinance
+    ? await Promise.all([listInvoicesForStudent(user.schoolId, student.id), prisma.school.findUniqueOrThrow({ where: { id: user.schoolId } })])
+    : [null, null];
 
   const canEdit = perms.has(PERMISSIONS.STUDENTS_EDIT);
   const canDelete = perms.has(PERMISSIONS.STUDENTS_DELETE);
@@ -72,6 +82,7 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
           <TabsTrigger value="guardians">Guardians</TabsTrigger>
           {attendance && <TabsTrigger value="attendance">Attendance</TabsTrigger>}
           {currentReportCard && <TabsTrigger value="results">Results</TabsTrigger>}
+          {invoices && <TabsTrigger value="finance">Finance</TabsTrigger>}
           <TabsTrigger value="health">Health</TabsTrigger>
         </TabsList>
 
@@ -180,6 +191,29 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+        )}
+
+        {invoices && school && (
+          <TabsContent value="finance">
+            {invoices.length === 0 ? (
+              <EmptyState title="No invoices yet" />
+            ) : (
+              <ul className="divide-y divide-border rounded-md border border-border">
+                {invoices.map((inv) => (
+                  <li key={inv.id} className="flex items-center justify-between p-3 text-sm">
+                    <Link href={`/dashboard/finance/invoices/${inv.id}`} className="font-medium text-foreground hover:text-accent">
+                      {inv.invoiceNumber}
+                    </Link>
+                    <div className="flex items-center gap-3 text-muted">
+                      <span>{inv.term.name}</span>
+                      <span>{formatMoney(invoiceBalanceMinor(inv), school.currency)} due</span>
+                      <Badge variant={INVOICE_STATUS_VARIANT[inv.status]}>{inv.status.replace("_", " ")}</Badge>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </TabsContent>
         )}
 

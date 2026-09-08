@@ -18,6 +18,9 @@ const schema = z.object({
   country: z.string().trim().min(1),
   currency: z.string().trim().min(1),
   timezone: z.string().trim().min(1),
+  bankName: z.string().trim().max(100).optional().or(z.literal("")),
+  bankAccountName: z.string().trim().max(150).optional().or(z.literal("")),
+  bankAccountNumber: z.string().trim().max(30).optional().or(z.literal("")),
 });
 
 export interface SettingsState {
@@ -39,13 +42,24 @@ export async function saveSchoolSettings(_prev: SettingsState, formData: FormDat
     country: formData.get("country"),
     currency: formData.get("currency"),
     timezone: formData.get("timezone"),
+    bankName: formData.get("bankName") ?? "",
+    bankAccountName: formData.get("bankAccountName") ?? "",
+    bankAccountNumber: formData.get("bankAccountNumber") ?? "",
   });
 
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
   }
 
-  await prisma.school.update({ where: { id: user.schoolId }, data: { name: parsed.data.name } });
+  await prisma.school.update({
+    where: { id: user.schoolId },
+    data: {
+      name: parsed.data.name,
+      bankName: parsed.data.bankName || null,
+      bankAccountName: parsed.data.bankAccountName || null,
+      bankAccountNumber: parsed.data.bankAccountNumber || null,
+    },
+  });
   await updateSchoolInfo(user.schoolId, {
     email: parsed.data.email || null,
     phone: parsed.data.phone || null,

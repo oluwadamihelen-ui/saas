@@ -65,6 +65,24 @@ export function SettingsForm({ school }: { school: School }) {
           </Select>
         </div>
       </div>
+      <div>
+        <h3 className="mb-3 text-sm font-semibold text-foreground">Bank details</h3>
+        <p className="mb-3 text-xs text-muted">Shown to parents on the pay page as a bank-transfer option. Leave blank to hide it.</p>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="bankName">Bank name</Label>
+            <Input id="bankName" name="bankName" defaultValue={school.bankName ?? ""} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="bankAccountName">Account name</Label>
+            <Input id="bankAccountName" name="bankAccountName" defaultValue={school.bankAccountName ?? ""} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="bankAccountNumber">Account number</Label>
+            <Input id="bankAccountNumber" name="bankAccountNumber" defaultValue={school.bankAccountNumber ?? ""} />
+          </div>
+        </div>
+      </div>
       <Button type="submit" disabled={isPending}>{isPending ? "Saving..." : "Save changes"}</Button>
       {state.status === "error" && <p className="text-sm text-danger">{state.message}</p>}
       {state.status === "success" && <p className="text-sm text-success">{state.message}</p>}

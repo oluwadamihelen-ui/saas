@@ -12,6 +12,7 @@ import {
   CalendarDays,
   FileText,
   Award,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/brand/logo";
@@ -24,6 +25,7 @@ const NAV = [
   { href: "/dashboard/timetable", label: "Timetable", icon: CalendarDays },
   { href: "/dashboard/assignments", label: "Assignments", icon: FileText },
   { href: "/dashboard/results", label: "Results", icon: Award },
+  { href: "/dashboard/finance", label: "Finance", icon: Wallet },
   { href: "/dashboard/staff", label: "Staff", icon: Users },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];

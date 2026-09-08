@@ -5,8 +5,8 @@ students, staff, academics, attendance, finance, communication and an AI
 assistant, built on a multi-tenant foundation (so other schools can be
 onboarded the same way later). This app is being built in phases (see
 [the root README](../../README.md) for the full architecture assessment and
-roadmap); this commit implements **Phase 1 (Foundation)** and **Phase 2
-(Academics)**:
+roadmap); this commit implements **Phase 1 (Foundation)**, **Phase 2
+(Academics)** and **Phase 3 (Finance)**:
 
 **Phase 1 — Foundation**
 - Multi-tenant data model (every tenant-owned table carries `schoolId`)
@@ -39,7 +39,27 @@ roadmap); this commit implements **Phase 1 (Foundation)** and **Phase 2
   grade bands, a score-entry grid per class/subject, and report cards with
   a real approval workflow (draft → approved → published) plus PDF export
 
-Not yet built (see the phased roadmap): finance, payroll, communication,
+**Phase 3 — Finance**
+- Fee structures: per-school categories (Tuition, Transport, ...) and
+  amounts scoped to a class and term, configurable from Finance → Fee
+  structures
+- Invoices: one click rolls every applicable fee structure into an invoice
+  per student for a class; a per-student, per-class and overall finance
+  dashboard shows revenue/outstanding/overdue in real time
+- Payments: a real provider abstraction (`src/lib/payments/`) with a mock
+  adapter selected via `PAYMENT_PROVIDER` — swapping in Paystack/Flutterwave
+  later is a new adapter file, not a rewrite. There's no parent portal yet
+  (Phase 4), so each invoice gets a shareable, unauthenticated `/pay/[token]`
+  link — the same pattern as the Phase 1 staff-invite link — where a parent
+  can pay online (mock checkout) or see the school's bank details and
+  notify a transfer for staff to confirm
+- Receipts: PDF receipts for confirmed payments, downloadable by staff and,
+  via the same pay link, by the parent
+- Expenses: vendors, categories, and an approval workflow — expenses at or
+  above a configurable threshold need owner/admin sign-off; smaller ones
+  are recorded straight through
+
+Not yet built (see the phased roadmap): payroll, communication,
 parent/student portals, AI.
 
 ## Stack
@@ -63,8 +83,10 @@ npm run dev                # http://localhost:3001
 ### Demo accounts
 
 The seed script creates **Winfield Montessori School** (Creche, Nursery &
-Primary) with 14 class arms, 110 students, and these staff accounts — all
-with password `Passw0rd!23`:
+Primary) with 14 class arms, 110 students, fee structures, 110 generated
+invoices with a realistic mix of paid/partial/unpaid/pending-confirmation
+payments, and a handful of expenses (one over the approval threshold), and
+these staff accounts — all with password `Passw0rd!23`:
 
 | Role | Email |
 |---|---|

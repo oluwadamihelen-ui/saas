@@ -1,8 +1,8 @@
 # Winfield — Architecture
 
 Winfield is a multi-tenant AI-native school management platform. This document
-describes the system as implemented through **Phase 1 (Foundation)** and
-**Phase 2 (Academics)** — see the [root README](../../README.md#school-platform--architecture-assessment-phase-1-kickoff)
+describes the system as implemented through **Phase 1 (Foundation)**,
+**Phase 2 (Academics)** and **Phase 3 (Finance)** — see the [root README](../../README.md#school-platform--architecture-assessment-phase-1-kickoff)
 for the initial assessment this build started from, and the phased roadmap
 below for what comes next.
 
@@ -46,9 +46,10 @@ nothing in Phase 1's UI creates or uses such a user yet.
   Session is a JWT carrying `userId`, `role` (key), `schoolId`.
 - **Permissions** are `module.action` strings (`src/lib/permissions.ts`),
   e.g. `students.edit`, `staff.invite`, `school_settings.manage`,
-  `attendance.mark`, `results.approve`. The catalog only lists permissions
-  for modules that actually exist — finance permissions, for instance,
-  aren't seeded ahead of time as inert placeholders.
+  `attendance.mark`, `results.approve`, `finance.manage`, `expenses.approve`.
+  The catalog only lists permissions for modules that actually exist —
+  payroll permissions, for instance, aren't seeded ahead of time as inert
+  placeholders.
 - **Roles** (`Role` model) are tenant-scoped rows, not a global enum. When a
   school is created, `src/lib/school-provisioning.ts` seeds one `Role` row
   per system role (`SCHOOL_OWNER`, `SCHOOL_ADMIN`, `PRINCIPAL`, `TEACHER`,
@@ -76,6 +77,8 @@ Core entities (`prisma/schema.prisma`):
 - **Attendance**: `AttendanceRecord`
 - **Assignments**: `Assignment`, `AssignmentSubmission`
 - **Results**: `GradeBand`, `AssessmentComponent`, `Score`, `ReportCard`
+- **Finance**: `FeeCategory`, `FeeStructure`, `Invoice`, `InvoiceItem`,
+  `Payment`, `Vendor`, `ExpenseCategory`, `Expense`
 - **Audit**: `AuditLog`
 
 `ClassGroup` is a grade level (e.g. "JSS1"); `ClassArm` is the stream
@@ -141,30 +144,79 @@ part of this wizard yet — they're real Phase 2/3 features, not stubbed.
   Report card PDFs (`src/lib/services/report-card-pdf.ts`) reuse the same
   pdfkit pattern the marketplace app uses for invoices.
 
+## Phase 3: finance
+
+- **Money** is always an integer in the school's currency's minor units
+  (kobo for NGN) — never a float — via `amountMinor` columns everywhere and
+  a single `formatMoney()`/`toMinorUnits()` pair (`src/lib/money.ts`) that's
+  the only place a conversion to/from a display value happens.
+- **Fee structures → invoices** — `FeeStructure` rows are school-configured
+  data (category, optional class-group scope, term, amount).
+  `generateInvoicesForClass` (`src/lib/services/invoices.ts`) rolls every
+  structure applicable to a class (matching its class group, or scoped to
+  "all classes") into one `Invoice` + one `InvoiceItem` per structure, per
+  active student, skipping students who already have one for that term.
+- **Invoice status is derived, never set directly.** `recalculateInvoiceStatus`
+  sums confirmed `Payment` rows against `totalMinor` and writes
+  `ISSUED`/`PARTIALLY_PAID`/`PAID` every time a payment is recorded or
+  confirmed — no code path sets `Invoice.status` any other way, so it can't
+  drift from what's actually been paid.
+- **Payment provider abstraction** (`src/lib/payments/`) — `PaymentProvider`
+  is an interface (`initialize`, `verify`); `mock-provider.ts` implements it
+  without any external credentials by redirecting to the app's own
+  confirmation page instead of a real gateway's checkout, and `registry.ts`
+  selects an implementation via `PAYMENT_PROVIDER` (default `mock`). A real
+  adapter (Paystack, Flutterwave, ...) is a new file plus a registry entry —
+  nothing that calls `getPaymentProvider()` changes.
+- **No parent portal yet (Phase 4), so `Invoice.payToken`** is what makes
+  "online payments" and "bank transfers" reachable at all in this phase: an
+  unauthenticated `/pay/[token]` page (same unguessable-token pattern as the
+  Phase 1 staff-invite link) lets a parent view the invoice, pay through the
+  mock provider, or see the school's bank details and record a "notify
+  transfer" `PENDING` payment for staff to confirm from the invoice detail
+  page. Receipts for confirmed payments are downloadable the same way
+  (`/api/pay/[token]/receipt/[paymentId]`), no login required.
+- **Expense approval is threshold-based, not universal.** `recordExpense`
+  checks the amount against the school's configurable
+  `expenseApprovalThresholdMinor` at creation time — anything under it is
+  auto-`APPROVED`, only amounts at or above it land as `PENDING` for an
+  owner/admin, matching the brief's "expenses above ₦X require approval"
+  rather than gating every expense on a human.
+
 ## AI architecture (not yet built)
 
 Phase 1 has no AI code — no chatbot, no scripted "AI insight" text. Building
 the intent → permission-check → tool-call → audit pipeline described in the
-brief now, before there's real attendance/results/finance data for it to
-reason over, would mean either faking its output (explicitly disallowed) or
-building against a data shape that's likely to change once Phase 2/3 land.
-The permission-string system above exists specifically so Phase 5's AI tools
-can reuse the exact same `requirePermission()` checks the UI uses, rather
-than inventing a parallel authorization path.
+brief now, before there was real attendance/results/finance data for it to
+reason over, would have meant either faking its output (explicitly
+disallowed) or building against a data shape that kept changing as Phase
+2/3 landed. That data now exists; Phase 5 is next in the roadmap, not blocked
+on anything further. The permission-string system exists specifically so
+Phase 5's AI tools can reuse the exact same `requirePermission()` checks the
+UI uses, rather than inventing a parallel authorization path.
 
 ## Testing tenant isolation
 
 Still not automated (no test suite exists for this app yet — `vitest` is
-wired up in `package.json` but empty; Phase 1 and Phase 2 were both verified
+wired up in `package.json` but empty; Phases 1 through 3 were each verified
 manually end-to-end against a real database instead). The service-layer
 pattern above (`schoolId` as a mandatory first argument everywhere) is the
-structural mitigation in place; a "School A cannot read School B's students"
-integration test, per the brief's testing requirements, is overdue and
-should be the first thing added in Phase 3 rather than deferred again.
+structural mitigation in place; a "School A cannot read School B's students
+(or invoices, or payments)" integration test, per the brief's testing
+requirements, is overdue and should not be deferred again — it's the
+highest-value thing to add before Phase 4.
+
+## Known scale limitation
+
+The invoices list (`/dashboard/finance/invoices`) and a few similar admin
+tables render every matching row with no pagination — fine at the demo
+school's 110 invoices, but worth fixing (the same `page`/`pageSize` pattern
+already used in `listStudents`) before a school's invoice history grows much
+past a few hundred rows.
 
 ## Phased roadmap
 
-Matches the brief exactly: Phase 1 Foundation → Phase 2 Academics (this) →
-Phase 3 Finance → Phase 4 Communication/parent & student portals → Phase 5
+Matches the brief exactly: Phase 1 Foundation → Phase 2 Academics → Phase 3
+Finance (this) → Phase 4 Communication/parent & student portals → Phase 5
 AI → Phase 6 Advanced ERP (payroll/library/transport/hostel) → Phase 7 SaaS
 billing & platform admin.

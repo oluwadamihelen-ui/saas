@@ -108,6 +108,14 @@ export async function listClassArms(schoolId: string) {
   });
 }
 
+export async function listClassGroups(schoolId: string) {
+  return prisma.classGroup.findMany({ where: { schoolId }, orderBy: { order: "asc" } });
+}
+
+export async function listTerms(schoolId: string) {
+  return prisma.term.findMany({ where: { schoolId }, orderBy: { startDate: "desc" } });
+}
+
 export async function getCurrentSession(schoolId: string) {
   return prisma.academicSession.findFirst({ where: { schoolId, isCurrent: true } });
 }

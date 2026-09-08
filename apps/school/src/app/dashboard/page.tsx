@@ -5,6 +5,9 @@ import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getDashboardStats } from "@/lib/services/dashboard";
 import { getTodayAttendanceSummary } from "@/lib/services/attendance";
+import { getFinanceStats } from "@/lib/services/finance-dashboard";
+import { prisma } from "@/lib/db";
+import { formatMoney } from "@/lib/money";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -16,10 +19,13 @@ export default async function DashboardPage() {
   const user = await requireSchoolUser();
   const perms = await getUserPermissions(user.id);
   const canViewAttendance = perms.has(PERMISSIONS.ATTENDANCE_VIEW);
-  const [stats, attendanceToday] = await Promise.all([
+  const canViewFinance = perms.has(PERMISSIONS.FINANCE_VIEW);
+  const [stats, attendanceToday, school] = await Promise.all([
     getDashboardStats(user.schoolId),
     canViewAttendance ? getTodayAttendanceSummary(user.schoolId) : Promise.resolve(null),
+    prisma.school.findUniqueOrThrow({ where: { id: user.schoolId } }),
   ]);
+  const financeStats = canViewFinance ? await getFinanceStats(user.schoolId, stats.currentTerm?.id) : null;
 
   return (
     <div className="space-y-8">
@@ -127,7 +133,32 @@ export default async function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <EmptyState title="Coming in Phase 3" description="Fees, invoices and revenue will show here once billing is built." />
+              {!financeStats ? (
+                <EmptyState title="No access" description="You don't have permission to view finance." />
+              ) : financeStats.totalInvoices === 0 ? (
+                <EmptyState
+                  title="No invoices yet"
+                  description="Generate invoices for a class to start tracking revenue."
+                  action={
+                    <Button asChild size="sm">
+                      <Link href="/dashboard/finance/invoices">Go to invoices</Link>
+                    </Button>
+                  }
+                />
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-semibold text-foreground">{formatMoney(financeStats.revenueMinor, school.currency)}</span>
+                    <span className="text-sm text-muted">collected this term</span>
+                  </div>
+                  <p className="text-sm text-muted">
+                    {formatMoney(financeStats.outstandingMinor, school.currency)} outstanding · {financeStats.overdueCount} overdue
+                  </p>
+                  <Button asChild size="sm" variant="secondary">
+                    <Link href="/dashboard/finance">View finance</Link>
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
           <Card>
