@@ -169,7 +169,9 @@ export default async function ChildDetailPage({ params }: { params: Promise<{ st
                   <div className="flex items-center gap-3">
                     <span className="text-muted">{formatMoney(invoiceBalanceMinor(inv), school.currency)} due</span>
                     <Badge variant={INVOICE_STATUS_VARIANT[inv.status]}>{inv.status.replace("_", " ")}</Badge>
-                    <Link href={`/pay/${inv.payToken}`} className="text-accent hover:underline">Pay / view</Link>
+                    <Link href={`/pay/${inv.payToken}`} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                      Pay / view
+                    </Link>
                   </div>
                 </li>
               ))}

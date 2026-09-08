@@ -151,6 +151,15 @@ export async function createPlan(input: PlanInput) {
   return prisma.subscriptionPlan.create({ data: input });
 }
 
+/// Existing subscriptions keep referencing this plan by id, and past
+/// PlatformInvoice rows already snapshotted their own amountMinor at
+/// generation time (the same pattern payroll uses for payslips) — so
+/// editing a plan only ever changes what happens going forward, never
+/// rewrites history.
+export async function updatePlan(planId: string, input: PlanInput) {
+  return prisma.subscriptionPlan.update({ where: { id: planId }, data: input });
+}
+
 export async function setPlanActive(planId: string, isActive: boolean) {
   return prisma.subscriptionPlan.update({ where: { id: planId }, data: { isActive } });
 }

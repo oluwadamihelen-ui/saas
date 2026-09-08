@@ -1,10 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSuperAdmin } from "@/lib/auth/require";
 import { listPlans } from "@/lib/services/platform";
-import { formatMoney } from "@/lib/money";
-import { CreatePlanForm, PlanActiveToggle } from "./forms";
+import { CreatePlanForm, PlanRow } from "./forms";
 
 export default async function PlatformPlansPage() {
   await requireSuperAdmin();
@@ -33,19 +31,7 @@ export default async function PlatformPlansPage() {
           ) : (
             <ul className="divide-y divide-border">
               {plans.map((p) => (
-                <li key={p.id} className="flex items-center justify-between gap-3 p-4 text-sm">
-                  <div>
-                    <p className="flex items-center gap-2 font-medium text-foreground">
-                      {p.name}
-                      {!p.isActive && <Badge variant="neutral">Inactive</Badge>}
-                    </p>
-                    <p className="text-xs text-muted">
-                      {formatMoney(p.priceMinor, "NGN")}/{p.billingInterval === "MONTHLY" ? "mo" : "yr"} ·{" "}
-                      {p.studentLimit ? `up to ${p.studentLimit} students` : "unlimited students"}
-                    </p>
-                  </div>
-                  <PlanActiveToggle planId={p.id} isActive={p.isActive} />
-                </li>
+                <PlanRow key={p.id} plan={p} currency="NGN" />
               ))}
             </ul>
           )}

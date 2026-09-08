@@ -12,6 +12,7 @@ import {
   markPlatformInvoicePaid,
   voidPlatformInvoice,
   createPlan,
+  updatePlan,
   setPlanActive,
 } from "@/lib/services/platform";
 import { toMinorUnits } from "@/lib/money";
@@ -133,6 +134,30 @@ export async function createPlanAction(_prev: PlatformFormState, formData: FormD
     });
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not create this plan." };
+  }
+  revalidatePath("/platform/plans");
+  return { status: "success" };
+}
+
+export async function updatePlanAction(planId: string, _prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+  await requireSuperAdmin();
+  const parsed = planSchema.safeParse({
+    name: formData.get("name"),
+    price: formData.get("price"),
+    billingInterval: formData.get("billingInterval"),
+    studentLimit: formData.get("studentLimit") ?? "",
+  });
+  if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
+
+  try {
+    await updatePlan(planId, {
+      name: parsed.data.name,
+      priceMinor: toMinorUnits(parsed.data.price),
+      billingInterval: parsed.data.billingInterval,
+      studentLimit: parsed.data.studentLimit ? Number(parsed.data.studentLimit) : null,
+    });
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Could not update this plan." };
   }
   revalidatePath("/platform/plans");
   return { status: "success" };
