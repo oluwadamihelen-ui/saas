@@ -90,6 +90,12 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 Paste the output as the value of `AUTH_SECRET` in `.env`.
 
+`PLATFORM_PAYSTACK_PUBLIC_KEY`/`PLATFORM_PAYSTACK_SECRET_KEY` are also
+optional — these are for a school paying *Winfield* (not a school's own
+gateway for collecting fees from parents). Leave them blank and
+`/dashboard/billing`'s "Pay now" uses a simulated checkout instead, same as
+every other payment flow in this app.
+
 The AI assistant (`/dashboard/assistant` once you're signed in) is
 optional — everything else in the app works without it. To turn it on,
 paste a real key into `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` in `.env`
@@ -143,7 +149,57 @@ To see the parent/student side, sign in as `parent@winfield.demo` or
 of `/dashboard`, with that family's own attendance, results, assignments,
 timetable, fees, announcements and messages.
 
+To see the subscription/billing system: visit `/pricing` (public, no
+login) for the plan comparison page; sign in as `owner@winfield.demo` and
+go to **Billing** in the sidebar to try switching plans, cancelling, or
+paying an invoice online (simulated); sign in as `owner@brightpath.demo`
+to see a school still inside its 14-day trial; sign in as
+`superadmin@winfield.demo` and go to `/platform/billing` for the
+MRR/ARR/churn dashboard or `/platform/inquiries` for Enterprise inquiries
+submitted from the pricing page.
+
 To stop the server, click back into the `cmd` window and press `Ctrl+C`.
+
+## Updating an existing installation to a newer delivery
+
+Already set this up before and just unzipped a newer `.zip` over (or
+alongside) your old folder? Do this instead of starting from step 1:
+
+1. Copy your existing `apps\school\.env` somewhere safe first (it has your
+   `DATABASE_URL`/`AUTH_SECRET`), unzip the new delivery, then put your
+   `.env` back into the new `apps\school\` folder (or `copy .env.example .env`
+   again and re-enter your values — either works).
+2. From the repo root:
+
+   ```bat
+   npm install
+   ```
+3. From `apps\school`:
+
+   ```bat
+   npx prisma migrate dev
+   npm run db:backfill-permissions
+   ```
+
+   `prisma migrate dev` applies any new database changes since your last
+   delivery (this one adds the subscription/billing tables) without
+   touching your existing schools' data — Prisma will ask you to confirm
+   before applying anything. `db:backfill-permissions` tops up any new
+   permission that was added since (harmless to run even if nothing
+   changed).
+4. Optional — only if you want to try re-seeding fresh demo data (this
+   **replaces** the two demo schools, "Winfield Montessori School" and
+   "Bright Path Academy", but never touches a real school you created via
+   `/register`):
+
+   ```bat
+   npm run db:seed
+   ```
+5. Start the app as usual:
+
+   ```bat
+   npm run dev
+   ```
 
 ## Troubleshooting
 
