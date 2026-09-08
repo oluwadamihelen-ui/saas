@@ -40,6 +40,10 @@ export const PERMISSIONS = {
   EXPENSES_VIEW: "expenses.view",
   EXPENSES_CREATE: "expenses.create",
   EXPENSES_APPROVE: "expenses.approve",
+  ANNOUNCEMENTS_VIEW: "announcements.view",
+  ANNOUNCEMENTS_MANAGE: "announcements.manage",
+  MESSAGES_VIEW: "messages.view",
+  MESSAGES_MANAGE: "messages.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -76,6 +80,10 @@ export const PERMISSION_CATALOG: { key: PermissionKey; module: string; descripti
   { key: PERMISSIONS.EXPENSES_VIEW, module: "finance", description: "View expense records" },
   { key: PERMISSIONS.EXPENSES_CREATE, module: "finance", description: "Record a new expense" },
   { key: PERMISSIONS.EXPENSES_APPROVE, module: "finance", description: "Approve or reject expenses above the approval threshold" },
+  { key: PERMISSIONS.ANNOUNCEMENTS_VIEW, module: "communication", description: "View announcements addressed to staff" },
+  { key: PERMISSIONS.ANNOUNCEMENTS_MANAGE, module: "communication", description: "Create and publish announcements" },
+  { key: PERMISSIONS.MESSAGES_VIEW, module: "communication", description: "View parent/guardian messages" },
+  { key: PERMISSIONS.MESSAGES_MANAGE, module: "communication", description: "Reply to and close parent/guardian conversations" },
 ];
 
 /// System roles seeded into every new school (brief section 3's role list).
@@ -135,6 +143,10 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.PAYMENTS_VIEW,
     PERMISSIONS.EXPENSES_VIEW,
     PERMISSIONS.EXPENSES_APPROVE,
+    PERMISSIONS.ANNOUNCEMENTS_VIEW,
+    PERMISSIONS.ANNOUNCEMENTS_MANAGE,
+    PERMISSIONS.MESSAGES_VIEW,
+    PERMISSIONS.MESSAGES_MANAGE,
   ],
   TEACHER: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -146,6 +158,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.ASSIGNMENTS_MANAGE,
     PERMISSIONS.RESULTS_VIEW,
     PERMISSIONS.RESULTS_ENTER,
+    PERMISSIONS.ANNOUNCEMENTS_VIEW,
   ],
   ACCOUNTANT: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -156,15 +169,17 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.PAYMENTS_RECORD,
     PERMISSIONS.EXPENSES_VIEW,
     PERMISSIONS.EXPENSES_CREATE,
+    PERMISSIONS.ANNOUNCEMENTS_VIEW,
   ],
   HR_STAFF: [
     PERMISSIONS.DASHBOARD_VIEW,
     PERMISSIONS.STAFF_VIEW,
     PERMISSIONS.STAFF_INVITE,
     PERMISSIONS.STAFF_MANAGE,
+    PERMISSIONS.ANNOUNCEMENTS_VIEW,
   ],
-  LIBRARIAN: [PERMISSIONS.DASHBOARD_VIEW],
-  TRANSPORT_MANAGER: [PERMISSIONS.DASHBOARD_VIEW],
+  LIBRARIAN: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.ANNOUNCEMENTS_VIEW],
+  TRANSPORT_MANAGER: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.ANNOUNCEMENTS_VIEW],
   PARENT: [],
   STUDENT: [],
 };

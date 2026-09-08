@@ -2,7 +2,8 @@
 
 Winfield is a multi-tenant AI-native school management platform. This document
 describes the system as implemented through **Phase 1 (Foundation)**,
-**Phase 2 (Academics)** and **Phase 3 (Finance)** — see the [root README](../../README.md#school-platform--architecture-assessment-phase-1-kickoff)
+**Phase 2 (Academics)**, **Phase 3 (Finance)** and **Phase 4 (Communication &
+portals)** — see the [root README](../../README.md#school-platform--architecture-assessment-phase-1-kickoff)
 for the initial assessment this build started from, and the phased roadmap
 below for what comes next.
 
@@ -79,6 +80,8 @@ Core entities (`prisma/schema.prisma`):
 - **Results**: `GradeBand`, `AssessmentComponent`, `Score`, `ReportCard`
 - **Finance**: `FeeCategory`, `FeeStructure`, `Invoice`, `InvoiceItem`,
   `Payment`, `Vendor`, `ExpenseCategory`, `Expense`
+- **Communication & portals**: `PortalInvite`, `Notification`, `Announcement`,
+  `Conversation`, `Message`
 - **Audit**: `AuditLog`
 
 `ClassGroup` is a grade level (e.g. "JSS1"); `ClassArm` is the stream
@@ -183,6 +186,72 @@ part of this wizard yet — they're real Phase 2/3 features, not stubbed.
   owner/admin, matching the brief's "expenses above ₦X require approval"
   rather than gating every expense on a human.
 
+## Phase 4: communication & portals
+
+- **Every tenant-owned table carries a direct `schoolId`, no exceptions —
+  learned the hard way.** `Message` was first modeled without one (reachable
+  only via `Conversation.schoolId`, one hop further from `School` than every
+  sibling table). Reseeding hit a real Postgres foreign-key ordering bug: on
+  `DELETE FROM "School"`, the cascade to `User` (one hop) and the cascade to
+  `Message` (two hops, via `Conversation`) aren't guaranteed to interleave
+  correctly, so `Message_senderId_fkey` (`ON DELETE RESTRICT`, like every
+  other `User` reference in this schema) fired before the `Message` row was
+  gone. Giving `Message` its own `schoolId` — matching every other model —
+  fixed it and restored the one-hop-from-`School` invariant the rest of the
+  schema already relied on.
+- **Portal accounts are opt-in, not automatic.** Enrolling a student or
+  adding a guardian does not create them a login — a `PortalInvite` link
+  (`src/lib/services/portal-invites.ts`) does, generalizing the exact
+  `StaffInvite` token-accept pattern from Phase 1 (`/portal-invite/[token]`,
+  same unguessable-token, same "set your name and password" accept form).
+  `Guardian.userId`/`Student.userId` stay null until that invite is
+  accepted, so most students in a freshly onboarded school have no portal
+  presence at all, which is the expected/common case, not an error state.
+- **Notifications are in-app only, and derived from real events, never
+  synthesized.** `src/lib/services/notifications.ts` is called from inside
+  the exact service functions that already do the work — `publishReportCard`,
+  `generateInvoicesForClass`, all three payment-confirmation paths in
+  `payments.ts`, and `markAttendance` when a status is `ABSENT` — never from
+  a scheduled job or a guess at what "should" have happened. Email/SMS/
+  WhatsApp/push are schema-level extensibility only (no provider is wired
+  up), matching the Phase 2 `AttendanceMethod.QR`/`BIOMETRIC` precedent: the
+  `NotificationType` enum and the `Notification` model don't claim a
+  delivery channel that doesn't exist.
+- **Announcements resolve their own recipient list per audience at publish
+  time** (`src/lib/services/announcements.ts`) — `STAFF_ONLY` queries every
+  user whose role key isn't `PARENT`/`STUDENT`; `PARENTS_ONLY` and `CLASS`
+  walk `Guardian`/`Student` rows with `userId` set; `SCHOOL_WIDE` unions all
+  of the above. This runs fresh on every publish rather than snapshotting a
+  recipient list at creation time, so an announcement drafted before a
+  parent's portal invite was accepted still reaches them once they've
+  accepted it, as long as it's published after.
+- **Messaging is a shared admin-office inbox, not per-staff assignment.**
+  `Conversation.initiatedById` is always the parent/student who started it;
+  there is no "assigned to" field. `notifyNewMessage` looks up *who currently
+  holds* `messages.view` for the school at the time of the message (a live
+  permission query, not a cached list), so it stays correct if a school
+  changes its own role/permission matrix later — the same "no caching across
+  requests" principle `requirePermission` already uses.
+- **Portals reuse compute functions, they don't reimplement them.** The
+  parent portal's per-child view (`/portal/parent/children/[studentId]`) and
+  the student portal's own pages call `computeReportCard`,
+  `getStudentAttendanceHistory`, `listSlotsForClassArm`, and
+  `listInvoicesForStudent` — the exact same functions the staff dashboard
+  calls for the same data — so a late score correction or a newly confirmed
+  payment shows up identically on both sides with nothing to keep in sync.
+  Two access-control helpers make this safe: `getChildForGuardian` verifies
+  the requested student is actually one of the signed-in guardian's children
+  before returning anything (a parent can't view another family's child by
+  guessing an id in the URL), and `/api/report-cards/[studentId]/pdf` was
+  extended to accept either staff holding `results.view` *or* a portal user
+  requesting their own record/child, since `PARENT`/`STUDENT` roles
+  intentionally carry no staff permissions at all.
+- **Fee payment in the parent portal reuses the Phase 3 `/pay/[token]` link
+  as-is** rather than building a second, authenticated payment path — each
+  invoice already carries an unguessable `payToken`; the parent portal just
+  surfaces it as a link on each invoice row instead of it only being
+  reachable by an unauthenticated payer who was sent the link separately.
+
 ## AI architecture (not yet built)
 
 Phase 1 has no AI code — no chatbot, no scripted "AI insight" text. Building
@@ -198,13 +267,13 @@ UI uses, rather than inventing a parallel authorization path.
 ## Testing tenant isolation
 
 Still not automated (no test suite exists for this app yet — `vitest` is
-wired up in `package.json` but empty; Phases 1 through 3 were each verified
+wired up in `package.json` but empty; Phases 1 through 4 were each verified
 manually end-to-end against a real database instead). The service-layer
 pattern above (`schoolId` as a mandatory first argument everywhere) is the
 structural mitigation in place; a "School A cannot read School B's students
-(or invoices, or payments)" integration test, per the brief's testing
-requirements, is overdue and should not be deferred again — it's the
-highest-value thing to add before Phase 4.
+(or invoices, or payments, or portal invites, or messages)" integration
+test, per the brief's testing requirements, is overdue and should not be
+deferred again — it's the highest-value thing to add before Phase 5.
 
 ## Known scale limitation
 
@@ -217,6 +286,6 @@ past a few hundred rows.
 ## Phased roadmap
 
 Matches the brief exactly: Phase 1 Foundation → Phase 2 Academics → Phase 3
-Finance (this) → Phase 4 Communication/parent & student portals → Phase 5
+Finance → Phase 4 Communication/parent & student portals (this) → Phase 5
 AI → Phase 6 Advanced ERP (payroll/library/transport/hostel) → Phase 7 SaaS
 billing & platform admin.

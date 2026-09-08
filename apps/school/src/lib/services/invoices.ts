@@ -2,6 +2,7 @@ import "server-only";
 import crypto from "crypto";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
+import { notifyInvoiceIssued } from "@/lib/services/notifications";
 
 async function nextInvoiceNumber(schoolId: string) {
   const year = new Date().getFullYear();
@@ -43,7 +44,7 @@ export async function generateInvoicesForClass(schoolId: string, classArmId: str
       continue;
     }
 
-    await prisma.invoice.create({
+    const invoice = await prisma.invoice.create({
       data: {
         schoolId,
         studentId: student.id,
@@ -56,6 +57,7 @@ export async function generateInvoicesForClass(schoolId: string, classArmId: str
         items: { create: feeStructures.map((f) => ({ feeStructureId: f.id, description: f.name, amountMinor: f.amountMinor })) },
       },
     });
+    await notifyInvoiceIssued(schoolId, invoice.id);
     created += 1;
   }
 

@@ -91,6 +91,11 @@ model School {
   vendors              Vendor[]
   expenseCategories    ExpenseCategory[]
   expenses             Expense[]
+  portalInvites        PortalInvite[]
+  notifications        Notification[]
+  announcements        Announcement[]
+  conversations        Conversation[]
+  messages             Message[]
 
   @@index([status])
 }
@@ -156,6 +161,18 @@ model User {
   paymentsRecorded      Payment[]              @relation("PaymentRecordedBy")
   expensesCreated       Expense[]              @relation("ExpenseCreatedBy")
   expensesApproved      Expense[]              @relation("ExpenseApprovedBy")
+
+  /// Set only for users whose role is PARENT or STUDENT — links the login
+  /// account back to the Guardian/Student profile it was created for via
+  /// PortalInvite. A staff user has neither.
+  guardianProfile Guardian? @relation("GuardianUser")
+  studentProfile  Student?  @relation("StudentUser")
+
+  portalInvitesSent      PortalInvite[] @relation("PortalInviteSentBy")
+  notifications          Notification[] @relation("UserNotifications")
+  announcementsCreated   Announcement[] @relation("AnnouncementCreatedBy")
+  conversationsInitiated Conversation[] @relation("ConversationInitiatedBy")
+  messagesSent           Message[]      @relation("MessageSender")
 
   @@index([schoolId])
 }
@@ -334,6 +351,7 @@ model ClassArm {
   attendanceRecords  AttendanceRecord[]
   timetableSlots     TimetableSlot[]
   assignments        Assignment[]
+  announcements      Announcement[]
 
   @@unique([classGroupId, name])
   @@index([schoolId])
@@ -409,12 +427,20 @@ model Student {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Set once the student (or a guardian, for younger children who can't
+  /// manage their own login) accepts a PortalInvite. Null means this
+  /// student has no portal login yet — most students, until invited.
+  userId String? @unique
+  user   User?   @relation("StudentUser", fields: [userId], references: [id])
+
   guardians         StudentGuardian[]
   attendanceRecords AttendanceRecord[]
   submissions       AssignmentSubmission[]
   scores            Score[]
   reportCards       ReportCard[]
   invoices          Invoice[]
+  portalInvites     PortalInvite[]
+  conversations     Conversation[]
 
   @@unique([schoolId, admissionNumber])
   @@index([schoolId])
@@ -434,9 +460,15 @@ model Guardian {
   addressLine String?
   occupation  String?
 
+  /// Set once this guardian accepts a PortalInvite. Null means no portal
+  /// login yet.
+  userId String? @unique
+  user   User?   @relation("GuardianUser", fields: [userId], references: [id])
+
   createdAt DateTime @default(now())
 
-  students StudentGuardian[]
+  students      StudentGuardian[]
+  portalInvites PortalInvite[]
 
   @@index([schoolId])
 }
@@ -941,4 +973,165 @@ model AuditLog {
 
   @@index([schoolId, createdAt])
   @@index([resourceType, resourceId])
+}
+
+// ---------------------------------------------------------------------------
+// Communication & portals (Phase 4)
+// ---------------------------------------------------------------------------
+
+enum PortalUserType {
+  GUARDIAN
+  STUDENT
+}
+
+/// Generalizes StaffInvite's token-link pattern for granting a Guardian or
+/// Student their own login. Exactly one of guardianId/studentId is set,
+/// matching `type`. email is the login email to use — Guardian already has
+/// an optional email of its own, but Student has none (many young pupils
+/// have no email of their own), so the address is captured here at invite
+/// time regardless of type, the same way StaffInvite captures it up front.
+model PortalInvite {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  type       PortalUserType
+  guardianId String?
+  guardian   Guardian?      @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+  studentId  String?
+  student    Student?       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  email       String
+  token       String       @unique
+  status      InviteStatus @default(PENDING)
+  expiresAt   DateTime
+  invitedById String
+  invitedBy   User         @relation("PortalInviteSentBy", fields: [invitedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([schoolId, email, status])
+  @@index([schoolId])
+  @@index([guardianId])
+  @@index([studentId])
+}
+
+/// In-app only — there's no email/SMS/WhatsApp/push provider wired up yet,
+/// so a Notification only ever appears in the topbar bell for the user it
+/// belongs to (src/lib/services/notifications.ts creates these alongside
+/// the real event that caused them: a published report card, an issued
+/// invoice, a confirmed payment, a marked-absent record, a published
+/// announcement). Claiming delivery beyond in-app would be faking a
+/// channel that doesn't exist.
+enum NotificationType {
+  ANNOUNCEMENT
+  REPORT_CARD_PUBLISHED
+  INVOICE_ISSUED
+  PAYMENT_CONFIRMED
+  ATTENDANCE_ABSENT
+  MESSAGE
+}
+
+model Notification {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  type   NotificationType
+  title  String
+  body   String?
+  link   String?
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+}
+
+/// classArmId is set only when audience is CLASS; ignored otherwise. Only a
+/// published (publishedAt set) announcement is visible outside the staff
+/// dashboard that authored it, and only publishing fires a Notification per
+/// matching recipient — a draft is invisible to its intended audience.
+enum AnnouncementAudience {
+  SCHOOL_WIDE
+  STAFF_ONLY
+  PARENTS_ONLY
+  CLASS
+}
+
+model Announcement {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  title      String
+  body       String
+  audience   AnnouncementAudience
+  classArmId String?
+  classArm   ClassArm?            @relation(fields: [classArmId], references: [id], onDelete: Cascade)
+
+  publishedAt DateTime?
+  createdById String
+  createdBy   User      @relation("AnnouncementCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([schoolId, audience])
+  @@index([schoolId, classArmId])
+}
+
+/// A "contact the school" thread. studentId is optional context (which
+/// child the conversation is about) rather than a hard scope — a guardian
+/// with several children, or a general question, leaves it null.
+/// initiatedById is whoever started the thread — a portal user (PARENT/
+/// STUDENT role) in practice, but not restricted to that at the schema
+/// level, so staff-to-staff use isn't ruled out by a constraint.
+enum ConversationStatus {
+  OPEN
+  CLOSED
+}
+
+model Conversation {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  subject       String
+  status        ConversationStatus @default(OPEN)
+  initiatedById String
+  initiatedBy   User               @relation("ConversationInitiatedBy", fields: [initiatedById], references: [id])
+  studentId     String?
+  student       Student?           @relation(fields: [studentId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages Message[]
+
+  @@index([schoolId])
+  @@index([schoolId, status])
+  @@index([initiatedById])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  schoolId       String
+  school         School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation("MessageSender", fields: [senderId], references: [id])
+
+  body String
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([conversationId])
 }

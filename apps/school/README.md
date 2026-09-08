@@ -6,7 +6,7 @@ assistant, built on a multi-tenant foundation (so other schools can be
 onboarded the same way later). This app is being built in phases (see
 [the root README](../../README.md) for the full architecture assessment and
 roadmap); this commit implements **Phase 1 (Foundation)**, **Phase 2
-(Academics)** and **Phase 3 (Finance)**:
+(Academics)**, **Phase 3 (Finance)** and **Phase 4 (Communication & portals)**:
 
 **Phase 1 — Foundation**
 - Multi-tenant data model (every tenant-owned table carries `schoolId`)
@@ -59,8 +59,39 @@ roadmap); this commit implements **Phase 1 (Foundation)**, **Phase 2
   above a configurable threshold need owner/admin sign-off; smaller ones
   are recorded straight through
 
-Not yet built (see the phased roadmap): payroll, communication,
-parent/student portals, AI.
+**Phase 4 — Communication & portals**
+- Notifications: an in-app bell (topbar, both staff dashboard and parent/
+  student portals) triggered by real events — a report card published, an
+  invoice issued, a payment confirmed, a student marked absent, an
+  announcement published. Email/SMS/WhatsApp/push are schema-level
+  extensibility only (`PortalInvite`/notification delivery is in-app, same
+  as the Phase 2 `AttendanceMethod` precedent) — nothing claims to send
+  outside the app yet
+- Announcements (`/dashboard/announcements`): staff with `announcements.manage`
+  create and publish notices targeted at the whole school, staff only,
+  parents only, or one specific class; publishing fires a notification to
+  every matching recipient. Everyone with `announcements.view` (all staff
+  roles by default) can read the list
+- Portal accounts: a guardian or student gets their own login via a
+  `PortalInvite` link (`/portal-invite/[token]`) — the same unauthenticated,
+  unguessable-token accept flow as the Phase 1 staff invite — sent from a
+  student's profile (**Portal access** tab) by anyone with `guardians.manage`
+  (for a parent) or `students.edit` (for the student themself)
+- Parent portal (`/portal/parent`): a children list, and per child the same
+  Attendance/Results/Assignments/Timetable/Fees data the staff dashboard
+  shows (reusing the exact same compute functions — nothing is duplicated
+  or recomputed differently), plus the announcements feed and messaging
+  below. Fees link straight to the existing `/pay/[token]` flow per invoice
+- Student portal (`/portal/student`): a lighter, read-only version of the
+  same — timetable, assignments, results, attendance, announcements — for
+  a student's own login
+- Messaging: a parent starts a conversation (optionally about one specific
+  child) from `/portal/parent/messages`; any staff member with
+  `messages.manage` (owner/admin/principal by default — deliberately not
+  teachers, since this is an admin-office inbox) replies from
+  `/dashboard/messages`. Replying notifies the other side
+
+Not yet built (see the phased roadmap): payroll, AI.
 
 ## Stack
 
@@ -85,8 +116,10 @@ npm run dev                # http://localhost:3001
 The seed script creates **Winfield Montessori School** (Creche, Nursery &
 Primary) with 14 class arms, 110 students, fee structures, 110 generated
 invoices with a realistic mix of paid/partial/unpaid/pending-confirmation
-payments, and a handful of expenses (one over the approval threshold), and
-these staff accounts — all with password `Passw0rd!23`:
+payments, a handful of expenses (one over the approval threshold), four
+published announcements (school-wide, staff-only, parents-only and one
+class-scoped), and a sample parent↔school conversation — plus these
+accounts, all with password `Passw0rd!23`:
 
 | Role | Email |
 |---|---|
@@ -96,9 +129,13 @@ these staff accounts — all with password `Passw0rd!23`:
 | Teacher | teacher1@winfield.demo / teacher2@winfield.demo |
 | Accountant | accountant@winfield.demo |
 | HR Staff | hr@winfield.demo |
+| Parent (portal) | parent@winfield.demo |
+| Student (portal) | student@winfield.demo |
 
-Or go to `/register` to walk through the real onboarding wizard and create a
-brand-new school from scratch.
+The parent and student accounts are both linked to the same seeded child, so
+signing in as either shows the same class/attendance/results/fees data from
+each side. Or go to `/register` to walk through the real onboarding wizard
+and create a brand-new school from scratch.
 
 ## Scripts
 

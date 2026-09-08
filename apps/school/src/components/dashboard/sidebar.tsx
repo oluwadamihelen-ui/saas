@@ -13,6 +13,8 @@ import {
   FileText,
   Award,
   Wallet,
+  Megaphone,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/brand/logo";
@@ -26,6 +28,8 @@ const NAV = [
   { href: "/dashboard/assignments", label: "Assignments", icon: FileText },
   { href: "/dashboard/results", label: "Results", icon: Award },
   { href: "/dashboard/finance", label: "Finance", icon: Wallet },
+  { href: "/dashboard/announcements", label: "Announcements", icon: Megaphone },
+  { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
   { href: "/dashboard/staff", label: "Staff", icon: Users },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];

@@ -14,11 +14,14 @@ import { getStudentAttendanceHistory } from "@/lib/services/attendance";
 import { computeReportCard } from "@/lib/services/results";
 import { getCurrentTerm } from "@/lib/services/academics";
 import { listInvoicesForStudent, invoiceBalanceMinor } from "@/lib/services/invoices";
+import { listPortalInvitesForGuardian, listPortalInvitesForStudent } from "@/lib/services/portal-invites";
 import { formatMoney } from "@/lib/money";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import { WithdrawButton } from "./withdraw-button";
 import { AddGuardianForm } from "./add-guardian-form";
+import { PortalInviteForm } from "./portal-invite-form";
+import { inviteGuardianPortalAction, inviteStudentPortalAction } from "../actions";
 
 const ATTENDANCE_BADGE = { PRESENT: "success", LATE: "warning", EXCUSED: "neutral", ABSENT: "danger" } as const;
 
@@ -48,6 +51,18 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
   const canEdit = perms.has(PERMISSIONS.STUDENTS_EDIT);
   const canDelete = perms.has(PERMISSIONS.STUDENTS_DELETE);
   const canManageGuardians = perms.has(PERMISSIONS.GUARDIANS_MANAGE);
+  const canManagePortalAccess = canEdit || canManageGuardians;
+
+  const studentInvites = canEdit ? await listPortalInvitesForStudent(user.schoolId, student.id) : [];
+  const guardianInvites = canManageGuardians
+    ? await Promise.all(
+        student.guardians.map(async (sg) => ({
+          guardianId: sg.guardianId,
+          invites: await listPortalInvitesForGuardian(user.schoolId, sg.guardianId),
+        }))
+      )
+    : [];
+  const guardianInviteMap = new Map(guardianInvites.map((g) => [g.guardianId, g.invites]));
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -84,6 +99,7 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
           {currentReportCard && <TabsTrigger value="results">Results</TabsTrigger>}
           {invoices && <TabsTrigger value="finance">Finance</TabsTrigger>}
           <TabsTrigger value="health">Health</TabsTrigger>
+          {canManagePortalAccess && <TabsTrigger value="portal">Portal access</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="personal">
@@ -227,6 +243,61 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
             </CardContent>
           </Card>
         </TabsContent>
+
+        {canManagePortalAccess && (
+          <TabsContent value="portal">
+            <div className="space-y-4">
+              {canEdit && (
+                <Card>
+                  <CardContent className="space-y-3">
+                    <p className="text-sm font-medium text-foreground">{student.firstName}&apos;s student portal login</p>
+                    {student.userId ? (
+                      <Badge variant="success">Portal account active</Badge>
+                    ) : (
+                      <>
+                        <PortalInviteForm action={inviteStudentPortalAction.bind(null, student.id)} />
+                        {studentInvites.filter((i) => i.status === "PENDING").map((invite) => (
+                          <div key={invite.id} className="flex items-center justify-between rounded-md border border-border p-3 text-sm">
+                            <span className="text-muted">{invite.email}</span>
+                            <code className="text-xs text-muted">/portal-invite/{invite.token}</code>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+              {canManageGuardians &&
+                student.guardians.map((sg) => (
+                  <Card key={sg.guardianId}>
+                    <CardContent className="space-y-3">
+                      <p className="text-sm font-medium text-foreground">
+                        {sg.guardian.firstName} {sg.guardian.lastName}&apos;s parent portal login
+                      </p>
+                      {sg.guardian.userId ? (
+                        <Badge variant="success">Portal account active</Badge>
+                      ) : (
+                        <>
+                          <PortalInviteForm
+                            action={inviteGuardianPortalAction.bind(null, student.id, sg.guardianId)}
+                            defaultEmail={sg.guardian.email}
+                          />
+                          {(guardianInviteMap.get(sg.guardianId) ?? [])
+                            .filter((i) => i.status === "PENDING")
+                            .map((invite) => (
+                              <div key={invite.id} className="flex items-center justify-between rounded-md border border-border p-3 text-sm">
+                                <span className="text-muted">{invite.email}</span>
+                                <code className="text-xs text-muted">/portal-invite/{invite.token}</code>
+                              </div>
+                            ))}
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+            </div>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

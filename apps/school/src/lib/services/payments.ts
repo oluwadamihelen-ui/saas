@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { prisma } from "@/lib/db";
 import { getPaymentProvider } from "@/lib/payments/registry";
 import { recalculateInvoiceStatus, invoiceBalanceMinor } from "@/lib/services/invoices";
+import { notifyPaymentConfirmed } from "@/lib/services/notifications";
 
 /// Staff directly recording a payment they already have evidence of
 /// (cash in hand, a bank alert) — confirmed immediately, no gateway
@@ -17,7 +18,7 @@ export async function recordManualPayment(
   if (!invoice) throw new Error("Invoice not found");
   if (input.amountMinor <= 0) throw new Error("Enter an amount greater than 0.");
 
-  await prisma.payment.create({
+  const payment = await prisma.payment.create({
     data: {
       schoolId,
       invoiceId,
@@ -30,7 +31,9 @@ export async function recordManualPayment(
     },
   });
 
-  return recalculateInvoiceStatus(invoiceId);
+  const result = await recalculateInvoiceStatus(invoiceId);
+  await notifyPaymentConfirmed(schoolId, payment.id);
+  return result;
 }
 
 /// The payer (no login) has clicked "I've made a bank transfer" on the
@@ -88,6 +91,7 @@ export async function confirmOnlinePayment(reference: string) {
 
   await prisma.payment.update({ where: { id: payment.id }, data: { status: "CONFIRMED", paidAt: new Date() } });
   await recalculateInvoiceStatus(payment.invoiceId);
+  await notifyPaymentConfirmed(payment.schoolId, payment.id);
   return prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
 }
 
@@ -100,6 +104,7 @@ export async function confirmPendingPayment(schoolId: string, paymentId: string)
 
   await prisma.payment.update({ where: { id: paymentId }, data: { status: "CONFIRMED", paidAt: new Date() } });
   await recalculateInvoiceStatus(payment.invoiceId);
+  await notifyPaymentConfirmed(schoolId, paymentId);
   return prisma.payment.findUniqueOrThrow({ where: { id: paymentId } });
 }
 

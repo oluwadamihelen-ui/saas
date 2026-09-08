@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { createStudent, updateStudent, withdrawStudent, addGuardianToStudent } from "@/lib/services/students";
+import { inviteGuardianToPortal, inviteStudentToPortal } from "@/lib/services/portal-invites";
 import { logAudit } from "@/lib/audit";
 
 const genderEnum = z.enum(["MALE", "FEMALE"]);
@@ -214,4 +215,58 @@ export async function addGuardianAction(
 
   revalidatePath(`/dashboard/students/${studentId}`);
   return { status: "idle" };
+}
+
+const portalInviteEmailSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Enter a valid email"),
+});
+
+export interface PortalInviteState {
+  status: "idle" | "error" | "success";
+  message?: string;
+}
+
+export async function inviteGuardianPortalAction(
+  studentId: string,
+  guardianId: string,
+  _prev: PortalInviteState,
+  formData: FormData
+): Promise<PortalInviteState> {
+  const user = await requirePermission(PERMISSIONS.GUARDIANS_MANAGE);
+
+  const parsed = portalInviteEmailSchema.safeParse({ email: formData.get("email") });
+  if (!parsed.success) {
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Enter a valid email." };
+  }
+
+  try {
+    await inviteGuardianToPortal(user.schoolId, user.id, guardianId, parsed.data.email);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Could not send invite." };
+  }
+
+  revalidatePath(`/dashboard/students/${studentId}`);
+  return { status: "success" };
+}
+
+export async function inviteStudentPortalAction(
+  studentId: string,
+  _prev: PortalInviteState,
+  formData: FormData
+): Promise<PortalInviteState> {
+  const user = await requirePermission(PERMISSIONS.STUDENTS_EDIT);
+
+  const parsed = portalInviteEmailSchema.safeParse({ email: formData.get("email") });
+  if (!parsed.success) {
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Enter a valid email." };
+  }
+
+  try {
+    await inviteStudentToPortal(user.schoolId, user.id, studentId, parsed.data.email);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Could not send invite." };
+  }
+
+  revalidatePath(`/dashboard/students/${studentId}`);
+  return { status: "success" };
 }

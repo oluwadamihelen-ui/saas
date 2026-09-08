@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { notifyReportCardPublished } from "@/lib/services/notifications";
 
 // ---------------------------------------------------------------------------
 // Grading configuration (per-school, editable)
@@ -183,10 +184,12 @@ export async function publishReportCard(schoolId: string, studentId: string, ter
   if (!existing || existing.status !== "APPROVED") {
     throw new Error("A report card must be approved before it can be published.");
   }
-  return prisma.reportCard.update({
+  const reportCard = await prisma.reportCard.update({
     where: { studentId_termId: { studentId, termId } },
     data: { status: "PUBLISHED", publishedAt: new Date() },
   });
+  await notifyReportCardPublished(schoolId, studentId, termId);
+  return reportCard;
 }
 
 export async function listReportCardsForClass(schoolId: string, classArmId: string, termId: string) {

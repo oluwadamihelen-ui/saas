@@ -219,6 +219,9 @@ async function main() {
   console.log("Enrolling demo students...");
   const enrolledStudents: { id: string; classArmId: string }[] = [];
   let admissionSeq = 1;
+  let demoStudentId: string | null = null;
+  let demoGuardianId: string | null = null;
+  let demoClassArmId: string | null = null;
   for (let i = 0; i < 110; i++) {
     const isMale = Math.random() > 0.5;
     const firstName = pick(isMale ? FIRST_NAMES_M : FIRST_NAMES_F);
@@ -245,7 +248,10 @@ async function main() {
     });
     enrolledStudents.push({ id: student.id, classArmId });
 
-    if (Math.random() > 0.2) {
+    // The very first enrolled student always gets a guardian, so there's a
+    // guaranteed family to attach the demo portal accounts (below) to —
+    // everyone else keeps the random 80% chance.
+    if (i === 0 || Math.random() > 0.2) {
       const guardianFirst = pick(isMale ? FIRST_NAMES_F : FIRST_NAMES_M);
       const guardian = await prisma.guardian.create({
         data: {
@@ -259,6 +265,11 @@ async function main() {
       await prisma.studentGuardian.create({
         data: { studentId: student.id, guardianId: guardian.id, relationship: isMale ? "MOTHER" : "FATHER", isPrimary: true },
       });
+      if (i === 0) {
+        demoStudentId = student.id;
+        demoGuardianId = guardian.id;
+        demoClassArmId = classArmId;
+      }
     }
   }
 
@@ -484,9 +495,106 @@ async function main() {
     });
   }
 
+  console.log("Setting up portal accounts, announcements and messages...");
+
+  const principal = userByEmail.get("principal@winfield.demo")!;
+  const PORTAL_PASSWORD_HASH = passwordHash;
+
+  const parentUser = await prisma.user.create({
+    data: {
+      schoolId: school.id,
+      roleId: roleByKey.get("PARENT")!.id,
+      email: "parent@winfield.demo",
+      name: "Demo Parent",
+      passwordHash: PORTAL_PASSWORD_HASH,
+    },
+  });
+  await prisma.guardian.update({ where: { id: demoGuardianId! }, data: { userId: parentUser.id } });
+
+  const studentUser = await prisma.user.create({
+    data: {
+      schoolId: school.id,
+      roleId: roleByKey.get("STUDENT")!.id,
+      email: "student@winfield.demo",
+      name: "Demo Student",
+      passwordHash: PORTAL_PASSWORD_HASH,
+    },
+  });
+  await prisma.student.update({ where: { id: demoStudentId! }, data: { userId: studentUser.id } });
+
+  const announcementSeeds: {
+    title: string;
+    body: string;
+    audience: "SCHOOL_WIDE" | "STAFF_ONLY" | "PARENTS_ONLY" | "CLASS";
+    classArmId?: string;
+    createdById: string;
+  }[] = [
+    {
+      title: "Mid-term break notice",
+      body: "The school will be closed for mid-term break from Friday to the following Monday. Classes resume as usual on Tuesday.",
+      audience: "SCHOOL_WIDE",
+      createdById: owner.id,
+    },
+    {
+      title: "Staff meeting - Friday",
+      body: "All staff are to attend the end-of-term review meeting in the staff room at 3:30pm on Friday.",
+      audience: "STAFF_ONLY",
+      createdById: principal.id,
+    },
+    {
+      title: "PTA meeting reminder",
+      body: "The termly PTA meeting holds this Saturday at 10am in the school hall. All parents are encouraged to attend.",
+      audience: "PARENTS_ONLY",
+      createdById: owner.id,
+    },
+    {
+      title: "Excursion permission slips due",
+      body: "Please return signed excursion permission slips to the class teacher by Wednesday.",
+      audience: "CLASS",
+      classArmId: demoClassArmId!,
+      createdById: teacher1.id,
+    },
+  ];
+  for (const a of announcementSeeds) {
+    await prisma.announcement.create({
+      data: {
+        schoolId: school.id,
+        title: a.title,
+        body: a.body,
+        audience: a.audience,
+        classArmId: a.classArmId ?? null,
+        createdById: a.createdById,
+        publishedAt: new Date(),
+      },
+    });
+  }
+
+  const conversation = await prisma.conversation.create({
+    data: {
+      schoolId: school.id,
+      initiatedById: parentUser.id,
+      subject: "Question about the school bus route",
+      studentId: demoStudentId!,
+      messages: {
+        create: { schoolId: school.id, senderId: parentUser.id, body: "Hi, does the school bus cover the Lekki Phase 1 area this term?" },
+      },
+    },
+  });
+  await prisma.message.create({
+    data: {
+      schoolId: school.id,
+      conversationId: conversation.id,
+      senderId: accountant.id,
+      body: "Yes, the Lekki route runs every school day. Please share your address and we'll confirm the pickup point.",
+    },
+  });
+
   console.log(`\nSeeded "${schoolName}" with ${classArms.length} class arms and 110 students.`);
   console.log(`All staff accounts use the password: ${DEMO_PASSWORD}\n`);
   for (const s of staffSeeds) console.log(`  ${s.role.padEnd(16)} ${s.email}`);
+  console.log(`\nPortal demo accounts (same password: ${DEMO_PASSWORD}):`);
+  console.log(`  PARENT           ${parentUser.email}`);
+  console.log(`  STUDENT          ${studentUser.email}`);
 }
 
 main()

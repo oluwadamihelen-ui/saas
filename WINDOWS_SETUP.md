@@ -100,8 +100,9 @@ npm run db:seed
 ```
 
 The seed command creates a demo school ("Winfield Montessori School") with staff
-logins and 110 students, and prints the login credentials to the screen —
-scroll up in the window to see them (all use password `Passw0rd!23`).
+logins, a parent login and a student login, and 110 students, and prints the
+login credentials to the screen — scroll up in the window to see them (all
+use password `Passw0rd!23`).
 
 ## 7. Start the app
 
@@ -121,6 +122,11 @@ onboarding wizard and create a brand-new school. The seeded school also
 comes with 110 generated invoices under **Finance → Invoices** — open one
 and copy its "Share with a parent" link into a private/incognito window to
 try the payer's side (no login) of paying online or by bank transfer.
+
+To see the parent/student side, sign in as `parent@winfield.demo` or
+`student@winfield.demo` (same password) — you'll land on `/portal` instead
+of `/dashboard`, with that family's own attendance, results, assignments,
+timetable, fees, announcements and messages.
 
 To stop the server, click back into the `cmd` window and press `Ctrl+C`.
 

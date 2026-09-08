@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import type { AttendanceStatus } from "@/generated/prisma/client";
+import { notifyAttendanceAbsent } from "@/lib/services/notifications";
 
 function normalizeDate(date: string | Date): Date {
   const d = typeof date === "string" ? new Date(`${date}T00:00:00.000Z`) : date;
@@ -54,6 +55,12 @@ export async function markAttendance(
         update: { status: entry.status, markedById, classArmId: input.classArmId },
       })
     )
+  );
+
+  await Promise.all(
+    input.entries
+      .filter((entry) => entry.status === "ABSENT")
+      .map((entry) => notifyAttendanceAbsent(schoolId, entry.studentId, day))
   );
 }
 

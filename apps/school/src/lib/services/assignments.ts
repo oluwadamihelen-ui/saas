@@ -19,6 +19,16 @@ export async function listAssignments(schoolId: string) {
   }));
 }
 
+/// A student/parent-facing view: what's owed and what's already graded for
+/// one specific student, not a teacher's whole-class gradebook.
+export async function listAssignmentsForStudent(schoolId: string, studentId: string) {
+  return prisma.assignmentSubmission.findMany({
+    where: { studentId, assignment: { schoolId } },
+    include: { assignment: { include: { subject: true, classArm: { include: { classGroup: true } } } } },
+    orderBy: { assignment: { dueDate: "desc" } },
+  });
+}
+
 export async function getAssignment(schoolId: string, id: string) {
   return prisma.assignment.findFirst({
     where: { schoolId, id },

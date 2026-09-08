@@ -4,12 +4,26 @@ import { signOut } from "next-auth/react";
 import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
+import { NotificationBell, type NotificationItem } from "@/components/dashboard/notification-bell";
 
-export function DashboardTopbar({ name, email, roleName }: { name: string; email: string; roleName: string }) {
+export function DashboardTopbar({
+  name,
+  email,
+  roleName,
+  notifications = [],
+  unreadCount = 0,
+}: {
+  name: string;
+  email: string;
+  roleName: string;
+  notifications?: NotificationItem[];
+  unreadCount?: number;
+}) {
   return (
     <header className="flex h-16 items-center justify-between border-b border-border bg-surface px-6">
       <div />
       <div className="flex items-center gap-4">
+        <NotificationBell notifications={notifications} unreadCount={unreadCount} />
         <div className="text-right">
           <p className="text-sm font-medium text-foreground">{name}</p>
           <p className="text-xs text-muted">{roleName} · {email}</p>
