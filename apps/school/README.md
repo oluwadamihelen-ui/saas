@@ -7,7 +7,8 @@ onboarded the same way later). This app is being built in phases (see
 [the root README](../../README.md) for the full architecture assessment and
 roadmap); this commit implements **Phase 1 (Foundation)**, **Phase 2
 (Academics)**, **Phase 3 (Finance)**, **Phase 4 (Communication & portals)**,
-**Phase 5 (AI assistant)** and **Phase 6 (Advanced ERP)**:
+**Phase 5 (AI assistant)**, **Phase 6 (Advanced ERP)** and **Phase 7 (SaaS
+billing & platform admin)** — every phase in the original brief:
 
 **Phase 1 — Foundation**
 - Multi-tenant data model (every tenant-owned table carries `schoolId`)
@@ -133,8 +134,20 @@ roadmap); this commit implements **Phase 1 (Foundation)**, **Phase 2
   management goes to `HR_STAFF` instead, since no dedicated role was
   pre-seeded for it
 
-Not yet built (see the phased roadmap): the Phase 7 SaaS billing &
-platform-admin layer.
+**Phase 7 — SaaS billing & platform admin**
+- A platform Super Admin — one global account, not tied to any school —
+  gets its own app at `/platform`: an overview (schools by status, total
+  students, MRR, trial/overdue counts), a schools list/detail (change a
+  school's account status, its subscription plan and status, generate and
+  mark platform invoices paid), and subscription plan management. There is
+  no self-serve way to become one — `npm run platform:create-admin` is the
+  only way to create this account
+- Every new school created via `/register` is automatically enrolled on the
+  `Starter` plan with a 30-day trial subscription; the school's own owner
+  can see their plan and billing history (read-only) at `/dashboard/billing`
+- This bills the *school* for using Winfield — a completely separate thing
+  from Phase 3's Invoice/Payment, which bills a *student's family* for
+  school fees. The two never touch each other
 
 ## Stack
 
@@ -168,8 +181,10 @@ published announcements (school-wide, staff-only, parents-only and one
 class-scoped), a sample parent↔school conversation, salary structures and
 two payroll runs (one paid, one still draft) for six staff members, a small
 book catalog with a few loans issued, two transport routes with stops and
-assigned students, and two hostels with rooms and assigned students — plus
-these accounts, all with password `Passw0rd!23`:
+assigned students, two hostels with rooms and assigned students, and (Phase
+7) the three default subscription plans plus this school's own subscription
+with two paid platform invoices and one pending — plus these accounts, all
+with password `Passw0rd!23`:
 
 | Role | Email |
 |---|---|
@@ -183,11 +198,14 @@ these accounts, all with password `Passw0rd!23`:
 | Transport Manager | transport@winfield.demo |
 | Parent (portal) | parent@winfield.demo |
 | Student (portal) | student@winfield.demo |
+| Platform Super Admin | superadmin@winfield.demo |
 
 The parent and student accounts are both linked to the same seeded child, so
 signing in as either shows the same class/attendance/results/fees data from
-each side. Or go to `/register` to walk through the real onboarding wizard
-and create a brand-new school from scratch.
+each side. The Super Admin account lands on `/platform`, not `/dashboard` —
+it isn't attached to any school. Or go to `/register` to walk through the
+real onboarding wizard and create a brand-new school from scratch (it's
+automatically enrolled on the Starter plan with a 30-day trial).
 
 ## Scripts
 
@@ -197,6 +215,8 @@ npm run build       # production build
 npm run lint         # eslint
 npm run db:seed      # (re)seed the demo school — wipes any existing school with the same slug first
 npm run db:backfill-permissions   # top up existing schools' roles with any permission added since they were created
+npm run platform:create-admin -- --email=you@example.com --password=... --name="Your Name"
+                     # create a real platform Super Admin account (only way to get one — no self-serve signup)
 ```
 
 ### Upgrading an existing database

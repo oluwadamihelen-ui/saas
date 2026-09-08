@@ -112,6 +112,9 @@ model School {
   hostelRooms                 HostelRoom[]
   hostelBedAssignments        HostelBedAssignment[]
 
+  subscription     Subscription?
+  platformInvoices PlatformInvoice[]
+
   @@index([status])
 }
 
@@ -198,6 +201,10 @@ model User {
   payslips            Payslip[]             @relation("Payslips")
   bookLoansBorrowed   BookLoan[]            @relation("BookBorrower")
   bookLoansIssued     BookLoan[]            @relation("BookIssuedBy")
+
+  /// Set only for the platform Super Admin, marking which platform invoices
+  /// they personally confirmed as paid.
+  platformInvoicesMarkedPaid PlatformInvoice[] @relation("PlatformInvoiceMarkedPaidBy")
 
   @@index([schoolId])
 }
@@ -1533,4 +1540,97 @@ model HostelBedAssignment {
   @@index([schoolId])
   @@index([schoolId, studentId])
   @@index([roomId])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7: SaaS billing & platform admin
+//
+// Bills a SCHOOL for using the platform — a completely different thing from
+// Invoice/Payment above, which bill a student's family for school fees.
+// None of these models carry a schoolId FK the way tenant-owned tables do
+// (they're platform-level, owned by the Super Admin, not a tenant), except
+// where they need to reference which school a subscription/invoice is for.
+// ---------------------------------------------------------------------------
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+/// Platform-level catalog, not tenant-scoped — the same handful of plans
+/// apply across every school, the same role Permission plays for
+/// module.action strings.
+model SubscriptionPlan {
+  id              String          @id @default(cuid())
+  name            String          @unique
+  priceMinor      Int
+  billingInterval BillingInterval
+  studentLimit    Int?
+  isActive        Boolean         @default(true)
+
+  createdAt DateTime @default(now())
+
+  subscriptions Subscription[]
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+/// One per school. Deliberately separate from School.status
+/// (TRIAL/ACTIVE/SUSPENDED), which is an account-access flag a Super Admin
+/// sets independently — a school can be billing-ACTIVE but access-SUSPENDED
+/// (abuse/ToS issue unrelated to payment) or vice versa.
+model Subscription {
+  id       String           @id @default(cuid())
+  schoolId String           @unique
+  school   School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  planId   String
+  plan     SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  status             SubscriptionStatus @default(TRIALING)
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  canceledAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoices PlatformInvoice[]
+
+  @@index([status])
+}
+
+enum PlatformInvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+  VOID
+}
+
+model PlatformInvoice {
+  id             String       @id @default(cuid())
+  schoolId       String
+  school         School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  periodStart DateTime
+  periodEnd   DateTime
+  amountMinor Int
+  status      PlatformInvoiceStatus @default(PENDING)
+  dueDate     DateTime
+  paidAt      DateTime?
+
+  markedPaidById String?
+  markedPaidBy   User?   @relation("PlatformInvoiceMarkedPaidBy", fields: [markedPaidById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([subscriptionId])
+  @@index([schoolId, status])
 }

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { requireSchoolUser } from "@/lib/auth/require";
+import { requireUser, requireSchoolUser } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { prisma } from "@/lib/db";
 import { getSchool, nextOnboardingStep } from "@/lib/services/school";
@@ -8,6 +8,13 @@ import { Sidebar, DashboardMobileNav } from "@/components/dashboard/sidebar";
 import { DashboardTopbar } from "@/components/dashboard/topbar";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  // Checked before requireSchoolUser(), which would otherwise throw for a
+  // Super Admin — that account has no schoolId by design.
+  const rawUser = await requireUser();
+  if (rawUser.role === "SUPER_ADMIN") {
+    redirect("/platform");
+  }
+
   const sessionUser = await requireSchoolUser();
 
   if (sessionUser.role === "PARENT" || sessionUser.role === "STUDENT") {

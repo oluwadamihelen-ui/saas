@@ -20,6 +20,7 @@ import {
   Library,
   Bus,
   BedDouble,
+  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/brand/logo";
@@ -48,6 +49,7 @@ const NAV: { href: string; label: string; icon: typeof LayoutDashboard; exact?: 
   { href: "/dashboard/messages", label: "Messages", icon: MessageSquare, requiredPermission: PERMISSIONS.MESSAGES_VIEW },
   { href: "/dashboard/assistant", label: "AI Assistant", icon: Sparkles, requiredPermission: PERMISSIONS.ASSISTANT_USE },
   { href: "/dashboard/staff", label: "Staff", icon: Users },
+  { href: "/dashboard/billing", label: "Billing", icon: CreditCard, requiredPermission: PERMISSIONS.BILLING_VIEW },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 

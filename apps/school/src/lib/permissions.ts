@@ -54,6 +54,7 @@ export const PERMISSIONS = {
   TRANSPORT_MANAGE: "transport.manage",
   HOSTEL_VIEW: "hostel.view",
   HOSTEL_MANAGE: "hostel.manage",
+  BILLING_VIEW: "billing.view",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -104,6 +105,7 @@ export const PERMISSION_CATALOG: { key: PermissionKey; module: string; descripti
   { key: PERMISSIONS.TRANSPORT_MANAGE, module: "transport", description: "Manage vehicles, routes and student transport assignments" },
   { key: PERMISSIONS.HOSTEL_VIEW, module: "hostel", description: "View hostels, rooms and student room assignments" },
   { key: PERMISSIONS.HOSTEL_MANAGE, module: "hostel", description: "Manage hostels, rooms and student room assignments" },
+  { key: PERMISSIONS.BILLING_VIEW, module: "billing", description: "View the school's own platform subscription and billing history" },
 ];
 
 /// System roles seeded into every new school (brief section 3's role list).
@@ -143,10 +145,14 @@ const ALL_PERMISSIONS = PERMISSION_CATALOG.map((p) => p.key);
 /// Enrolling a student (students.create) is deliberately restricted to
 /// SCHOOL_OWNER and PRINCIPAL ("Head of School") only — not even
 /// SCHOOL_ADMIN gets it by default, so the ALL_PERMISSIONS shortcut below
-/// explicitly carves it out alongside ROLES_MANAGE.
+/// explicitly carves it out alongside ROLES_MANAGE. billing.view is
+/// carved out the same way — the school's relationship with the platform
+/// (plan, invoices) is owner-only, not even school-admin-visible by default.
 export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = {
   SCHOOL_OWNER: ALL_PERMISSIONS,
-  SCHOOL_ADMIN: ALL_PERMISSIONS.filter((p) => p !== PERMISSIONS.ROLES_MANAGE && p !== PERMISSIONS.STUDENTS_CREATE),
+  SCHOOL_ADMIN: ALL_PERMISSIONS.filter(
+    (p) => p !== PERMISSIONS.ROLES_MANAGE && p !== PERMISSIONS.STUDENTS_CREATE && p !== PERMISSIONS.BILLING_VIEW
+  ),
   PRINCIPAL: [
     PERMISSIONS.DASHBOARD_VIEW,
     PERMISSIONS.STUDENTS_VIEW,
@@ -236,8 +242,13 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
   STUDENT: [],
 };
 
-/// The single platform-level role (School = null). Its permission set is
-/// intentionally empty in Phase 1 — the platform admin app (brief section
-/// 35) is Phase 7 scope; this role exists so `User.schoolId` nullable +
-/// `Role.schoolId` nullable never needs a schema change to support it.
+/// The single platform-level role (School = null). Not part of
+/// SYSTEM_ROLE_KEYS/ROLE_DEFAULT_PERMISSIONS above — those are tenant
+/// roles seeded fresh per school. This one is seeded exactly once, globally
+/// (see ensureSuperAdminRole in src/lib/school-provisioning.ts), and access
+/// is checked directly against the session's role key (requireSuperAdmin in
+/// src/lib/auth/require.ts) rather than through the per-school
+/// RolePermission system every tenant role uses — a Super Admin isn't
+/// scoped to a school's data at all, so "does this role have
+/// students.view" is a meaningless question for it.
 export const SUPER_ADMIN_ROLE_KEY = "SUPER_ADMIN";

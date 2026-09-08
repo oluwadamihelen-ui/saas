@@ -778,12 +778,80 @@ async function main() {
     },
   });
 
+  console.log("Setting up platform billing (Super Admin, plans, subscription)...");
+
+  // Mirrors ensureDefaultPlans()/ensureSuperAdminRole() in
+  // src/lib/platform-provisioning.ts — duplicated here for the same
+  // import "server-only" reason as everything else in this script.
+  const planSeeds: { name: string; priceMinor: number; billingInterval: "MONTHLY"; studentLimit: number | null }[] = [
+    { name: "Starter", priceMinor: 1_500_000, billingInterval: "MONTHLY", studentLimit: 150 },
+    { name: "Growth", priceMinor: 4_500_000, billingInterval: "MONTHLY", studentLimit: 500 },
+    { name: "Enterprise", priceMinor: 12_000_000, billingInterval: "MONTHLY", studentLimit: null },
+  ];
+  const plans = await Promise.all(
+    planSeeds.map((p) =>
+      prisma.subscriptionPlan.upsert({ where: { name: p.name }, create: p, update: {} })
+    )
+  );
+  const growthPlan = plans.find((p) => p.name === "Growth")!;
+
+  const currentPeriodStart = new Date();
+  currentPeriodStart.setDate(1);
+  const currentPeriodEnd = new Date(currentPeriodStart);
+  currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
+
+  const subscription = await prisma.subscription.create({
+    data: {
+      schoolId: school.id,
+      planId: growthPlan.id,
+      status: "ACTIVE",
+      currentPeriodStart,
+      currentPeriodEnd,
+    },
+  });
+
+  // Two prior months, paid; the current month still pending.
+  for (let monthsAgo = 2; monthsAgo >= 0; monthsAgo--) {
+    const periodStart = new Date(currentPeriodStart);
+    periodStart.setMonth(periodStart.getMonth() - monthsAgo);
+    const periodEnd = new Date(periodStart);
+    periodEnd.setMonth(periodEnd.getMonth() + 1);
+    const isPast = monthsAgo > 0;
+
+    await prisma.platformInvoice.create({
+      data: {
+        schoolId: school.id,
+        subscriptionId: subscription.id,
+        periodStart,
+        periodEnd,
+        amountMinor: growthPlan.priceMinor,
+        dueDate: periodEnd,
+        status: isPast ? "PAID" : "PENDING",
+        paidAt: isPast ? periodEnd : null,
+      },
+    });
+  }
+
+  let superAdminRole = await prisma.role.findFirst({ where: { schoolId: null, key: "SUPER_ADMIN" } });
+  if (!superAdminRole) {
+    superAdminRole = await prisma.role.create({
+      data: { schoolId: null, key: "SUPER_ADMIN", name: "Super Admin", isSystem: true },
+    });
+  }
+  await prisma.user.upsert({
+    where: { email: "superadmin@winfield.demo" },
+    create: { schoolId: null, roleId: superAdminRole.id, email: "superadmin@winfield.demo", name: "Winfield Platform Admin", passwordHash },
+    update: {},
+  });
+
   console.log(`\nSeeded "${schoolName}" with ${classArms.length} class arms and 110 students.`);
   console.log(`All staff accounts use the password: ${DEMO_PASSWORD}\n`);
   for (const s of staffSeeds) console.log(`  ${s.role.padEnd(16)} ${s.email}`);
   console.log(`\nPortal demo accounts (same password: ${DEMO_PASSWORD}):`);
   console.log(`  PARENT           ${parentUser.email}`);
   console.log(`  STUDENT          ${studentUser.email}`);
+  console.log(`\nPlatform admin (same password: ${DEMO_PASSWORD}):`);
+  console.log(`  SUPER_ADMIN      superadmin@winfield.demo`);
 }
 
 main()

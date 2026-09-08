@@ -513,9 +513,59 @@ duplicate the payroll snapshot/component logic directly against
 the same `import "server-only"` constraint documented above for finance/
 Phase 4 seeding.
 
+## Phase 7: SaaS billing & platform admin
+
+The last content phase — this one is about Winfield-the-company billing
+*schools* for using the platform, a completely different thing from every
+other finance-shaped model in this schema, which bills a *student's family*
+for school fees. `SubscriptionPlan`/`Subscription`/`PlatformInvoice` carry
+no relation to `FeeStructure`/`Invoice`/`Payment` at all.
+
+**The Super Admin role is structurally different from every tenant role.**
+It's a single global `User` row (`schoolId: null`) pointing at a single
+global `Role` row (`schoolId: null`, `key: "SUPER_ADMIN"`) that is
+deliberately *not* part of `SYSTEM_ROLE_KEYS`/`ROLE_DEFAULT_PERMISSIONS` —
+those are reseeded fresh per school; this one is seeded exactly once,
+platform-wide. Access to `/platform/*` is checked directly against the
+session's role key (`requireSuperAdmin()` in `src/lib/auth/require.ts`)
+rather than through `RolePermission`, because "does this role have
+`students.view`" is a meaningless question for an account that isn't
+scoped to any school's data. Bootstrapping one is deliberately not
+self-serve — `npm run platform:create-admin -- --email=... --password=...`
+(a standalone script, same `import "server-only"` constraint as
+`backfill-permissions.ts`) is the only way, run once per environment.
+`dashboard/layout.tsx` checks for this role *before* calling
+`requireSchoolUser()` (which would otherwise throw for it — a Super Admin
+has no `schoolId` by design) and redirects to `/platform`; `middleware.ts`
+protects `/platform/*` the same way it does `/dashboard`, `/portal` and
+`/onboarding`.
+
+**`School.status` (TRIAL/ACTIVE/SUSPENDED) and `Subscription.status`
+(TRIALING/ACTIVE/PAST_DUE/CANCELED) are deliberately two separate fields,**
+not one. The first is an account-access flag a Super Admin sets
+independently of payment — a school can be suspended for a ToS issue while
+still current on its subscription, or vice versa. Collapsing these into one
+status would eventually force a workaround for exactly that case.
+
+**`createSchoolWithOwner`** (the `/register` signup flow) now also enrolls
+every new school on the `Starter` plan with `Subscription.status:
+TRIALING` and a 30-day period — `ensureDefaultPlans()` in
+`src/lib/platform-provisioning.ts` is called before creating the tenant,
+the same "idempotent upsert, safe to call every time" shape as
+`ensurePermissionCatalog()`. This only applies going forward: a school
+created before this code existed has no `Subscription` row at all, which
+the schools list/detail pages render as a real, handled state (a `—` plan
+column, an empty-state card) rather than crashing — and
+`createSubscriptionForSchool()` gives a Super Admin a real way to onboard
+one from the UI rather than that being a dead end. `billing.view` (the
+school's own read-only `/dashboard/billing`) is owner-only by default,
+carved out of `SCHOOL_ADMIN`'s `ALL_PERMISSIONS` shortcut the same way
+`students.create`/`roles.manage` are — a school's relationship with the
+platform is more sensitive than its own internal finance module.
+
 ## Phased roadmap
 
 Matches the brief exactly: Phase 1 Foundation → Phase 2 Academics → Phase 3
 Finance → Phase 4 Communication/parent & student portals → Phase 5 AI →
-Phase 6 Advanced ERP (payroll/library/transport/hostel, this) → Phase 7 SaaS
-billing & platform admin.
+Phase 6 Advanced ERP (payroll/library/transport/hostel) → Phase 7 SaaS
+billing & platform admin (this).

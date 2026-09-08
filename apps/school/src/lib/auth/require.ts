@@ -28,3 +28,13 @@ export async function requirePermission(permission: PermissionKey) {
   if (!perms.has(permission)) throw new ForbiddenError(`Missing permission: ${permission}`);
   return user;
 }
+
+/// The platform Super Admin is a single global user (User.schoolId null,
+/// Role.schoolId null) — not a tenant role, so it's checked directly
+/// against the session's role key rather than going through the
+/// per-school RolePermission system requirePermission() uses.
+export async function requireSuperAdmin() {
+  const user = await requireUser();
+  if (user.role !== "SUPER_ADMIN") throw new ForbiddenError("Super admin access required");
+  return user;
+}

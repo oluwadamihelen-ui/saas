@@ -7,6 +7,7 @@ import {
   SYSTEM_ROLE_KEYS,
   SYSTEM_ROLE_LABELS,
 } from "@/lib/permissions";
+import { ensureDefaultPlans, DEFAULT_SIGNUP_PLAN_NAME, TRIAL_PERIOD_DAYS } from "@/lib/platform-provisioning";
 
 /// Idempotently ensures the global permission catalog exists. Safe to call
 /// on every school creation — it's a handful of upserts, not a migration.
@@ -65,10 +66,28 @@ export async function createSchoolWithOwner(input: {
   const slug = await uniqueSlug(input.schoolName);
   const passwordHash = await bcrypt.hash(input.password, 12);
 
+  const plans = await ensureDefaultPlans();
+  const signupPlan = plans.find((p) => p.name === DEFAULT_SIGNUP_PLAN_NAME) ?? plans[0];
+
   return prisma.$transaction(async (tx) => {
     const school = await tx.school.create({
       data: { name: input.schoolName, slug },
     });
+
+    if (signupPlan) {
+      const periodStart = new Date();
+      const periodEnd = new Date(periodStart);
+      periodEnd.setDate(periodEnd.getDate() + TRIAL_PERIOD_DAYS);
+      await tx.subscription.create({
+        data: {
+          schoolId: school.id,
+          planId: signupPlan.id,
+          status: "TRIALING",
+          currentPeriodStart: periodStart,
+          currentPeriodEnd: periodEnd,
+        },
+      });
+    }
 
     const roles = await Promise.all(
       SYSTEM_ROLE_KEYS.map((key) =>

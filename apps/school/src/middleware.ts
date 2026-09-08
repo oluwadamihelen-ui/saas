@@ -7,7 +7,10 @@ const { auth } = NextAuth(authConfig);
 export default auth((req) => {
   const { pathname } = req.nextUrl;
   const isProtected =
-    pathname.startsWith("/dashboard") || pathname.startsWith("/onboarding") || pathname.startsWith("/portal");
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/onboarding") ||
+    pathname.startsWith("/portal") ||
+    pathname.startsWith("/platform");
 
   if (!isProtected) {
     return NextResponse.next();
@@ -25,5 +28,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/onboarding/:path*", "/portal/:path*"],
+  matcher: ["/dashboard/:path*", "/onboarding/:path*", "/portal/:path*", "/platform/:path*"],
 };
