@@ -8,6 +8,7 @@
     "start": "next start -p 3001",
     "lint": "eslint",
     "db:seed": "tsx --tsconfig tsconfig.json prisma/seed/index.ts",
+    "db:backfill-permissions": "tsx --tsconfig tsconfig.json prisma/scripts/backfill-permissions.ts",
     "test": "vitest run"
   },
   "dependencies": {

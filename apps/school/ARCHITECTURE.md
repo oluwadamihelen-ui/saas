@@ -61,6 +61,20 @@ nothing in Phase 1's UI creates or uses such a user yet.
   changing what a `TEACHER` can do at School A never touches School B — even
   though Phase 1 doesn't yet expose a UI to edit it (roles are fixed at
   creation time until that UI lands).
+- **`ROLE_DEFAULT_PERMISSIONS` is only ever applied once, at that
+  school-creation moment — which means a school provisioned before a later
+  phase added a new default permission to one of its roles doesn't
+  retroactively gain it.** This surfaced as a real bug: a school seeded
+  early and never re-seeded got "Missing permission" errors on pages a
+  later phase's default matrix says that role should reach. Rather than
+  auto-granting on every request (expensive, and silently masks the gap),
+  `prisma/scripts/backfill-permissions.ts` is a standalone, idempotent,
+  additive-only script (`npm run db:backfill-permissions`) that tops up
+  every school's system roles to the current defaults without touching real
+  data — the fix for an existing database, the same way `npm run db:seed`
+  is the fix for the demo school specifically. It's standalone (not
+  imported from `school-provisioning.ts`) for the same `server-only`
+  reason `prisma/seed/index.ts` is.
 - **Enforcement is server-side only.** `requirePermission(key)` re-checks the
   database on every call (no caching across requests) so a permission change
   takes effect immediately rather than waiting out a session's JWT lifetime.

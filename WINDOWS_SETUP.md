@@ -110,6 +110,15 @@ logins, a parent login and a student login, and 110 students, and prints the
 login credentials to the screen — scroll up in the window to see them (all
 use password `Passw0rd!23`).
 
+**Already set this up before, and just unzipped a newer delivery into the
+same database instead of starting fresh?** Also run:
+
+```bat
+npm run db:backfill-permissions
+```
+
+See Troubleshooting below for why this matters.
+
 ## 7. Start the app
 
 ```bat
@@ -146,3 +155,13 @@ To stop the server, click back into the `cmd` window and press `Ctrl+C`.
   what you set during install.
 - **Port already in use** — if something else is already using port 3001,
   stop it, or run `npm run dev -- -p 3002` and visit that port instead.
+- **"Missing permission: ..." errors after unzipping a newer delivery into
+  an existing database** — you're on new code with an old database: a role
+  is missing a permission that was added to its defaults in a later phase
+  (only applied when a school is first created, not retroactively). Run
+  this once, from inside `apps\school`, and it'll fix it without touching
+  any of your data:
+
+  ```bat
+  npm run db:backfill-permissions
+  ```

@@ -171,4 +171,26 @@ npm run dev        # start the app on :3001
 npm run build       # production build
 npm run lint         # eslint
 npm run db:seed      # (re)seed the demo school — wipes any existing school with the same slug first
+npm run db:backfill-permissions   # top up existing schools' roles with any permission added since they were created
 ```
+
+### Upgrading an existing database
+
+Pulling new code into a database from an earlier phase needs two steps
+beyond the usual `npx prisma migrate dev`:
+
+```bash
+npx prisma migrate dev              # applies new tables/columns
+npm run db:backfill-permissions     # grants any permission added to a role's defaults since your school was created
+```
+
+Each phase has occasionally added a new default permission to an existing
+role (e.g. Phase 4 added `announcements.view` to every staff role). That
+default is only ever applied when a school is first created — a school
+that already existed doesn't retroactively gain it, so a role that should
+now be able to open a page instead sees a "Missing permission" error. The
+backfill script (`prisma/scripts/backfill-permissions.ts`) fixes this
+without touching any of your real data — it only adds permissions a role
+is missing, never removes one, and is safe to run as many times as you
+like (a real-data-preserving alternative to `npm run db:seed`, which wipes
+and recreates the whole demo school from scratch instead).
