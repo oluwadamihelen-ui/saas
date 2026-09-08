@@ -2,6 +2,7 @@ import "server-only";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
+import type { Prisma } from "@/generated/prisma/client";
 
 const INVITE_TTL_DAYS = 7;
 
@@ -9,12 +10,24 @@ export async function listRoles(schoolId: string) {
   return prisma.role.findMany({ where: { schoolId }, orderBy: { name: "asc" } });
 }
 
-export async function listStaff(schoolId: string) {
-  return prisma.user.findMany({
-    where: { schoolId },
-    include: { role: true },
-    orderBy: { createdAt: "desc" },
-  });
+const STAFF_PAGE_SIZE = 20;
+
+/// Excludes PARENT/STUDENT portal accounts — this is the staff directory,
+/// not every login this school has ever issued.
+export async function listStaff(schoolId: string, page = 1) {
+  const currentPage = Math.max(1, page);
+  const where: Prisma.UserWhereInput = { schoolId, role: { key: { notIn: ["PARENT", "STUDENT"] } } };
+  const [staff, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      include: { role: true },
+      orderBy: { createdAt: "desc" },
+      skip: (currentPage - 1) * STAFF_PAGE_SIZE,
+      take: STAFF_PAGE_SIZE,
+    }),
+    prisma.user.count({ where }),
+  ]);
+  return { staff, total, page: currentPage, pageCount: Math.max(1, Math.ceil(total / STAFF_PAGE_SIZE)) };
 }
 
 export async function listPendingInvites(schoolId: string) {

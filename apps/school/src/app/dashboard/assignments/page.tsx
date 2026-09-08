@@ -3,25 +3,27 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
+import { Pagination } from "@/components/ui/pagination";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { listAssignments } from "@/lib/services/assignments";
 import { formatDate } from "@/lib/utils";
 
-export default async function AssignmentsPage() {
+export default async function AssignmentsPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const user = await requirePermission(PERMISSIONS.ASSIGNMENTS_VIEW);
   const perms = await getUserPermissions(user.id);
   const canManage = perms.has(PERMISSIONS.ASSIGNMENTS_MANAGE);
 
-  const assignments = await listAssignments(user.schoolId);
+  const params = await searchParams;
+  const { assignments, total, page, pageCount } = await listAssignments(user.schoolId, params.page ? Number(params.page) : 1);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Assignments</h1>
-          <p className="text-sm text-muted">{assignments.length} assignment{assignments.length === 1 ? "" : "s"}</p>
+          <p className="text-sm text-muted">{total} assignment{total === 1 ? "" : "s"}</p>
         </div>
         {canManage && (
           <Button asChild>
@@ -75,6 +77,8 @@ export default async function AssignmentsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Pagination page={page} pageCount={pageCount} basePath="/dashboard/assignments" />
     </div>
   );
 }

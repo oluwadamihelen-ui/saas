@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/brand/logo";
 import { PERMISSIONS, type PermissionKey } from "@/lib/permissions";
+import { NavDrawer } from "@/components/ui/nav-drawer";
 
 /// requiredPermission mirrors what each page's own requirePermission()
 /// gate actually checks — kept in sync with them on purpose, so the
@@ -42,10 +43,22 @@ const NAV: { href: string; label: string; icon: typeof LayoutDashboard; exact?: 
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
+function visibleNavFor(perms: string[]) {
+  const permSet = new Set(perms);
+  return NAV.filter((item) => !item.requiredPermission || permSet.has(item.requiredPermission));
+}
+
+/// Mounted separately from Sidebar (not nested inside its `hidden md:flex`
+/// aside) so the trigger button and drawer are visible below the md
+/// breakpoint. Shares the same permission-filtered nav list as the desktop
+/// sidebar.
+export function DashboardMobileNav({ perms }: { perms: string[] }) {
+  return <NavDrawer items={visibleNavFor(perms)} homeHref="/dashboard" />;
+}
+
 export function Sidebar({ perms }: { perms: string[] }) {
   const pathname = usePathname();
-  const permSet = new Set(perms);
-  const visibleNav = NAV.filter((item) => !item.requiredPermission || permSet.has(item.requiredPermission));
+  const visibleNav = visibleNavFor(perms);
 
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-surface md:flex">

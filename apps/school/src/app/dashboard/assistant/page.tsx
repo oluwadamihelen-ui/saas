@@ -1,14 +1,16 @@
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Pagination } from "@/components/ui/pagination";
 import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { listAiConversations, isAiAssistantConfigured } from "@/lib/services/ai-assistant";
 import { formatDate } from "@/lib/utils";
 import { StartConversationButton } from "./start-conversation-button";
 
-export default async function AssistantPage() {
+export default async function AssistantPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const user = await requirePermission(PERMISSIONS.ASSISTANT_USE);
+  const params = await searchParams;
 
   if (!isAiAssistantConfigured()) {
     return (
@@ -24,11 +26,15 @@ export default async function AssistantPage() {
     );
   }
 
-  const conversations = await listAiConversations(user.schoolId, user.id);
+  const { conversations, page, pageCount } = await listAiConversations(
+    user.schoolId,
+    user.id,
+    params.page ? Number(params.page) : 1
+  );
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">AI Assistant</h1>
           <p className="text-sm text-muted">Ask about students, attendance, results and finance — scoped to what you can already see.</p>
@@ -54,6 +60,8 @@ export default async function AssistantPage() {
           </CardContent>
         </Card>
       )}
+
+      <Pagination page={page} pageCount={pageCount} basePath="/dashboard/assistant" />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Pagination } from "@/components/ui/pagination";
 import { requirePermission } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -16,22 +17,23 @@ import { ApprovalButtons } from "./approval-buttons";
 
 const STATUS_VARIANT = { PENDING: "warning", APPROVED: "success", REJECTED: "danger" } as const;
 
-export default async function ExpensesPage() {
+export default async function ExpensesPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const user = await requirePermission(PERMISSIONS.EXPENSES_VIEW);
   const perms = await getUserPermissions(user.id);
   const canApprove = perms.has(PERMISSIONS.EXPENSES_APPROVE);
   const canCreate = perms.has(PERMISSIONS.EXPENSES_CREATE);
+  const params = await searchParams;
 
-  const [vendors, categories, expenses, school] = await Promise.all([
+  const [vendors, categories, { expenses, page, pageCount }, school] = await Promise.all([
     listVendors(user.schoolId),
     listExpenseCategories(user.schoolId),
-    listExpenses(user.schoolId),
+    listExpenses(user.schoolId, undefined, params.page ? Number(params.page) : 1),
     prisma.school.findUniqueOrThrow({ where: { id: user.schoolId } }),
   ]);
 
   return (
     <div className="max-w-4xl space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Expenses</h1>
           <p className="text-sm text-muted">
@@ -101,6 +103,10 @@ export default async function ExpensesPage() {
               </TableBody>
             </Table>
           )}
+
+          <div className="p-4 pt-0">
+            <Pagination page={page} pageCount={pageCount} basePath="/dashboard/finance/expenses" />
+          </div>
         </CardContent>
       </Card>
     </div>

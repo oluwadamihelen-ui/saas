@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
+import { Pagination } from "@/components/ui/pagination";
 import { requirePermission } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -18,13 +19,14 @@ const AUDIENCE_LABEL: Record<string, string> = {
   CLASS: "Class",
 };
 
-export default async function AnnouncementsPage() {
+export default async function AnnouncementsPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const user = await requirePermission(PERMISSIONS.ANNOUNCEMENTS_VIEW);
   const perms = await getUserPermissions(user.id);
   const canManage = perms.has(PERMISSIONS.ANNOUNCEMENTS_MANAGE);
+  const params = await searchParams;
 
-  const [announcements, classArms] = await Promise.all([
-    listAnnouncements(user.schoolId),
+  const [{ announcements, total, page, pageCount }, classArms] = await Promise.all([
+    listAnnouncements(user.schoolId, params.page ? Number(params.page) : 1),
     canManage ? listClassArms(user.schoolId) : Promise.resolve([]),
   ]);
 
@@ -32,7 +34,7 @@ export default async function AnnouncementsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Announcements</h1>
-        <p className="text-sm text-muted">School-wide, staff, parent and class notices.</p>
+        <p className="text-sm text-muted">{total} notice{total === 1 ? "" : "s"} — school-wide, staff, parent and class.</p>
       </div>
 
       {canManage && (
@@ -84,6 +86,8 @@ export default async function AnnouncementsPage() {
           ))}
         </ul>
       )}
+
+      <Pagination page={page} pageCount={pageCount} basePath="/dashboard/announcements" />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { LayoutDashboard, Users, CalendarDays, FileText, Award, ClipboardCheck, Megaphone, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/brand/logo";
+import { NavDrawer } from "@/components/ui/nav-drawer";
 
 const PARENT_NAV = [
   { href: "/portal/parent", label: "My children", icon: Users, exact: true },
@@ -20,6 +21,14 @@ const STUDENT_NAV = [
   { href: "/portal/student/attendance", label: "Attendance", icon: ClipboardCheck },
   { href: "/portal/student/announcements", label: "Announcements", icon: Megaphone },
 ];
+
+/// Mounted separately from PortalSidebar (not nested inside its
+/// `hidden md:flex` aside) so the trigger button and drawer are visible
+/// below the md breakpoint.
+export function PortalMobileNav({ role }: { role: "parent" | "student" }) {
+  const nav = role === "parent" ? PARENT_NAV : STUDENT_NAV;
+  return <NavDrawer items={nav} homeHref={`/portal/${role}`} />;
+}
 
 export function PortalSidebar({ role }: { role: "parent" | "student" }) {
   const pathname = usePathname();

@@ -2,19 +2,21 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { InviteStaffForm } from "@/components/dashboard/invite-staff-form";
+import { Pagination } from "@/components/ui/pagination";
 import { requireSchoolUser } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { listStaff, listRoles, listPendingInvites } from "@/lib/services/staff";
 import { sendStaffInvite } from "./actions";
 
-export default async function StaffPage() {
+export default async function StaffPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const user = await requireSchoolUser();
   const perms = await getUserPermissions(user.id);
   const canInvite = perms.has(PERMISSIONS.STAFF_INVITE);
+  const params = await searchParams;
 
-  const [staff, roles, invites] = await Promise.all([
-    listStaff(user.schoolId),
+  const [{ staff, total, page, pageCount }, roles, invites] = await Promise.all([
+    listStaff(user.schoolId, params.page ? Number(params.page) : 1),
     listRoles(user.schoolId),
     listPendingInvites(user.schoolId),
   ]);
@@ -24,7 +26,7 @@ export default async function StaffPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Staff</h1>
-        <p className="text-sm text-muted">{staff.length} active account{staff.length === 1 ? "" : "s"}</p>
+        <p className="text-sm text-muted">{total} active account{total === 1 ? "" : "s"}</p>
       </div>
 
       {canInvite && (
@@ -71,6 +73,8 @@ export default async function StaffPage() {
           </ul>
         </CardContent>
       </Card>
+
+      <Pagination page={page} pageCount={pageCount} basePath="/dashboard/staff" />
     </div>
   );
 }

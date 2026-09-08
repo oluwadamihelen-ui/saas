@@ -2,20 +2,25 @@ import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Pagination } from "@/components/ui/pagination";
 import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { listConversationsForStaff } from "@/lib/services/messages";
 import { formatDate } from "@/lib/utils";
 
-export default async function MessagesPage() {
+export default async function MessagesPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const user = await requirePermission(PERMISSIONS.MESSAGES_VIEW);
-  const conversations = await listConversationsForStaff(user.schoolId);
+  const params = await searchParams;
+  const { conversations, total, page, pageCount } = await listConversationsForStaff(
+    user.schoolId,
+    params.page ? Number(params.page) : 1
+  );
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Messages</h1>
-        <p className="text-sm text-muted">Conversations started by parents and students.</p>
+        <p className="text-sm text-muted">{total} conversation{total === 1 ? "" : "s"} started by parents and students.</p>
       </div>
 
       {conversations.length === 0 ? (
@@ -43,6 +48,8 @@ export default async function MessagesPage() {
           </CardContent>
         </Card>
       )}
+
+      <Pagination page={page} pageCount={pageCount} basePath="/dashboard/messages" />
     </div>
   );
 }

@@ -68,9 +68,13 @@ export interface InvoiceFilters {
   classArmId?: string;
   termId?: string;
   status?: "ISSUED" | "PARTIALLY_PAID" | "PAID" | "CANCELLED";
+  page?: number;
 }
 
+const INVOICE_PAGE_SIZE = 20;
+
 export async function listInvoices(schoolId: string, filters: InvoiceFilters = {}) {
+  const page = Math.max(1, filters.page ?? 1);
   const where: Prisma.InvoiceWhereInput = {
     schoolId,
     ...(filters.termId ? { termId: filters.termId } : {}),
@@ -78,11 +82,18 @@ export async function listInvoices(schoolId: string, filters: InvoiceFilters = {
     ...(filters.classArmId ? { student: { classArmId: filters.classArmId } } : {}),
   };
 
-  return prisma.invoice.findMany({
-    where,
-    include: { student: { include: { classArm: { include: { classGroup: true } } } }, payments: true },
-    orderBy: { createdAt: "desc" },
-  });
+  const [invoices, total] = await Promise.all([
+    prisma.invoice.findMany({
+      where,
+      include: { student: { include: { classArm: { include: { classGroup: true } } } }, payments: true },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * INVOICE_PAGE_SIZE,
+      take: INVOICE_PAGE_SIZE,
+    }),
+    prisma.invoice.count({ where }),
+  ]);
+
+  return { invoices, total, page, pageCount: Math.max(1, Math.ceil(total / INVOICE_PAGE_SIZE)) };
 }
 
 export async function listInvoicesForStudent(schoolId: string, studentId: string) {

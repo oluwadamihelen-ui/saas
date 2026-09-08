@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Pagination } from "@/components/ui/pagination";
 import { requireSchoolUser } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -42,7 +43,7 @@ export default async function StudentsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Students</h1>
           <p className="text-sm text-muted">{total} student{total === 1 ? "" : "s"}</p>
@@ -127,22 +128,7 @@ export default async function StudentsPage({
             </Table>
           )}
 
-          {pageCount > 1 && (
-            <div className="flex items-center justify-center gap-2 pt-2">
-              {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) => (
-                <Button key={p} asChild size="sm" variant={p === page ? "primary" : "outline"}>
-                  <Link
-                    href={{
-                      pathname: "/dashboard/students",
-                      query: { ...params, page: p },
-                    }}
-                  >
-                    {p}
-                  </Link>
-                </Button>
-              ))}
-            </div>
-          )}
+          <Pagination page={page} pageCount={pageCount} basePath="/dashboard/students" query={params} />
         </CardContent>
       </Card>
     </div>

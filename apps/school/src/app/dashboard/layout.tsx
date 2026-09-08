@@ -4,7 +4,7 @@ import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { prisma } from "@/lib/db";
 import { getSchool, nextOnboardingStep } from "@/lib/services/school";
 import { listNotifications, unreadNotificationCount } from "@/lib/services/notifications";
-import { Sidebar } from "@/components/dashboard/sidebar";
+import { Sidebar, DashboardMobileNav } from "@/components/dashboard/sidebar";
 import { DashboardTopbar } from "@/components/dashboard/topbar";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -30,15 +30,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="flex min-h-screen">
       <Sidebar perms={[...perms]} />
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         <DashboardTopbar
           name={user.name}
           email={user.email}
           roleName={user.role.name}
           notifications={notifications}
           unreadCount={unreadCount}
+          mobileNav={<DashboardMobileNav perms={[...perms]} />}
         />
-        <main className="container-shell flex-1 py-8">{children}</main>
+        <main className="container-shell min-w-0 flex-1 py-6 sm:py-8">{children}</main>
       </div>
     </div>
   );

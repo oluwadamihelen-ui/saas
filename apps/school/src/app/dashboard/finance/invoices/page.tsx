@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Pagination } from "@/components/ui/pagination";
 import { requirePermission } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -20,7 +21,7 @@ const STATUS_VARIANT = { ISSUED: "warning", PARTIALLY_PAID: "accent", PAID: "suc
 export default async function InvoicesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ classArmId?: string; termId?: string; status?: string }>;
+  searchParams: Promise<{ classArmId?: string; termId?: string; status?: string; page?: string }>;
 }) {
   const user = await requirePermission(PERMISSIONS.FINANCE_VIEW);
   const perms = await getUserPermissions(user.id);
@@ -33,18 +34,19 @@ export default async function InvoicesPage({
     prisma.school.findUniqueOrThrow({ where: { id: user.schoolId } }),
   ]);
 
-  const invoices = await listInvoices(user.schoolId, {
+  const { invoices, total, page, pageCount } = await listInvoices(user.schoolId, {
     classArmId: params.classArmId,
     termId: params.termId,
     status: params.status as never,
+    page: params.page ? Number(params.page) : 1,
   });
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Invoices</h1>
-          <p className="text-sm text-muted">{invoices.length} invoice{invoices.length === 1 ? "" : "s"}</p>
+          <p className="text-sm text-muted">{total} invoice{total === 1 ? "" : "s"}</p>
         </div>
         <div className="flex items-center gap-2">
           <Button asChild variant="secondary"><Link href="/dashboard/finance/expenses">Expenses</Link></Button>
@@ -131,6 +133,13 @@ export default async function InvoicesPage({
               </TableBody>
             </Table>
           )}
+
+          <Pagination
+            page={page}
+            pageCount={pageCount}
+            basePath="/dashboard/finance/invoices"
+            query={{ classArmId: params.classArmId, termId: params.termId, status: params.status }}
+          />
         </CardContent>
       </Card>
     </div>

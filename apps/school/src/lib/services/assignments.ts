@@ -1,22 +1,35 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 
-export async function listAssignments(schoolId: string) {
-  const assignments = await prisma.assignment.findMany({
-    where: { schoolId },
-    include: {
-      classArm: { include: { classGroup: true } },
-      subject: true,
-      teacher: true,
-      submissions: true,
-    },
-    orderBy: { dueDate: "desc" },
-  });
-  return assignments.map((a) => ({
-    ...a,
-    gradedCount: a.submissions.filter((s) => s.status === "GRADED").length,
-    totalCount: a.submissions.length,
-  }));
+const PAGE_SIZE = 20;
+
+export async function listAssignments(schoolId: string, page = 1) {
+  const currentPage = Math.max(1, page);
+  const [assignments, total] = await Promise.all([
+    prisma.assignment.findMany({
+      where: { schoolId },
+      include: {
+        classArm: { include: { classGroup: true } },
+        subject: true,
+        teacher: true,
+        submissions: true,
+      },
+      orderBy: { dueDate: "desc" },
+      skip: (currentPage - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+    }),
+    prisma.assignment.count({ where: { schoolId } }),
+  ]);
+  return {
+    assignments: assignments.map((a) => ({
+      ...a,
+      gradedCount: a.submissions.filter((s) => s.status === "GRADED").length,
+      totalCount: a.submissions.length,
+    })),
+    total,
+    page: currentPage,
+    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+  };
 }
 
 /// A student/parent-facing view: what's owed and what's already graded for

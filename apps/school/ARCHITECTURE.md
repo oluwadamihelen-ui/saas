@@ -393,13 +393,59 @@ conversations)" integration test, per the brief's testing requirements, is
 overdue and should not be deferred again — it's the highest-value thing to
 add before Phase 6.
 
-## Known scale limitation
+## UX pass: pagination, mobile navigation, responsive layout
 
-The invoices list (`/dashboard/finance/invoices`) and a few similar admin
-tables render every matching row with no pagination — fine at the demo
-school's 110 invoices, but worth fixing (the same `page`/`pageSize` pattern
-already used in `listStudents`) before a school's invoice history grows much
-past a few hundred rows.
+Every list page that can grow unbounded is now paginated with a consistent
+`page`/`pageSize` pattern (skip/take + a parallel `count`, 20 rows per page):
+students, staff, assignments, invoices, expenses, announcements (dashboard
+and both portal variants), messages (dashboard and parent portal), and AI
+assistant conversations. Each service function returns
+`{ items, total, page, pageCount }`; each page component reads `page` from
+`searchParams` and renders the shared `<Pagination>` component
+(`src/components/ui/pagination.tsx`), which windows page numbers (`1 … 4 5 6
+… 20`) and renders nothing when `pageCount <= 1`. `fee-structures.ts` and
+`teacher-assignments.ts` were deliberately left unpaginated — both are
+bounded, slowly-growing configuration lists (comparable to grading setup),
+not the kind of list that grows with school size.
+
+Mobile navigation was a real functional gap, not just cosmetic: the
+dashboard `Sidebar` and portal `PortalSidebar` are both `hidden md:flex`
+with no fallback, so below the `md` breakpoint there was previously no way
+to navigate the app at all. `src/components/ui/nav-drawer.tsx` adds a
+`NavDrawer` primitive (hamburger trigger + slide-out drawer, both in one
+client component so open/close state doesn't need to be lifted into the
+server-rendered layout) that `DashboardMobileNav` and `PortalMobileNav`
+wrap with the same nav lists their desktop siblings use (the dashboard
+variant applies the same permission filtering as `Sidebar`). The trigger is
+rendered into `DashboardTopbar`'s left slot via a new `mobileNav` prop, not
+nested inside the desktop sidebar's `hidden` aside — otherwise it would
+inherit `display: none` on mobile too. The drawer closes via each link's own
+`onClick`, not a `pathname`-watching effect — this repo's lint config
+(`react-hooks/set-state-in-effect`, `react-hooks/refs`) rejects both the
+effect-based and the ref-during-render patterns for "close on navigation",
+so per-link `onClick={() => setOpen(false)}` is the pattern to reuse for any
+future drawer/modal that needs the same behavior.
+
+Fixing mobile nav surfaced a real layout bug: on narrow viewports, tables
+and other wide content were forcing the *entire page* to scroll
+horizontally instead of scrolling within their own `overflow-x-auto`
+container. Root cause: `.container-shell` (the page-content wrapper) centers
+itself with `margin-left/right: auto` but had no explicit `width`. A
+`margin: auto` flex item with `width: auto` doesn't stretch to fill its
+flex container's cross-axis — the browser sizes it to its content's
+max-content width instead, which is exactly the CSS flexbox rule "auto
+margins absorb positive free space and disable stretch alignment on that
+axis." Fixed by adding `width: 100%` to `.container-shell` — it still caps
+at `max-width: 84rem` and centers via the auto margins on wide screens
+(verified: unchanged at a 1920px viewport), but on narrow screens it now
+correctly resolves to 100% of the available flex width instead of
+ballooning to fit its content. `min-w-0` was also added to the intervening
+flex containers (`dashboard/layout.tsx` and both portal layouts) as
+defense in depth, though the `width: 100%` fix was the one that mattered.
+Page headers with a title + primary action button
+(`flex items-center justify-between`) were changed to
+`flex flex-wrap items-center justify-between gap-3` so the button drops
+below the title on narrow screens instead of being squeezed or clipped.
 
 ## Phased roadmap
 

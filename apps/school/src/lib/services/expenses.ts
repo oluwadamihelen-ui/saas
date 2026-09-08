@@ -17,12 +17,22 @@ export async function createExpenseCategory(schoolId: string, name: string) {
   return prisma.expenseCategory.create({ data: { schoolId, name } });
 }
 
-export async function listExpenses(schoolId: string, status?: "PENDING" | "APPROVED" | "REJECTED") {
-  return prisma.expense.findMany({
-    where: { schoolId, ...(status ? { status } : {}) },
-    include: { category: true, vendor: true, createdBy: true, approvedBy: true },
-    orderBy: { incurredAt: "desc" },
-  });
+const EXPENSE_PAGE_SIZE = 20;
+
+export async function listExpenses(schoolId: string, status?: "PENDING" | "APPROVED" | "REJECTED", page = 1) {
+  const currentPage = Math.max(1, page);
+  const where = { schoolId, ...(status ? { status } : {}) };
+  const [expenses, total] = await Promise.all([
+    prisma.expense.findMany({
+      where,
+      include: { category: true, vendor: true, createdBy: true, approvedBy: true },
+      orderBy: { incurredAt: "desc" },
+      skip: (currentPage - 1) * EXPENSE_PAGE_SIZE,
+      take: EXPENSE_PAGE_SIZE,
+    }),
+    prisma.expense.count({ where }),
+  ]);
+  return { expenses, total, page: currentPage, pageCount: Math.max(1, Math.ceil(total / EXPENSE_PAGE_SIZE)) };
 }
 
 export interface ExpenseInput {

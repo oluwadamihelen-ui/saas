@@ -3,17 +3,23 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Pagination } from "@/components/ui/pagination";
 import { requireSchoolUser } from "@/lib/auth/require";
 import { listConversationsForUser } from "@/lib/services/messages";
 import { formatDate } from "@/lib/utils";
 
-export default async function ParentMessagesPage() {
+export default async function ParentMessagesPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const user = await requireSchoolUser();
-  const conversations = await listConversationsForUser(user.schoolId, user.id);
+  const params = await searchParams;
+  const { conversations, page, pageCount } = await listConversationsForUser(
+    user.schoolId,
+    user.id,
+    params.page ? Number(params.page) : 1
+  );
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Messages</h1>
           <p className="text-sm text-muted">Contact the school office.</p>
@@ -47,6 +53,8 @@ export default async function ParentMessagesPage() {
           </CardContent>
         </Card>
       )}
+
+      <Pagination page={page} pageCount={pageCount} basePath="/portal/parent/messages" />
     </div>
   );
 }

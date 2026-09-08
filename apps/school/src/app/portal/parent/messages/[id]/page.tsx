@@ -18,7 +18,7 @@ export default async function ParentConversationPage({ params }: { params: Promi
       <Link href="/portal/parent/messages" className="text-sm text-muted hover:text-foreground">
         &larr; Back to messages
       </Link>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-foreground">{conversation.subject}</h1>
           {conversation.student && (

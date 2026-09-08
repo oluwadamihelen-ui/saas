@@ -21,24 +21,42 @@ export async function startConversation(
   return conversation;
 }
 
-export async function listConversationsForUser(schoolId: string, userId: string) {
-  return prisma.conversation.findMany({
-    where: { schoolId, initiatedById: userId },
-    include: { student: true, messages: { orderBy: { createdAt: "desc" }, take: 1 } },
-    orderBy: { updatedAt: "desc" },
-  });
+const CONVERSATION_PAGE_SIZE = 20;
+
+export async function listConversationsForUser(schoolId: string, userId: string, page = 1) {
+  const currentPage = Math.max(1, page);
+  const where = { schoolId, initiatedById: userId };
+  const [conversations, total] = await Promise.all([
+    prisma.conversation.findMany({
+      where,
+      include: { student: true, messages: { orderBy: { createdAt: "desc" }, take: 1 } },
+      orderBy: { updatedAt: "desc" },
+      skip: (currentPage - 1) * CONVERSATION_PAGE_SIZE,
+      take: CONVERSATION_PAGE_SIZE,
+    }),
+    prisma.conversation.count({ where }),
+  ]);
+  return { conversations, total, page: currentPage, pageCount: Math.max(1, Math.ceil(total / CONVERSATION_PAGE_SIZE)) };
 }
 
-export async function listConversationsForStaff(schoolId: string) {
-  return prisma.conversation.findMany({
-    where: { schoolId },
-    include: {
-      student: true,
-      initiatedBy: true,
-      messages: { orderBy: { createdAt: "desc" }, take: 1 },
-    },
-    orderBy: { updatedAt: "desc" },
-  });
+export async function listConversationsForStaff(schoolId: string, page = 1) {
+  const currentPage = Math.max(1, page);
+  const where = { schoolId };
+  const [conversations, total] = await Promise.all([
+    prisma.conversation.findMany({
+      where,
+      include: {
+        student: true,
+        initiatedBy: true,
+        messages: { orderBy: { createdAt: "desc" }, take: 1 },
+      },
+      orderBy: { updatedAt: "desc" },
+      skip: (currentPage - 1) * CONVERSATION_PAGE_SIZE,
+      take: CONVERSATION_PAGE_SIZE,
+    }),
+    prisma.conversation.count({ where }),
+  ]);
+  return { conversations, total, page: currentPage, pageCount: Math.max(1, Math.ceil(total / CONVERSATION_PAGE_SIZE)) };
 }
 
 /// Returns null rather than throwing if the conversation doesn't belong to

@@ -21,11 +21,21 @@ export function isAiAssistantConfigured(): boolean {
   return getAiProvider() !== null;
 }
 
-export async function listAiConversations(schoolId: string, userId: string) {
-  return prisma.aiConversation.findMany({
-    where: { schoolId, userId },
-    orderBy: { updatedAt: "desc" },
-  });
+const AI_CONVERSATION_PAGE_SIZE = 20;
+
+export async function listAiConversations(schoolId: string, userId: string, page = 1) {
+  const currentPage = Math.max(1, page);
+  const where = { schoolId, userId };
+  const [conversations, total] = await Promise.all([
+    prisma.aiConversation.findMany({
+      where,
+      orderBy: { updatedAt: "desc" },
+      skip: (currentPage - 1) * AI_CONVERSATION_PAGE_SIZE,
+      take: AI_CONVERSATION_PAGE_SIZE,
+    }),
+    prisma.aiConversation.count({ where }),
+  ]);
+  return { conversations, total, page: currentPage, pageCount: Math.max(1, Math.ceil(total / AI_CONVERSATION_PAGE_SIZE)) };
 }
 
 export async function getAiConversation(schoolId: string, userId: string, id: string) {

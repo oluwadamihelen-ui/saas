@@ -2,17 +2,23 @@ import { notFound } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Pagination } from "@/components/ui/pagination";
 import { requireSchoolUser } from "@/lib/auth/require";
 import { getStudentForUser } from "@/lib/services/portal";
 import { listAnnouncementsForStudent } from "@/lib/services/announcements";
 import { formatDate } from "@/lib/utils";
 
-export default async function StudentAnnouncementsPage() {
+export default async function StudentAnnouncementsPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const user = await requireSchoolUser();
+  const params = await searchParams;
   const student = await getStudentForUser(user.schoolId, user.id);
   if (!student) notFound();
 
-  const announcements = await listAnnouncementsForStudent(user.schoolId, student.id);
+  const { announcements, page, pageCount } = await listAnnouncementsForStudent(
+    user.schoolId,
+    student.id,
+    params.page ? Number(params.page) : 1
+  );
 
   return (
     <div className="space-y-6">
@@ -37,6 +43,8 @@ export default async function StudentAnnouncementsPage() {
           ))}
         </ul>
       )}
+
+      <Pagination page={page} pageCount={pageCount} basePath="/portal/student/announcements" />
     </div>
   );
 }

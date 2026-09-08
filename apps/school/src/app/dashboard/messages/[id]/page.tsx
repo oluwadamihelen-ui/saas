@@ -27,7 +27,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
       <Link href="/dashboard/messages" className="text-sm text-muted hover:text-foreground">
         &larr; Back to messages
       </Link>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-foreground">{conversation.subject}</h1>
           <p className="text-sm text-muted">

@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import type { AnnouncementAudience } from "@/generated/prisma/client";
+import type { AnnouncementAudience, Prisma } from "@/generated/prisma/client";
 
 export interface AnnouncementInput {
   title: string;
@@ -9,14 +9,24 @@ export interface AnnouncementInput {
   classArmId?: string | null;
 }
 
+const ANNOUNCEMENT_PAGE_SIZE = 20;
+
 /// Staff-side manage list — every announcement regardless of publish state,
 /// newest first, so a draft is visible to the person who wrote it.
-export async function listAnnouncements(schoolId: string) {
-  return prisma.announcement.findMany({
-    where: { schoolId },
-    include: { classArm: { include: { classGroup: true } }, createdBy: true },
-    orderBy: { createdAt: "desc" },
-  });
+export async function listAnnouncements(schoolId: string, page = 1) {
+  const currentPage = Math.max(1, page);
+  const where = { schoolId };
+  const [announcements, total] = await Promise.all([
+    prisma.announcement.findMany({
+      where,
+      include: { classArm: { include: { classGroup: true } }, createdBy: true },
+      orderBy: { createdAt: "desc" },
+      skip: (currentPage - 1) * ANNOUNCEMENT_PAGE_SIZE,
+      take: ANNOUNCEMENT_PAGE_SIZE,
+    }),
+    prisma.announcement.count({ where }),
+  ]);
+  return { announcements, total, page: currentPage, pageCount: Math.max(1, Math.ceil(total / ANNOUNCEMENT_PAGE_SIZE)) };
 }
 
 /// What a staff member sees on their own dashboard: only announcements
@@ -28,7 +38,8 @@ export async function listAnnouncementsForStaff(schoolId: string) {
   });
 }
 
-export async function listAnnouncementsForGuardian(schoolId: string, guardianId: string) {
+export async function listAnnouncementsForGuardian(schoolId: string, guardianId: string, page = 1) {
+  const currentPage = Math.max(1, page);
   const guardian = await prisma.guardian.findFirst({
     where: { schoolId, id: guardianId },
     include: { students: { include: { student: true } } },
@@ -37,33 +48,50 @@ export async function listAnnouncementsForGuardian(schoolId: string, guardianId:
     .map((sg) => sg.student.classArmId)
     .filter((id): id is string => Boolean(id));
 
-  return prisma.announcement.findMany({
-    where: {
-      schoolId,
-      publishedAt: { not: null },
-      OR: [
-        { audience: { in: ["SCHOOL_WIDE", "PARENTS_ONLY"] } },
-        ...(classArmIds.length > 0 ? [{ audience: "CLASS" as const, classArmId: { in: classArmIds } }] : []),
-      ],
-    },
-    orderBy: { publishedAt: "desc" },
-  });
+  const where: Prisma.AnnouncementWhereInput = {
+    schoolId,
+    publishedAt: { not: null },
+    OR: [
+      { audience: { in: ["SCHOOL_WIDE", "PARENTS_ONLY"] } },
+      ...(classArmIds.length > 0 ? [{ audience: "CLASS" as const, classArmId: { in: classArmIds } }] : []),
+    ],
+  };
+
+  const [announcements, total] = await Promise.all([
+    prisma.announcement.findMany({
+      where,
+      orderBy: { publishedAt: "desc" },
+      skip: (currentPage - 1) * ANNOUNCEMENT_PAGE_SIZE,
+      take: ANNOUNCEMENT_PAGE_SIZE,
+    }),
+    prisma.announcement.count({ where }),
+  ]);
+  return { announcements, total, page: currentPage, pageCount: Math.max(1, Math.ceil(total / ANNOUNCEMENT_PAGE_SIZE)) };
 }
 
-export async function listAnnouncementsForStudent(schoolId: string, studentId: string) {
+export async function listAnnouncementsForStudent(schoolId: string, studentId: string, page = 1) {
+  const currentPage = Math.max(1, page);
   const student = await prisma.student.findFirst({ where: { schoolId, id: studentId } });
 
-  return prisma.announcement.findMany({
-    where: {
-      schoolId,
-      publishedAt: { not: null },
-      OR: [
-        { audience: "SCHOOL_WIDE" },
-        ...(student?.classArmId ? [{ audience: "CLASS" as const, classArmId: student.classArmId }] : []),
-      ],
-    },
-    orderBy: { publishedAt: "desc" },
-  });
+  const where: Prisma.AnnouncementWhereInput = {
+    schoolId,
+    publishedAt: { not: null },
+    OR: [
+      { audience: "SCHOOL_WIDE" },
+      ...(student?.classArmId ? [{ audience: "CLASS" as const, classArmId: student.classArmId }] : []),
+    ],
+  };
+
+  const [announcements, total] = await Promise.all([
+    prisma.announcement.findMany({
+      where,
+      orderBy: { publishedAt: "desc" },
+      skip: (currentPage - 1) * ANNOUNCEMENT_PAGE_SIZE,
+      take: ANNOUNCEMENT_PAGE_SIZE,
+    }),
+    prisma.announcement.count({ where }),
+  ]);
+  return { announcements, total, page: currentPage, pageCount: Math.max(1, Math.ceil(total / ANNOUNCEMENT_PAGE_SIZE)) };
 }
 
 export async function createAnnouncement(
