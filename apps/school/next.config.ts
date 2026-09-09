@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
+  // This is an npm-workspaces monorepo with Vercel's Root Directory set to
+  // apps/school — Next's docs call out that in a monorepo, only files
+  // under the Next.js project root are traced by default, and recommend
+  // explicitly setting outputFileTracingRoot (to the monorepo root, where
+  // the shared node_modules actually lives) alongside outputFileTracingIncludes.
+  outputFileTracingRoot: path.join(__dirname, "../../"),
   // Prisma's generated client lives at a custom `output` path
   // (src/generated/prisma) rather than the default node_modules/.prisma
   // location. Next.js's serverless file tracer doesn't reliably detect
