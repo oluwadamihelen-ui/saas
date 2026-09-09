@@ -76,6 +76,12 @@ export const PERMISSIONS = {
   CBT_GENERATE_AI_QUESTIONS: "cbt.generate_ai_questions",
   TRANSCRIPTS_VIEW: "transcripts.view",
   TRANSCRIPTS_MANAGE: "transcripts.manage",
+  LECTURES_VIEW: "lectures.view",
+  LECTURES_MANAGE: "lectures.manage",
+  LIVE_CLASSES_VIEW: "live_classes.view",
+  LIVE_CLASSES_MANAGE: "live_classes.manage",
+  LIVE_CLASSES_START: "live_classes.start",
+  ONLINE_LEARNING_VIEW_ALL: "online_learning.view_all",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -148,6 +154,12 @@ export const PERMISSION_CATALOG: { key: PermissionKey; module: string; descripti
   { key: PERMISSIONS.CBT_GENERATE_AI_QUESTIONS, module: "cbt", description: "Generate draft CBT questions with the AI assistant" },
   { key: PERMISSIONS.TRANSCRIPTS_VIEW, module: "transcripts", description: "View, generate, download and print student academic transcripts" },
   { key: PERMISSIONS.TRANSCRIPTS_MANAGE, module: "transcripts", description: "Revoke an issued transcript" },
+  { key: PERMISSIONS.LECTURES_VIEW, module: "online_learning", description: "View self-paced lectures and student learning progress" },
+  { key: PERMISSIONS.LECTURES_MANAGE, module: "online_learning", description: "Create, publish, edit and archive lectures for your assigned subjects and classes" },
+  { key: PERMISSIONS.LIVE_CLASSES_VIEW, module: "online_learning", description: "View scheduled and past live classes and their attendance" },
+  { key: PERMISSIONS.LIVE_CLASSES_MANAGE, module: "online_learning", description: "Schedule, edit and cancel live classes for your assigned subjects and classes" },
+  { key: PERMISSIONS.LIVE_CLASSES_START, module: "online_learning", description: "Start, control and end a live class session in the virtual classroom" },
+  { key: PERMISSIONS.ONLINE_LEARNING_VIEW_ALL, module: "online_learning", description: "Monitor online learning activity across every teacher and class in the school" },
 ];
 
 /// System roles seeded into every new school (brief section 3's role list).
@@ -243,6 +255,9 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.CBT_EXPORT,
     PERMISSIONS.TRANSCRIPTS_VIEW,
     PERMISSIONS.TRANSCRIPTS_MANAGE,
+    PERMISSIONS.LECTURES_VIEW,
+    PERMISSIONS.LIVE_CLASSES_VIEW,
+    PERMISSIONS.ONLINE_LEARNING_VIEW_ALL,
   ],
   TEACHER: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -265,6 +280,11 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.CBT_VIEW_RESULTS,
     PERMISSIONS.CBT_MANAGE_QUESTION_BANK,
     PERMISSIONS.CBT_GENERATE_AI_QUESTIONS,
+    PERMISSIONS.LECTURES_VIEW,
+    PERMISSIONS.LECTURES_MANAGE,
+    PERMISSIONS.LIVE_CLASSES_VIEW,
+    PERMISSIONS.LIVE_CLASSES_MANAGE,
+    PERMISSIONS.LIVE_CLASSES_START,
   ],
   ACCOUNTANT: [
     PERMISSIONS.DASHBOARD_VIEW,

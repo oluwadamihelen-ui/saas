@@ -1,7 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { LayoutDashboard, Users, CalendarDays, FileText, Award, ClipboardCheck, Megaphone, MessageSquare, MessageCircle, MonitorCheck } from "lucide-react";
+import {
+  LayoutDashboard,
+  Users,
+  CalendarDays,
+  FileText,
+  Award,
+  ClipboardCheck,
+  Megaphone,
+  MessageSquare,
+  MessageCircle,
+  MonitorCheck,
+  PlayCircle,
+  GraduationCap,
+  ScrollText,
+  Video,
+  CheckCircle2,
+} from "lucide-react";
 import { SchoolLogo } from "@/components/brand/school-logo";
 import { NavDrawer } from "@/components/ui/nav-drawer";
 import { NavTree, type NavItem } from "@/components/ui/nav-tree";
@@ -15,6 +31,16 @@ const PARENT_NAV: NavItem[] = [
 
 const STUDENT_NAV: NavItem[] = [
   { href: "/portal/student", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  {
+    label: "Online Learning",
+    icon: PlayCircle,
+    children: [
+      { href: "/portal/student/online-learning", label: "My Learning", icon: GraduationCap, exact: true },
+      { href: "/portal/student/online-learning/lectures", label: "My Lectures", icon: ScrollText },
+      { href: "/portal/student/online-learning/live-classes", label: "Live Classes", icon: Video },
+      { href: "/portal/student/online-learning/completed", label: "Completed Lessons", icon: CheckCircle2 },
+    ],
+  },
   { href: "/portal/student/timetable", label: "Timetable", icon: CalendarDays },
   { href: "/portal/student/cbt", label: "Exams", icon: MonitorCheck },
   { href: "/portal/student/assignments", label: "Assignments", icon: FileText },

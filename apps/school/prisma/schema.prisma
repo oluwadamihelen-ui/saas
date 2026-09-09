@@ -150,6 +150,13 @@ model School {
   cbtCandidates   CBTExamCandidate[]
   cbtAttempts     CBTAttempt[]
 
+  lectures               Lecture[]
+  studentLectureProgress StudentLectureProgress[]
+  liveClasses            LiveClass[]
+  liveClassAttendance    LiveClassAttendance[]
+  classroomMessages      ClassroomMessage[]
+  liveClassRecordings    LiveClassRecording[]
+
   @@index([status])
 }
 
@@ -249,12 +256,18 @@ model User {
   feedbackSubmitted     Feedback[]      @relation("FeedbackSubmittedBy")
   feedbackReviewed      Feedback[]      @relation("FeedbackReviewedBy")
 
-  cbtQuestionsCreated  CBTQuestion[]       @relation("CBTQuestionCreatedBy")
-  cbtQuestionsApproved CBTQuestion[]       @relation("CBTQuestionApprovedBy")
-  cbtExamsCreated      CBTExam[]           @relation("CBTExamCreatedBy")
-  cbtExamsPublished    CBTExam[]           @relation("CBTExamPublishedBy")
-  cbtExtensionsGranted CBTExamCandidate[]  @relation("CBTExtensionGrantedBy")
-  cbtManualGrades      CBTManualGrade[]    @relation("CBTManualGradedBy")
+  cbtQuestionsCreated  CBTQuestion[]      @relation("CBTQuestionCreatedBy")
+  cbtQuestionsApproved CBTQuestion[]      @relation("CBTQuestionApprovedBy")
+  cbtExamsCreated      CBTExam[]          @relation("CBTExamCreatedBy")
+  cbtExamsPublished    CBTExam[]          @relation("CBTExamPublishedBy")
+  cbtExtensionsGranted CBTExamCandidate[] @relation("CBTExtensionGrantedBy")
+  cbtManualGrades      CBTManualGrade[]   @relation("CBTManualGradedBy")
+
+  lecturesCreated              Lecture[]            @relation("LectureTeacher")
+  liveClassesCreated           LiveClass[]          @relation("LiveClassTeacher")
+  classroomMessagesSent        ClassroomMessage[]   @relation("ClassroomMessageSender")
+  classroomMessagesDeleted     ClassroomMessage[]   @relation("ClassroomMessageDeletedBy")
+  liveClassRecordingsInitiated LiveClassRecording[] @relation("LiveClassRecordingInitiatedBy")
 
   @@index([schoolId])
 }
@@ -351,6 +364,8 @@ model AcademicSession {
 
   terms          Term[]
   calendarEvents CalendarEvent[]
+  lectures       Lecture[]
+  liveClasses    LiveClass[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
@@ -378,6 +393,8 @@ model Term {
   invoices          Invoice[]
   calendarEvents    CalendarEvent[]
   cbtExams          CBTExam[]
+  lectures          Lecture[]
+  liveClasses       LiveClass[]
 
   @@unique([academicSessionId, name])
   @@index([schoolId])
@@ -440,6 +457,8 @@ model ClassArm {
   assignments        Assignment[]
   announcements      Announcement[]
   calendarEvents     CalendarEvent[]
+  lectures           Lecture[]
+  liveClasses        LiveClass[]
 
   @@unique([classGroupId, name])
   @@index([schoolId])
@@ -461,6 +480,8 @@ model Subject {
   scores             Score[]
   cbtQuestions       CBTQuestion[]
   cbtExams           CBTExam[]
+  lectures           Lecture[]
+  liveClasses        LiveClass[]
 
   @@unique([schoolId, code])
   @@index([schoolId])
@@ -543,6 +564,9 @@ model Student {
 
   cbtExamCandidates CBTExamCandidate[]
   cbtAttempts       CBTAttempt[]
+
+  lectureProgress     StudentLectureProgress[]
+  liveClassAttendance LiveClassAttendance[]
 
   @@unique([schoolId, admissionNumber])
   @@index([schoolId])
@@ -888,9 +912,9 @@ model Transcript {
   generatedBy   User     @relation("TranscriptGeneratedBy", fields: [generatedById], references: [id])
   generatedAt   DateTime @default(now())
 
-  revokedById String?
-  revokedBy   User?     @relation("TranscriptRevokedBy", fields: [revokedById], references: [id])
-  revokedAt   DateTime?
+  revokedById   String?
+  revokedBy     User?     @relation("TranscriptRevokedBy", fields: [revokedById], references: [id])
+  revokedAt     DateTime?
   revokedReason String?
 
   @@index([schoolId])
@@ -1243,6 +1267,12 @@ enum NotificationType {
   CBT_EXAM_SUBMITTED
   CBT_MANUAL_GRADING_REQUIRED
   CBT_RESULT_PUBLISHED
+  LECTURE_PUBLISHED
+  LIVE_CLASS_SCHEDULED
+  LIVE_CLASS_STARTING_SOON
+  LIVE_CLASS_STARTED
+  LIVE_CLASS_CANCELLED
+  LIVE_CLASS_RECORDING_AVAILABLE
 }
 
 model Notification {
@@ -2210,8 +2240,8 @@ model CBTQuestion {
   /// manual grading. Never used to auto-grade.
   rubric String?
 
-  createdById String
-  createdBy   User      @relation("CBTQuestionCreatedBy", fields: [createdById], references: [id])
+  createdById  String
+  createdBy    User      @relation("CBTQuestionCreatedBy", fields: [createdById], references: [id])
   approvedById String?
   approvedBy   User?     @relation("CBTQuestionApprovedBy", fields: [approvedById], references: [id])
   approvedAt   DateTime?
@@ -2336,7 +2366,7 @@ model CBTExam {
   /// Marks deducted per wrong answer when negative marking is on, e.g.
   /// 0.25 — a fraction, so CBTAnswer.marksAwarded/CBTAttempt.score are
   /// Float even though CBTQuestion.marks itself is a whole Int.
-  negativeMarkPerWrong Float @default(0)
+  negativeMarkPerWrong   Float   @default(0)
 
   startAt         DateTime
   endAt           DateTime
@@ -2357,7 +2387,7 @@ model CBTExam {
   /// Only meaningful when resultVisibility is MANUAL_RELEASE — null until
   /// a teacher explicitly releases results (see cbt-results.ts), even if
   /// every attempt is already GRADED.
-  resultsReleasedAt DateTime?
+  resultsReleasedAt  DateTime?
 
   createdById   String
   createdBy     User      @relation("CBTExamCreatedBy", fields: [createdById], references: [id])
@@ -2440,11 +2470,11 @@ model CBTExamCandidate {
   schoolId  String
   school    School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
-  maxAttemptsOverride Int?
-  extraTimeMinutes    Int     @default(0)
-  extensionReason     String?
+  maxAttemptsOverride  Int?
+  extraTimeMinutes     Int     @default(0)
+  extensionReason      String?
   extensionGrantedById String?
-  extensionGrantedBy   User?  @relation("CBTExtensionGrantedBy", fields: [extensionGrantedById], references: [id])
+  extensionGrantedBy   User?   @relation("CBTExtensionGrantedBy", fields: [extensionGrantedById], references: [id])
 
   attendanceStatus CBTCandidateAttendanceStatus @default(PENDING)
 
@@ -2616,4 +2646,352 @@ model CBTSecurityEvent {
   occurredAt DateTime             @default(now())
 
   @@index([attemptId])
+}
+
+// ---------------------------------------------------------------------------
+// Online Learning: self-paced lectures & native live virtual classroom
+// (Phase 8)
+//
+// Reuses rather than duplicates existing infrastructure the same way CBT
+// does above:
+//   - Notification/NotificationType carries every lecture/live-class alert
+//     (LIVE_CLASS_STARTING_SOON is schema-level only for now, same as
+//     CBT_EXAM_STARTING_SOON and CalendarEvent.notifyAudience — this app has
+//     no background job runner, so only alerts triggered by a real user
+//     action — schedule, start, cancel, publish — actually fire).
+//   - AuditLog carries every sensitive action (lecture published/archived,
+//     live class started/ended/cancelled) — no separate audit table.
+//   - TeacherAssignment (above) is the source of truth for which
+//     subject+classArm pairs a teacher may create a Lecture/LiveClass for —
+//     enforced in src/lib/services/lectures.ts and live-classes.ts, never
+//     trusted from the client.
+// A Lecture/LiveClass targets exactly one ClassArm (the unit students are
+// actually enrolled into), matching how Assignment and the CLASS
+// Announcement audience already scope content to a class.
+// ---------------------------------------------------------------------------
+
+enum LectureStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum LectureResourceType {
+  VIDEO
+  AUDIO
+  WRITTEN
+  PDF
+  WORD_DOCUMENT
+  PRESENTATION
+  IMAGE
+  EXTERNAL_LINK
+}
+
+enum LectureProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+/// A self-paced learning unit. Students see this row at all only once it is
+/// PUBLISHED (getLecturesForStudent enforces this server-side) and only if
+/// it targets their own classArmId within their own school — never by
+/// subject/topic alone, and never a different school's row with the same
+/// classArm *name* (JSS 2A at School A is a different classArmId than JSS 2A
+/// at School B).
+model Lecture {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  subjectId         String
+  subject           Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  classArmId        String
+  classArm          ClassArm        @relation(fields: [classArmId], references: [id], onDelete: Cascade)
+  academicSessionId String
+  academicSession   AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  termId            String
+  term              Term            @relation(fields: [termId], references: [id], onDelete: Cascade)
+  teacherId         String
+  teacher           User            @relation("LectureTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+
+  title              String
+  topic              String?
+  description        String?
+  learningObjectives String?
+  instructions       String?
+
+  status      LectureStatus @default(DRAFT)
+  publishedAt DateTime?
+  dueDate     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  resources    LectureResource[]
+  progress     StudentLectureProgress[]
+  recordedFrom LiveClassRecording?
+
+  @@index([schoolId])
+  @@index([schoolId, classArmId, status])
+  @@index([schoolId, subjectId])
+  @@index([schoolId, teacherId])
+}
+
+/// A lecture can carry several of these (brief example: one VIDEO plus two
+/// PDF attachments) — order controls display sequence. fileUrl points at
+/// the configured object storage (Vercel Blob, see src/lib/storage/blob.ts)
+/// for every uploaded type; externalUrl is used only for
+/// EXTERNAL_LINK; writtenContent only for WRITTEN. durationSeconds is
+/// probed client-side from the media element at upload time and is the
+/// denominator StudentLectureProgress.watchPercent is computed against.
+model LectureResource {
+  id        String  @id @default(cuid())
+  lectureId String
+  lecture   Lecture @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+
+  type        LectureResourceType
+  title       String
+  description String?
+
+  fileUrl        String?
+  externalUrl    String?
+  writtenContent String?
+
+  fileSizeBytes   Int?
+  durationSeconds Int?
+  order           Int  @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([lectureId])
+}
+
+/// One row per (lecture, student), created lazily on first open rather than
+/// up front for a whole class — a student who never opens a lecture simply
+/// has no row, which getLectureProgressForTeacher's aggregation treats as
+/// NOT_STARTED. Never flips to COMPLETED just because the row exists (brief:
+/// "do not automatically mark a lecture as completed simply because the
+/// student opened the page") — see markLectureOpened vs
+/// completeLectureFromVideoProgress/markLectureCompleteManually in
+/// src/lib/services/lectures.ts for the two ways completion can actually be
+/// reached.
+model StudentLectureProgress {
+  id        String  @id @default(cuid())
+  schoolId  String
+  school    School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  lectureId String
+  lecture   Lecture @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  status          LectureProgressStatus @default(NOT_STARTED)
+  progressPercent Int                   @default(0)
+
+  lastVideoPositionSeconds Int  @default(0)
+  videoDurationSeconds     Int?
+  watchPercent             Int  @default(0)
+
+  firstOpenedAt  DateTime?
+  lastAccessedAt DateTime?
+  completedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([lectureId, studentId])
+  @@index([schoolId])
+  @@index([schoolId, studentId])
+  @@index([lectureId])
+}
+
+enum LiveClassStatus {
+  SCHEDULED
+  LIVE
+  COMPLETED
+  CANCELLED
+}
+
+/// JOINED: connected at least once but present for too little of the class
+/// to count as attended. ATTENDED: met the school's minimum-presence rule
+/// (see live-classes.ts) at class end. LEFT_EARLY: joined but disconnected
+/// before the class ended and never met the minimum. ABSENT: never
+/// connected at all — the default for every eligible student's row, created
+/// up front when the class is scheduled (unlike lecture progress) so a
+/// no-show is visible without a join ever happening.
+enum LiveClassAttendanceStatus {
+  JOINED
+  ATTENDED
+  LEFT_EARLY
+  ABSENT
+}
+
+enum LiveClassRecordingStatus {
+  RECORDING
+  PROCESSING
+  AVAILABLE
+  FAILED
+}
+
+/// A scheduled/live/completed native video class, taught entirely inside
+/// Winfield via the LiveKit-backed Virtual Classroom (src/lib/live-classroom).
+/// roomName is the LiveKit room identifier — distinct from `id` so a room
+/// can be recreated without changing the LiveClass's own identity, and
+/// never exposed to a client that hasn't already passed the join-eligibility
+/// check in src/lib/services/live-classes.ts.
+model LiveClass {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  subjectId         String
+  subject           Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  classArmId        String
+  classArm          ClassArm        @relation(fields: [classArmId], references: [id], onDelete: Cascade)
+  academicSessionId String
+  academicSession   AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  termId            String
+  term              Term            @relation(fields: [termId], references: [id], onDelete: Cascade)
+  teacherId         String
+  teacher           User            @relation("LiveClassTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+
+  title       String
+  topic       String?
+  description String?
+
+  scheduledStart          DateTime
+  durationMinutes         Int
+  maxParticipants         Int?
+  /// Minutes before scheduledStart a student may enter the waiting room —
+  /// configurable per class rather than hardcoded.
+  joinWindowMinutesBefore Int      @default(15)
+
+  status   LiveClassStatus @default(SCHEDULED)
+  roomName String          @unique
+
+  startedAt    DateTime?
+  endedAt      DateTime?
+  cancelledAt  DateTime?
+  cancelReason String?
+
+  chatEnabled      Boolean @default(true)
+  recordingEnabled Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  attendance LiveClassAttendance[]
+  messages   ClassroomMessage[]
+  recordings LiveClassRecording[]
+
+  @@index([schoolId])
+  @@index([schoolId, classArmId, status])
+  @@index([schoolId, teacherId])
+  @@index([schoolId, status, scheduledStart])
+}
+
+/// One row per eligible student per live class, created up front when the
+/// class is scheduled (default ABSENT) — mirrors AssignmentSubmission's
+/// "create the whole class's rows immediately" pattern, so a student who
+/// never joins is still visible on the attendance report rather than
+/// silently missing. segments records each connect/disconnect span
+/// (handles the "student disconnects and reconnects" case) —
+/// totalConnectedSeconds is the sum of every segment's duration, and
+/// status is only ever computed (never hand-set) once the class ends,
+/// against the school's minimum-presence rule.
+model LiveClassAttendance {
+  id          String    @id @default(cuid())
+  schoolId    String
+  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  liveClassId String
+  liveClass   LiveClass @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  firstJoinedAt         DateTime?
+  lastLeftAt            DateTime?
+  totalConnectedSeconds Int                       @default(0)
+  status                LiveClassAttendanceStatus @default(ABSENT)
+
+  handRaised Boolean @default(false)
+  micMuted   Boolean @default(true)
+  cameraOn   Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  segments LiveClassAttendanceSegment[]
+
+  @@unique([liveClassId, studentId])
+  @@index([schoolId])
+  @@index([liveClassId])
+}
+
+model LiveClassAttendanceSegment {
+  id           String              @id @default(cuid())
+  attendanceId String
+  attendance   LiveClassAttendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+
+  joinedAt DateTime  @default(now())
+  leftAt   DateTime?
+
+  @@index([attendanceId])
+}
+
+/// Live classroom chat — moderation is a soft delete (deletedAt/deletedBy)
+/// so a teacher's "delete inappropriate message" leaves an auditable trace
+/// instead of destroying the row outright.
+model ClassroomMessage {
+  id          String    @id @default(cuid())
+  schoolId    String
+  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  liveClassId String
+  liveClass   LiveClass @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
+  senderId    String
+  sender      User      @relation("ClassroomMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  body        String
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("ClassroomMessageDeletedBy", fields: [deletedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([liveClassId])
+  @@index([schoolId])
+}
+
+/// Deliberately holds only metadata + a storage reference (brief: "do not
+/// store large video files directly in the database") — the actual file
+/// lives in the configured object storage (Vercel Blob). A recording only
+/// becomes reachable by students once publishedAsLectureId is set, which
+/// creates a real Lecture row so the recording follows the exact same
+/// PUBLISHED-and-same-classArm visibility rule every other lecture does —
+/// there is no separate "watch this recording" access path.
+model LiveClassRecording {
+  id          String    @id @default(cuid())
+  schoolId    String
+  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  liveClassId String
+  liveClass   LiveClass @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
+
+  status          LiveClassRecordingStatus @default(RECORDING)
+  startedAt       DateTime                 @default(now())
+  endedAt         DateTime?
+  durationSeconds Int?
+
+  storageProvider String?
+  storageKey      String?
+  fileUrl         String?
+
+  initiatedById String
+  initiatedBy   User   @relation("LiveClassRecordingInitiatedBy", fields: [initiatedById], references: [id])
+
+  publishedAsLectureId String?  @unique
+  publishedAsLecture   Lecture? @relation(fields: [publishedAsLectureId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([liveClassId])
+  @@index([schoolId])
 }

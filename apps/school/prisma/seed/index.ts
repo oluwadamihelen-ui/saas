@@ -1170,6 +1170,79 @@ async function main() {
     skipDuplicates: true,
   });
 
+  // Online Learning demo content — teacher1 already teaches Numeracy in
+  // every class arm (see the teacherAssignment seeding above), so a
+  // lecture/live class targeting the demo student's own class arm is
+  // guaranteed to satisfy assertTeacherAssignment the same way a real
+  // teacher's would.
+  console.log("Seeding online learning demo lecture and live class...");
+  const demoLecture = await prisma.lecture.create({
+    data: {
+      schoolId: school.id,
+      teacherId: teacher1.id,
+      subjectId: numeracy.id,
+      classArmId: demoClassArmId!,
+      academicSessionId: session.id,
+      termId: currentTerm.id,
+      title: "Introduction to Counting and Numbers",
+      topic: "Numbers 1-20",
+      description: "A gentle introduction to counting, recognizing and writing numbers from 1 to 20.",
+      learningObjectives: "By the end of this lesson, pupils should be able to count to 20 and recognize written numerals.",
+      instructions: "Read through the lesson, then try the practice questions attached below.",
+      status: "PUBLISHED",
+      publishedAt: new Date(),
+    },
+  });
+  await prisma.lectureResource.createMany({
+    data: [
+      {
+        lectureId: demoLecture.id,
+        type: "WRITTEN",
+        title: "Counting from 1 to 20",
+        order: 0,
+        writtenContent:
+          "Numbers help us count things around us. Let's practice counting from 1 to 20.\n\n1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20.\n\nTry counting your fingers, your toys, or the chairs in your classroom!",
+      },
+      {
+        lectureId: demoLecture.id,
+        type: "EXTERNAL_LINK",
+        title: "Extra practice: Counting song (external resource)",
+        order: 1,
+        externalUrl: "https://www.khanacademy.org/kids",
+      },
+    ],
+  });
+
+  const liveClassStart = new Date();
+  liveClassStart.setDate(liveClassStart.getDate() + 2);
+  liveClassStart.setHours(10, 0, 0, 0);
+  const demoLiveClass = await prisma.liveClass.create({
+    data: {
+      schoolId: school.id,
+      teacherId: teacher1.id,
+      subjectId: numeracy.id,
+      classArmId: demoClassArmId!,
+      academicSessionId: session.id,
+      termId: currentTerm.id,
+      title: "Numbers Live Revision",
+      topic: "Counting and number recognition",
+      description: "A live revision class going over counting from 1 to 20 with real-time Q&A.",
+      scheduledStart: liveClassStart,
+      durationMinutes: 40,
+      joinWindowMinutesBefore: 15,
+      status: "SCHEDULED",
+      roomName: `live-${crypto.randomUUID()}`,
+    },
+  });
+  const demoLiveClassRoster = await prisma.student.findMany({
+    where: { schoolId: school.id, classArmId: demoClassArmId!, status: "ACTIVE" },
+    select: { id: true },
+  });
+  await prisma.liveClassAttendance.createMany({
+    data: demoLiveClassRoster.map((s) => ({ schoolId: school.id, liveClassId: demoLiveClass.id, studentId: s.id })),
+    skipDuplicates: true,
+  });
+
   let superAdminRole = await prisma.role.findFirst({ where: { schoolId: null, key: "SUPER_ADMIN" } });
   if (!superAdminRole) {
     superAdminRole = await prisma.role.create({

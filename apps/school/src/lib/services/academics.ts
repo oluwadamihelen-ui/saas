@@ -113,7 +113,7 @@ export async function listClassGroups(schoolId: string) {
 }
 
 export async function listTerms(schoolId: string) {
-  return prisma.term.findMany({ where: { schoolId }, orderBy: { startDate: "desc" } });
+  return prisma.term.findMany({ where: { schoolId }, include: { academicSession: true }, orderBy: { startDate: "desc" } });
 }
 
 export async function getCurrentSession(schoolId: string) {

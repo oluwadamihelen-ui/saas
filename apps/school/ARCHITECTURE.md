@@ -1012,6 +1012,96 @@ Practice Test" — 20 auto-generated questions, 30 minutes, `isPractice`,
 retakeable — so `student@winfield.demo` can experience the whole flow
 without touching their real assessment record).
 
+## Online Learning: self-paced lectures & native live virtual classroom
+
+A full LMS layer — self-paced lectures with resources and progress
+tracking, plus a real-time video classroom taught entirely inside
+Winfield — appended to `prisma/schema.prisma` after the CBT section.
+Eight new models (`Lecture`, `LectureResource`, `StudentLectureProgress`,
+`LiveClass`, `LiveClassAttendance`, `LiveClassAttendanceSegment`,
+`ClassroomMessage`, `LiveClassRecording`), reusing `Notification`/
+`AuditLog` for alerts and audit trail the same way CBT does, rather than
+duplicating either.
+
+**Real-time video architecture.** This app's hosting (Vercel serverless
+functions) cannot itself run a persistent media or signaling server, and
+a browser-to-browser mesh (every participant sending video directly to
+every other participant) doesn't scale past a handful of people. The
+classroom is built on **LiveKit**, an open-source SFU (Selective
+Forwarding Unit) — every participant sends one stream to the LiveKit
+server, which forwards it to everyone else. `LIVEKIT_URL`/
+`LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET` (`.env.example`) point at either
+LiveKit Cloud or a self-hosted LiveKit instance interchangeably; either
+way, the student/teacher experience is 100% inside Winfield's own UI at
+`/classroom/[liveClassId]` (`src/components/classroom/virtual-classroom.tsx`)
+— nobody creates a LiveKit account, sees LiveKit's own interface, or is
+redirected off Winfield. `src/lib/live-classroom/livekit.ts` mints a
+short-lived (4h), room-and-user-scoped JWT server-side, the *only* way a
+browser ever gets into a room, and degrades to an honest "not configured"
+message when the env vars are unset — the same pattern every other
+external integration in this app follows (payment gateways, the AI
+assistant). Chat and raise-hand signals ride LiveKit's own data channel
+for instant delivery to everyone already connected, backed by a DB row
+(`ClassroomMessage`, `LiveClassAttendance.handRaised`) for persistence,
+history and moderation. Screen share, mute/unmute, camera on/off, active-
+speaker detection and automatic reconnection on a dropped connection are
+all handled by the LiveKit SDK (`@livekit/components-react`) rather than
+built from scratch. Recording (optional; needs a LiveKit Egress-writable
+S3 bucket, `RECORDING_S3_*`) is scaffolded on `LiveClassRecording` but,
+per the "no secret recording" requirement, only ever starts on an
+explicit teacher action.
+
+**File storage.** Lecture videos/documents and recordings go to Vercel
+Blob (`src/lib/storage/blob.ts`, private access) rather than the `data:`
+URL pattern logos/photos use elsewhere — those fit in a database column;
+a lecture video does not. Every stored file is served back only through
+this app's own authenticated route
+(`src/app/api/online-learning/lecture-resources/[resourceId]/route.ts`),
+which re-runs the lecture's own visibility check before streaming bytes
+— the underlying Blob URL is never sent to a browser directly.
+
+**Authorization.** `assertTeacherAssignment` (`src/lib/services/lectures.ts`)
+is the one gate every lecture/live-class create or edit passes through: a
+teacher may only act on a subject+classArm pair they hold a real
+`TeacherAssignment` row for, re-checked server-side on every write, never
+inferred from `lectures.manage` alone. Student-facing reads
+(`listLecturesForStudent`, `getStudentLiveClassAccess`) always re-derive
+the calling student's own `classArmId` from their `Student` row — never
+trust a classArmId or liveClassId a client supplies — so a lecture or
+live class is reachable only by students actually enrolled in its target
+class, in its own school; a cross-school or cross-class id is
+structurally a 404, not a 403 (never reveals that the row exists
+elsewhere). `getStudentLiveClassAccess` is the single source of truth for
+join eligibility, called identically by the page that shows the "Join"
+button and the route that mints a room token — there is no second path
+into a room.
+
+**Lecture progress.** A `StudentLectureProgress` row is created lazily on
+first open (`markLectureOpened`), never implying completion just because
+a student opened the page. A video/audio resource crossing an 80% watch
+threshold (`updateVideoProgress`) auto-completes the lecture; a written/
+document lecture needs an explicit "Mark as complete"
+(`markLectureCompleteManually`). Both are one-way — reopening a completed
+lecture updates the resume position but never un-completes it.
+
+**Live class attendance.** `LiveClassAttendance` rows are created for
+every ACTIVE student the moment a class is scheduled (default `ABSENT`),
+mirroring `AssignmentSubmission`'s "create the whole roster up front"
+pattern — a no-show is visible on the report, not silently missing.
+Each connect/disconnect is its own `LiveClassAttendanceSegment`; a
+student who drops and reconnects keeps their earlier segment's time
+rather than losing it, and `endLiveClass` sums every segment to decide
+`ATTENDED` (≥70% of class duration present) vs. `LEFT_EARLY` vs. `ABSENT`
+— never "present" merely because they clicked Join once.
+
+**Testing.** `tests/online-learning/security.test.ts` covers the brief's
+own worked scenario directly: two schools each with their own "JSS 2A"
+class, a lecture/live-class published in School A invisible to School B's
+students even though the class *name* collides, a same-school student in
+a different class rejected, a cross-school student's live-class access
+attempt rejected as `not_found`, the not-started/in-progress/completed
+progress matrix, and attendance math across a join/disconnect/reconnect.
+
 ## Phased roadmap
 
 Matches the brief exactly: Phase 1 Foundation → Phase 2 Academics → Phase 3
@@ -1022,4 +1112,6 @@ feedback) → multi-provider payments & portal branding → Subscription &
 billing system (four real-priced tiers, centralized entitlements,
 self-serve upgrade/downgrade, platform-billing Paystack + webhook, billing
 dashboard, Enterprise inquiries) → Computer-based testing (ten phases,
-detailed above), each landing as the brief's own priorities evolved.
+detailed above) → Online Learning (self-paced lectures + native LiveKit
+virtual classroom, detailed above), each landing as the brief's own
+priorities evolved.

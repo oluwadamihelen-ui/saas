@@ -31,6 +31,13 @@ import {
   ListChecks,
   ScrollText,
   Building2,
+  PlayCircle,
+  Video,
+  PlusCircle,
+  LineChart,
+  LayoutGrid,
+  UserCheck,
+  TrendingUp,
 } from "lucide-react";
 import { SchoolLogo } from "@/components/brand/school-logo";
 import { PERMISSIONS, type PermissionKey } from "@/lib/permissions";
@@ -109,6 +116,28 @@ const NAV: DashboardNavItem[] = [
           { href: "/dashboard/cbt/exams", label: "Exams", icon: MonitorCheck, requiredPermission: PERMISSIONS.CBT_VIEW },
           { href: "/dashboard/cbt/question-bank", label: "Question Bank", icon: ListChecks, requiredPermission: PERMISSIONS.CBT_VIEW },
           { href: "/dashboard/cbt/grading", label: "Grading", icon: ClipboardCheck, requiredPermission: PERMISSIONS.CBT_GRADE },
+        ],
+      },
+    ],
+  },
+  {
+    label: "Online Learning",
+    icon: PlayCircle,
+    children: [
+      { href: "/dashboard/online-learning/subjects", label: "My Subjects", icon: BookOpen, requiredPermission: PERMISSIONS.LECTURES_VIEW },
+      { href: "/dashboard/online-learning/lectures", label: "My Lectures", icon: ScrollText, requiredPermission: PERMISSIONS.LECTURES_VIEW },
+      { href: "/dashboard/online-learning/lectures/new", label: "Create Lecture", icon: PlusCircle, requiredPermission: PERMISSIONS.LECTURES_MANAGE },
+      { href: "/dashboard/online-learning/live-classes", label: "Live Classes", icon: Video, requiredPermission: PERMISSIONS.LIVE_CLASSES_VIEW },
+      { href: "/dashboard/online-learning/progress", label: "Student Progress", icon: LineChart, requiredPermission: PERMISSIONS.LECTURES_VIEW },
+      {
+        label: "Admin",
+        icon: LayoutGrid,
+        children: [
+          { href: "/dashboard/online-learning/admin", label: "Overview", icon: LayoutGrid, requiredPermission: PERMISSIONS.ONLINE_LEARNING_VIEW_ALL },
+          { href: "/dashboard/online-learning/admin/lectures", label: "Lectures", icon: ScrollText, requiredPermission: PERMISSIONS.ONLINE_LEARNING_VIEW_ALL },
+          { href: "/dashboard/online-learning/admin/live-classes", label: "Live Classes", icon: Video, requiredPermission: PERMISSIONS.ONLINE_LEARNING_VIEW_ALL },
+          { href: "/dashboard/online-learning/admin/teacher-activity", label: "Teacher Activity", icon: UserCheck, requiredPermission: PERMISSIONS.ONLINE_LEARNING_VIEW_ALL },
+          { href: "/dashboard/online-learning/admin/student-engagement", label: "Student Engagement", icon: TrendingUp, requiredPermission: PERMISSIONS.ONLINE_LEARNING_VIEW_ALL },
         ],
       },
     ],

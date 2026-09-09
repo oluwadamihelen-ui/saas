@@ -13,7 +13,9 @@ billing & platform admin)** — every phase in the original brief — plus an
 matching a reference school-management system's information architecture,
 and **multi-provider payments & portal branding**, letting each school
 connect its own online payment gateway and make its portal look like its
-own:
+own, plus **Computer-based testing** (online exams) and **Online
+Learning** (self-paced lectures + a native LiveKit-based live virtual
+classroom — see `ARCHITECTURE.md`):
 
 **Phase 1 — Foundation**
 - Multi-tenant data model (every tenant-owned table carries `schoolId`)

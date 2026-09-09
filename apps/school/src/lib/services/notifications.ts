@@ -327,3 +327,86 @@ export async function notifyCbtResultAvailable(schoolId: string, studentId: stri
   const recipients = await studentAndGuardianUserIds(schoolId, studentId);
   await notifyRecipients(schoolId, recipients, "CBT_RESULT_AVAILABLE", "Result available", `Your result for "${examTitle}" is ready.`);
 }
+
+/// Every student (and their linked guardians) currently enrolled in a
+/// classArm — the recipient set for anything scoped to a whole class rather
+/// than one student, same shape as announcements.ts's CLASS-audience
+/// resolution. Silently skips anyone without a portal account yet, same
+/// as studentAndGuardianUserIds above.
+async function classArmStudentAndGuardianUserIds(schoolId: string, classArmId: string): Promise<{ studentUserIds: string[]; guardianUserIds: string[] }> {
+  const students = await prisma.student.findMany({
+    where: { schoolId, classArmId, status: "ACTIVE" },
+    include: { guardians: { include: { guardian: true } } },
+  });
+  const studentUserIds: string[] = [];
+  const guardianUserIds: string[] = [];
+  for (const student of students) {
+    if (student.userId) studentUserIds.push(student.userId);
+    for (const sg of student.guardians) {
+      if (sg.guardian.userId) guardianUserIds.push(sg.guardian.userId);
+    }
+  }
+  return { studentUserIds, guardianUserIds };
+}
+
+export async function notifyLecturePublished(schoolId: string, lectureId: string) {
+  const lecture = await prisma.lecture.findFirst({ where: { schoolId, id: lectureId }, include: { subject: true } });
+  if (!lecture) return;
+  const { studentUserIds, guardianUserIds } = await classArmStudentAndGuardianUserIds(schoolId, lecture.classArmId);
+  await Promise.all([
+    notifyRecipients(schoolId, studentUserIds, "LECTURE_PUBLISHED", "New lecture available", `"${lecture.title}" (${lecture.subject.name}) is ready to study.`, "/portal/student/online-learning"),
+    notifyRecipients(schoolId, guardianUserIds, "LECTURE_PUBLISHED", "New lecture published", `"${lecture.title}" (${lecture.subject.name}) was published for your child's class.`),
+  ]);
+}
+
+export async function notifyLiveClassScheduled(schoolId: string, liveClassId: string) {
+  const liveClass = await prisma.liveClass.findFirst({ where: { schoolId, id: liveClassId }, include: { subject: true } });
+  if (!liveClass) return;
+  const { studentUserIds, guardianUserIds } = await classArmStudentAndGuardianUserIds(schoolId, liveClass.classArmId);
+  const when = liveClass.scheduledStart.toLocaleString();
+  await Promise.all([
+    notifyRecipients(schoolId, studentUserIds, "LIVE_CLASS_SCHEDULED", "Live class scheduled", `${liveClass.subject.name}: "${liveClass.title}" on ${when}.`, "/portal/student/online-learning/live-classes"),
+    notifyRecipients(schoolId, guardianUserIds, "LIVE_CLASS_SCHEDULED", "Live class scheduled", `${liveClass.subject.name}: "${liveClass.title}" on ${when}.`),
+  ]);
+}
+
+export async function notifyLiveClassStarted(schoolId: string, liveClassId: string) {
+  const liveClass = await prisma.liveClass.findFirst({ where: { schoolId, id: liveClassId }, include: { subject: true } });
+  if (!liveClass) return;
+  const { studentUserIds } = await classArmStudentAndGuardianUserIds(schoolId, liveClass.classArmId);
+  await notifyRecipients(
+    schoolId,
+    studentUserIds,
+    "LIVE_CLASS_STARTED",
+    "Your live class has started",
+    `${liveClass.subject.name}: "${liveClass.title}" is live now.`,
+    `/portal/student/online-learning/live-classes/${liveClass.id}`
+  );
+}
+
+export async function notifyLiveClassCancelled(schoolId: string, liveClassId: string) {
+  const liveClass = await prisma.liveClass.findFirst({ where: { schoolId, id: liveClassId }, include: { subject: true } });
+  if (!liveClass) return;
+  const { studentUserIds, guardianUserIds } = await classArmStudentAndGuardianUserIds(schoolId, liveClass.classArmId);
+  await notifyRecipients(
+    schoolId,
+    [...studentUserIds, ...guardianUserIds],
+    "LIVE_CLASS_CANCELLED",
+    "Live class cancelled",
+    `${liveClass.subject.name}: "${liveClass.title}" has been cancelled.`
+  );
+}
+
+export async function notifyLiveClassRecordingAvailable(schoolId: string, lectureId: string) {
+  const lecture = await prisma.lecture.findFirst({ where: { schoolId, id: lectureId }, include: { subject: true } });
+  if (!lecture) return;
+  const { studentUserIds } = await classArmStudentAndGuardianUserIds(schoolId, lecture.classArmId);
+  await notifyRecipients(
+    schoolId,
+    studentUserIds,
+    "LIVE_CLASS_RECORDING_AVAILABLE",
+    "Class recording available",
+    `The recording for "${lecture.title}" (${lecture.subject.name}) is ready to watch.`,
+    "/portal/student/online-learning"
+  );
+}
