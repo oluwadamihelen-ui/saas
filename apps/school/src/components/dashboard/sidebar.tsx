@@ -93,6 +93,7 @@ const NAV: DashboardNavItem[] = [
     label: "Exams (CBT)",
     icon: MonitorCheck,
     children: [
+      { href: "/dashboard/cbt/exams", label: "Exams", icon: MonitorCheck, requiredPermission: PERMISSIONS.CBT_VIEW },
       { href: "/dashboard/cbt/question-bank", label: "Question Bank", icon: ListChecks, requiredPermission: PERMISSIONS.CBT_VIEW },
     ],
   },

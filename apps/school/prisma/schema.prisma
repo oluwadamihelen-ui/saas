@@ -2320,7 +2320,7 @@ model CBTExamQuestion {
   examId     String
   exam       CBTExam     @relation(fields: [examId], references: [id], onDelete: Cascade)
   questionId String
-  question   CBTQuestion @relation(fields: [questionId], references: [id])
+  question   CBTQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   order         Int  @default(0)
   marksOverride Int?
@@ -2456,7 +2456,7 @@ model CBTAttemptQuestion {
   attemptId  String
   attempt    CBTAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   questionId String
-  question   CBTQuestion @relation(fields: [questionId], references: [id])
+  question   CBTQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   order Int @default(0)
   marks Int
@@ -2486,7 +2486,7 @@ model CBTAnswer {
   attemptId  String
   attempt    CBTAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   questionId String
-  question   CBTQuestion @relation(fields: [questionId], references: [id])
+  question   CBTQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   /// Shape depends on the question's type: a selected option id (single-
   /// choice/true-false), an array of option ids (multi-select/ordering),
