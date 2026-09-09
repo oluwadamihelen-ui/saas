@@ -441,3 +441,43 @@ export async function deleteExam(schoolId: string, id: string) {
   if (exam.status !== "DRAFT") throw new Error("Only draft exams can be deleted. Archive it instead.");
   await prisma.cBTExam.delete({ where: { id } });
 }
+
+/// Sets the candidate's total extra time (not an increment) and records
+/// who granted it and why (spec section 41 — explicit, audited, never
+/// student-initiated). If the candidate has an attempt already
+/// IN_PROGRESS, its deadlineAt — the sole authority for time remaining
+/// (schema doc-comment on CBTAttempt.deadlineAt) — is shifted by the
+/// delta so the extension actually takes effect mid-sitting rather than
+/// only benefiting a future attempt.
+export async function grantExamExtension(
+  schoolId: string,
+  grantedById: string,
+  candidateId: string,
+  extraTimeMinutes: number,
+  reason: string | null
+) {
+  if (extraTimeMinutes < 0) throw new Error("Extra time cannot be negative.");
+  const candidate = await prisma.cBTExamCandidate.findFirst({ where: { schoolId, id: candidateId } });
+  if (!candidate) throw new Error("Candidate not found.");
+
+  const deltaMinutes = extraTimeMinutes - candidate.extraTimeMinutes;
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.cBTExamCandidate.update({
+      where: { id: candidateId },
+      data: { extraTimeMinutes, extensionReason: reason, extensionGrantedById: grantedById },
+    });
+
+    if (deltaMinutes !== 0) {
+      const inProgress = await tx.cBTAttempt.findFirst({ where: { candidateId, status: "IN_PROGRESS" } });
+      if (inProgress) {
+        await tx.cBTAttempt.update({
+          where: { id: inProgress.id },
+          data: { deadlineAt: new Date(inProgress.deadlineAt.getTime() + deltaMinutes * 60_000) },
+        });
+      }
+    }
+
+    return updated;
+  });
+}

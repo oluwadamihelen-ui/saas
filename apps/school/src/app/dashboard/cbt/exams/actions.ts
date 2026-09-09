@@ -13,6 +13,7 @@ import {
   deleteExam,
   createExamType,
   listApprovedQuestionsForSubject,
+  grantExamExtension,
   type ExamInput,
 } from "@/lib/services/cbt-exams";
 import { releaseExamResults } from "@/lib/services/cbt-results";
@@ -178,4 +179,34 @@ export async function releaseExamResultsAction(examId: string): Promise<ExamActi
   revalidatePath(`/dashboard/cbt/exams/${examId}`);
   revalidatePath(`/dashboard/cbt/exams/${examId}/results`);
   return { status: "ok", examId };
+}
+
+export interface ExtensionActionResult {
+  status: "ok" | "error";
+  message?: string;
+}
+
+export async function grantExtensionAction(
+  candidateId: string,
+  extraTimeMinutes: number,
+  reason: string | null
+): Promise<ExtensionActionResult> {
+  const user = await requirePermission(PERMISSIONS.CBT_START);
+  let examId: string;
+  try {
+    const updated = await grantExamExtension(user.schoolId, user.id, candidateId, extraTimeMinutes, reason);
+    examId = updated.examId;
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Could not save the extension." };
+  }
+  await logAudit({
+    schoolId: user.schoolId,
+    userId: user.id,
+    action: "cbt_candidate.extension_granted",
+    resourceType: "CBTExamCandidate",
+    resourceId: candidateId,
+    newValue: { extraTimeMinutes, reason },
+  });
+  revalidatePath(`/dashboard/cbt/exams/${examId}`);
+  return { status: "ok" };
 }

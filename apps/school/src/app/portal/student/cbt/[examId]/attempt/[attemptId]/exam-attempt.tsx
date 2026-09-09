@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowDown, ArrowUp, Check, Clock, Loader2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Check, Clock, Loader2, Maximize } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
-import { saveAnswerAction, submitAttemptAction } from "../../../actions";
-import type { CBTQuestionType, Prisma } from "@/generated/prisma/client";
+import { saveAnswerAction, submitAttemptAction, logSecurityEventAction } from "../../../actions";
+import type { CBTQuestionType, CBTSecurityEventType, Prisma } from "@/generated/prisma/client";
 
 type SaveStatus = "idle" | "pending" | "saving" | "saved" | "error";
 
@@ -28,12 +28,18 @@ export function ExamAttempt({
   deadlineAt,
   questions,
   detectTabSwitch,
+  requireFullscreen,
+  restrictCopyPaste,
+  restrictRightClick,
 }: {
   attemptId: string;
   examTitle: string;
   deadlineAt: string;
   questions: AttemptQuestionView[];
   detectTabSwitch: boolean;
+  requireFullscreen: boolean;
+  restrictCopyPaste: boolean;
+  restrictRightClick: boolean;
 }) {
   const router = useRouter();
   const [index, setIndex] = useState(0);
@@ -55,6 +61,12 @@ export function ExamAttempt({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const autoSubmitTriggered = useRef(false);
+  // Read inside handlers registered once at mount, so a plain state read
+  // can't go stale without re-subscribing every listener on every render.
+  const submittedRef = useRef(submitted);
+  useEffect(() => {
+    submittedRef.current = submitted;
+  }, [submitted]);
 
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -77,16 +89,111 @@ export function ExamAttempt({
   const seconds = Math.floor((clampedMs % 60_000) / 1000);
   const timeLow = clampedMs < 5 * 60_000;
 
+  // Logged, never auto-accusatory (schema doc-comment on
+  // CBTSecurityEvent) — this only records that something happened; it
+  // never blocks an action or penalizes the student itself. Throttled per
+  // type so a flurry of the same event (e.g. rapid alt-tabbing) doesn't
+  // spam the server with a write per occurrence.
+  const lastLoggedAt = useRef<Partial<Record<CBTSecurityEventType, number>>>({});
+  const logEvent = useCallback(
+    (type: CBTSecurityEventType, metadata?: Record<string, unknown>) => {
+      if (submittedRef.current) return;
+      const now = Date.now();
+      const last = lastLoggedAt.current[type] ?? 0;
+      if (now - last < 2000) return;
+      lastLoggedAt.current[type] = now;
+      void logSecurityEventAction(attemptId, type, metadata);
+    },
+    [attemptId]
+  );
+
   useEffect(() => {
     if (!detectTabSwitch) return;
-    const handler = () => {
-      // Phase 8 will turn this into a logged CBTSecurityEvent; for now
-      // this is a no-op hook point so the flag's presence is at least
-      // wired up end to end.
+    function handleVisibility() {
+      if (document.hidden) logEvent("TAB_SWITCH");
+    }
+    function handleBlur() {
+      logEvent("WINDOW_BLUR");
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("blur", handleBlur);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("blur", handleBlur);
     };
-    document.addEventListener("visibilitychange", handler);
-    return () => document.removeEventListener("visibilitychange", handler);
-  }, [detectTabSwitch]);
+  }, [detectTabSwitch, logEvent]);
+
+  useEffect(() => {
+    if (!restrictCopyPaste) return;
+    function handleCopy(e: ClipboardEvent) {
+      e.preventDefault();
+      logEvent("COPY_ATTEMPT");
+    }
+    function handlePaste(e: ClipboardEvent) {
+      e.preventDefault();
+      logEvent("PASTE_ATTEMPT");
+    }
+    document.addEventListener("copy", handleCopy);
+    document.addEventListener("paste", handlePaste);
+    return () => {
+      document.removeEventListener("copy", handleCopy);
+      document.removeEventListener("paste", handlePaste);
+    };
+  }, [restrictCopyPaste, logEvent]);
+
+  useEffect(() => {
+    if (!restrictRightClick) return;
+    function handleContextMenu(e: MouseEvent) {
+      e.preventDefault();
+      logEvent("RIGHT_CLICK_ATTEMPT");
+    }
+    document.addEventListener("contextmenu", handleContextMenu);
+    return () => document.removeEventListener("contextmenu", handleContextMenu);
+  }, [restrictRightClick, logEvent]);
+
+  useEffect(() => {
+    function handleOffline() {
+      logEvent("CONNECTION_LOST");
+    }
+    function handleOnline() {
+      logEvent("CONNECTION_RESTORED");
+    }
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [logEvent]);
+
+  // Fullscreen is only ever entered/re-entered from an explicit click (the
+  // gate button below) since browsers refuse requestFullscreen() without a
+  // user gesture — so this effect only observes state, it never calls it.
+  const [fullscreenActive, setFullscreenActive] = useState(
+    typeof document !== "undefined" && Boolean(document.fullscreenElement)
+  );
+  const fullscreenEverEntered = useRef(false);
+
+  useEffect(() => {
+    if (!requireFullscreen) return;
+    function handleFullscreenChange() {
+      const active = Boolean(document.fullscreenElement);
+      setFullscreenActive(active);
+      if (active) fullscreenEverEntered.current = true;
+      else if (fullscreenEverEntered.current) logEvent("FULLSCREEN_EXIT");
+    }
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, [requireFullscreen, logEvent]);
+
+  async function enterFullscreen() {
+    try {
+      await document.documentElement.requestFullscreen();
+    } catch {
+      // Some browsers/embedded contexts refuse this — the exam still
+      // proceeds; requireFullscreen is a nudge, not a hard technical lock.
+    }
+  }
 
   useEffect(() => {
     function handleBeforeUnload(e: BeforeUnloadEvent) {
@@ -156,6 +263,21 @@ export function ExamAttempt({
         <h1 className="text-xl font-semibold text-foreground">Exam submitted</h1>
         <p className="text-sm text-muted">&quot;{examTitle}&quot; has been submitted successfully.</p>
         <Button onClick={() => router.push("/portal/student/cbt")}>Back to exams</Button>
+      </div>
+    );
+  }
+
+  if (requireFullscreen && !fullscreenActive) {
+    return (
+      <div className="mx-auto max-w-lg space-y-4 py-16 text-center">
+        <Maximize className="mx-auto h-10 w-10 text-accent" />
+        <h1 className="text-xl font-semibold text-foreground">Fullscreen required</h1>
+        <p className="text-sm text-muted">
+          &quot;{examTitle}&quot; must be taken in fullscreen mode
+          {fullscreenEverEntered.current ? " — you left fullscreen. Your timer keeps running, so re-enter to continue. " : ". "}
+          Click below to continue.
+        </p>
+        <Button onClick={enterFullscreen}>Enter fullscreen</Button>
       </div>
     );
   }

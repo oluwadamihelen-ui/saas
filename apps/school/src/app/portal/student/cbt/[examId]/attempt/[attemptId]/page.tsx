@@ -35,6 +35,9 @@ export default async function ExamAttemptPage({ params }: { params: Promise<{ ex
       deadlineAt={attempt.deadlineAt.toISOString()}
       questions={attempt.questions}
       detectTabSwitch={attempt.exam.detectTabSwitch}
+      requireFullscreen={attempt.exam.requireFullscreen}
+      restrictCopyPaste={attempt.exam.restrictCopyPaste}
+      restrictRightClick={attempt.exam.restrictRightClick}
     />
   );
 }

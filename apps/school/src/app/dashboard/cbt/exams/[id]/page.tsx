@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { formatDate } from "@/lib/utils";
 import { ExamLifecycleActions } from "../exam-lifecycle-actions";
+import { CandidateExtension } from "../candidate-extension";
 import type { CBTExamStatus } from "@/generated/prisma/client";
 
 const STATUS_VARIANT: Record<CBTExamStatus, "neutral" | "accent" | "success" | "warning" | "danger"> = {
@@ -46,9 +47,14 @@ export default async function ExamDetailPage({ params }: { params: Promise<{ id:
         </div>
         <div className="flex flex-col items-end gap-2">
           {perms.has(PERMISSIONS.CBT_VIEW_RESULTS) && (
-            <Button asChild size="sm" variant="secondary">
-              <Link href={`/dashboard/cbt/exams/${exam.id}/results`}>Results</Link>
-            </Button>
+            <div className="flex gap-2">
+              <Button asChild size="sm" variant="secondary">
+                <Link href={`/dashboard/cbt/exams/${exam.id}/security`}>Security log</Link>
+              </Button>
+              <Button asChild size="sm" variant="secondary">
+                <Link href={`/dashboard/cbt/exams/${exam.id}/results`}>Results</Link>
+              </Button>
+            </div>
           )}
           <ExamLifecycleActions
             examId={exam.id}
@@ -190,7 +196,14 @@ export default async function ExamDetailPage({ params }: { params: Promise<{ id:
                     <TableCell>{c.student.firstName} {c.student.lastName}</TableCell>
                     <TableCell className="text-muted">{c.student.admissionNumber}</TableCell>
                     <TableCell className="text-muted">{c.attendanceStatus}</TableCell>
-                    <TableCell className="text-muted">{c.extraTimeMinutes > 0 ? `+${c.extraTimeMinutes} min` : "—"}</TableCell>
+                    <TableCell className="text-muted">
+                      <CandidateExtension
+                        candidateId={c.id}
+                        extraTimeMinutes={c.extraTimeMinutes}
+                        extensionReason={c.extensionReason}
+                        canGrant={perms.has(PERMISSIONS.CBT_START)}
+                      />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

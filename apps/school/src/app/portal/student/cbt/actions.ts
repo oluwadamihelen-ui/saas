@@ -4,10 +4,11 @@ import { requireSchoolUser } from "@/lib/auth/require";
 import { getStudentForUser } from "@/lib/services/portal";
 import { startAttempt, saveAnswer, submitAttempt } from "@/lib/services/cbt-attempts";
 import { generateRevisionPlan, type RevisionPlanResult } from "@/lib/services/cbt-ai";
+import { logSecurityEvent } from "@/lib/services/cbt-security";
 import { notifyCbtExamSubmitted } from "@/lib/services/notifications";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
-import type { Prisma } from "@/generated/prisma/client";
+import type { CBTSecurityEventType, Prisma } from "@/generated/prisma/client";
 
 async function currentStudent() {
   const user = await requireSchoolUser();
@@ -67,6 +68,24 @@ export async function submitAttemptAction(attemptId: string): Promise<SubmitAtte
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not submit the exam." };
   }
+}
+
+/// Best-effort by design: a logging failure (network blip, race with the
+/// attempt just having been submitted) must never surface as an error to
+/// the student or interrupt them mid-exam — it's a side channel, not part
+/// of the exam-taking flow itself.
+export async function logSecurityEventAction(
+  attemptId: string,
+  type: CBTSecurityEventType,
+  metadata?: Record<string, unknown>
+): Promise<{ status: "ok" }> {
+  try {
+    const { user, student } = await currentStudent();
+    await logSecurityEvent(user.schoolId, student.id, attemptId, type, metadata as Prisma.InputJsonValue);
+  } catch {
+    // swallow — see note above
+  }
+  return { status: "ok" };
 }
 
 export interface RevisionPlanActionResult {
