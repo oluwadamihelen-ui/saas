@@ -64,6 +64,16 @@ export const PERMISSIONS = {
   FEEDBACK_MANAGE: "feedback.manage",
   PAYMENT_GATEWAYS_MANAGE: "payment_gateways.manage",
   BILLING_MANAGE: "billing.manage",
+  CBT_VIEW: "cbt.view",
+  CBT_CREATE: "cbt.create",
+  CBT_EDIT: "cbt.edit",
+  CBT_PUBLISH: "cbt.publish",
+  CBT_START: "cbt.start",
+  CBT_GRADE: "cbt.grade",
+  CBT_VIEW_RESULTS: "cbt.view_results",
+  CBT_EXPORT: "cbt.export",
+  CBT_MANAGE_QUESTION_BANK: "cbt.manage_question_bank",
+  CBT_GENERATE_AI_QUESTIONS: "cbt.generate_ai_questions",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -124,6 +134,16 @@ export const PERMISSION_CATALOG: { key: PermissionKey; module: string; descripti
   { key: PERMISSIONS.FEEDBACK_MANAGE, module: "administration", description: "Mark submitted feedback as reviewed" },
   { key: PERMISSIONS.PAYMENT_GATEWAYS_MANAGE, module: "finance", description: "Connect and manage the school's own online payment gateway credentials" },
   { key: PERMISSIONS.BILLING_MANAGE, module: "billing", description: "Upgrade, downgrade, cancel or renew the school's own Winfield subscription" },
+  { key: PERMISSIONS.CBT_VIEW, module: "cbt", description: "View CBT examinations and their configuration" },
+  { key: PERMISSIONS.CBT_CREATE, module: "cbt", description: "Create new CBT examinations" },
+  { key: PERMISSIONS.CBT_EDIT, module: "cbt", description: "Edit an examination's questions, configuration or schedule" },
+  { key: PERMISSIONS.CBT_PUBLISH, module: "cbt", description: "Publish a CBT examination, making it visible to its candidates" },
+  { key: PERMISSIONS.CBT_START, module: "cbt", description: "Control a live examination (extend, pause candidates, reset an attempt)" },
+  { key: PERMISSIONS.CBT_GRADE, module: "cbt", description: "Manually grade essay/short-answer CBT questions" },
+  { key: PERMISSIONS.CBT_VIEW_RESULTS, module: "cbt", description: "View CBT results, analytics and the security event log" },
+  { key: PERMISSIONS.CBT_EXPORT, module: "cbt", description: "Export CBT results and analytics as PDF/CSV/Excel" },
+  { key: PERMISSIONS.CBT_MANAGE_QUESTION_BANK, module: "cbt", description: "Create, edit, tag and archive question bank entries" },
+  { key: PERMISSIONS.CBT_GENERATE_AI_QUESTIONS, module: "cbt", description: "Generate draft CBT questions with the AI assistant" },
 ];
 
 /// System roles seeded into every new school (brief section 3's role list).
@@ -212,6 +232,11 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.HOSTEL_VIEW,
     PERMISSIONS.CALENDAR_VIEW,
     PERMISSIONS.ADMISSION_VIEW,
+    PERMISSIONS.CBT_VIEW,
+    PERMISSIONS.CBT_PUBLISH,
+    PERMISSIONS.CBT_START,
+    PERMISSIONS.CBT_VIEW_RESULTS,
+    PERMISSIONS.CBT_EXPORT,
   ],
   TEACHER: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -226,6 +251,14 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.ANNOUNCEMENTS_VIEW,
     PERMISSIONS.ASSISTANT_USE,
     PERMISSIONS.CALENDAR_VIEW,
+    PERMISSIONS.CBT_VIEW,
+    PERMISSIONS.CBT_CREATE,
+    PERMISSIONS.CBT_EDIT,
+    PERMISSIONS.CBT_START,
+    PERMISSIONS.CBT_GRADE,
+    PERMISSIONS.CBT_VIEW_RESULTS,
+    PERMISSIONS.CBT_MANAGE_QUESTION_BANK,
+    PERMISSIONS.CBT_GENERATE_AI_QUESTIONS,
   ],
   ACCOUNTANT: [
     PERMISSIONS.DASHBOARD_VIEW,

@@ -70,6 +70,16 @@ export const FEATURE_CATALOG = [
   { key: "ai_admin_automation", category: "AI", label: "AI-powered administrative automation", implemented: false },
   { key: "ai_document_processing", category: "AI", label: "AI document processing", implemented: false },
 
+  // --- CBT (Computer-Based Testing) ---
+  // `implemented: false` on every one of these until each phase actually
+  // ships real functionality behind it (Phase 1 here is the database
+  // foundation only) — flipped to true phase by phase, same as
+  // ai_question_generation above was before it existed.
+  { key: "cbt", category: "CBT", label: "Online examinations (CBT)", implemented: false },
+  { key: "cbt_question_bank", category: "CBT", label: "CBT question bank", implemented: false },
+  { key: "cbt_ai_generation", category: "CBT", label: "AI question generation for CBT", implemented: false },
+  { key: "cbt_advanced_analytics", category: "CBT", label: "Advanced CBT analytics", implemented: false },
+
   // --- Operations ---
   { key: "payroll", category: "Operations", label: "Payroll", implemented: true },
   { key: "hr", category: "Operations", label: "HR", implemented: false },
@@ -94,6 +104,7 @@ export const FEATURE_CATEGORIES = [
   "Communication",
   "Analytics",
   "AI",
+  "CBT",
   "Operations",
   "Support",
 ] as const;
@@ -113,6 +124,7 @@ const STARTER_FEATURES: FeatureKey[] = [
   "basic_dashboard",
   "basic_ai",
   "email_notifications",
+  "cbt",
 ];
 
 const PROFESSIONAL_ONLY_FEATURES: FeatureKey[] = [
@@ -134,6 +146,8 @@ const PROFESSIONAL_ONLY_FEATURES: FeatureKey[] = [
   "ai_performance_analysis",
   "ai_school_insights",
   "ai_timetable_assistant",
+  "cbt_question_bank",
+  "cbt_ai_generation",
 ];
 
 const PREMIUM_ONLY_FEATURES: FeatureKey[] = [
@@ -153,6 +167,7 @@ const PREMIUM_ONLY_FEATURES: FeatureKey[] = [
   "ai_document_processing",
   "priority_support",
   "custom_branding",
+  "cbt_advanced_analytics",
 ];
 
 export const PROFESSIONAL_FEATURES: FeatureKey[] = [...STARTER_FEATURES, ...PROFESSIONAL_ONLY_FEATURES];

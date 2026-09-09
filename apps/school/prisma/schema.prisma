@@ -141,6 +141,13 @@ model School {
 
   paymentGatewayCredentials PaymentGatewayCredential[]
 
+  cbtExamTypes    CBTExamTypeOption[]
+  cbtQuestions    CBTQuestion[]
+  cbtQuestionTags CBTQuestionTag[]
+  cbtExams        CBTExam[]
+  cbtCandidates   CBTExamCandidate[]
+  cbtAttempts     CBTAttempt[]
+
   @@index([status])
 }
 
@@ -237,6 +244,13 @@ model User {
   calendarEventsCreated CalendarEvent[] @relation("CalendarEventCreatedBy")
   feedbackSubmitted     Feedback[]      @relation("FeedbackSubmittedBy")
   feedbackReviewed      Feedback[]      @relation("FeedbackReviewedBy")
+
+  cbtQuestionsCreated  CBTQuestion[]       @relation("CBTQuestionCreatedBy")
+  cbtQuestionsApproved CBTQuestion[]       @relation("CBTQuestionApprovedBy")
+  cbtExamsCreated      CBTExam[]           @relation("CBTExamCreatedBy")
+  cbtExamsPublished    CBTExam[]           @relation("CBTExamPublishedBy")
+  cbtExtensionsGranted CBTExamCandidate[]  @relation("CBTExtensionGrantedBy")
+  cbtManualGrades      CBTManualGrade[]    @relation("CBTManualGradedBy")
 
   @@index([schoolId])
 }
@@ -359,6 +373,7 @@ model Term {
   feeStructures     FeeStructure[]
   invoices          Invoice[]
   calendarEvents    CalendarEvent[]
+  cbtExams          CBTExam[]
 
   @@unique([academicSessionId, name])
   @@index([schoolId])
@@ -392,6 +407,7 @@ model ClassGroup {
   arms          ClassArm[]
   feeStructures FeeStructure[]
   applicants    Applicant[]
+  cbtQuestions  CBTQuestion[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
@@ -439,6 +455,8 @@ model Subject {
   timetableSlots     TimetableSlot[]
   assignments        Assignment[]
   scores             Score[]
+  cbtQuestions       CBTQuestion[]
+  cbtExams           CBTExam[]
 
   @@unique([schoolId, code])
   @@index([schoolId])
@@ -517,6 +535,9 @@ model Student {
   /// Set only for a student admitted through the Applicant pipeline — the
   /// opposite side of Applicant.enrolledStudentId.
   admittedFrom Applicant? @relation("ApplicantEnrolledStudent")
+
+  cbtExamCandidates CBTExamCandidate[]
+  cbtAttempts       CBTAttempt[]
 
   @@unique([schoolId, admissionNumber])
   @@index([schoolId])
@@ -757,7 +778,8 @@ model AssessmentComponent {
 
   createdAt DateTime @default(now())
 
-  scores Score[]
+  scores   Score[]
+  cbtExams CBTExam[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
@@ -1163,6 +1185,14 @@ enum NotificationType {
   STUDENT_LIMIT_REACHED
   PLAN_UPGRADED
   PLAN_DOWNGRADED
+  CBT_EXAM_SCHEDULED
+  CBT_EXAM_STARTING_SOON
+  CBT_EXAM_AVAILABLE
+  CBT_EXAM_ENDING_SOON
+  CBT_RESULT_AVAILABLE
+  CBT_EXAM_SUBMITTED
+  CBT_MANUAL_GRADING_REQUIRED
+  CBT_RESULT_PUBLISHED
 }
 
 model Notification {
@@ -2000,4 +2030,526 @@ model Feedback {
 
   @@index([schoolId])
   @@index([schoolId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Computer-Based Testing (CBT) / Online Examinations
+//
+// Deliberately reuses rather than duplicates existing infrastructure:
+//   - Notification/NotificationType (above) carries every CBT_* alert —
+//     no separate CBTExamNotification model.
+//   - AuditLog (above) carries every sensitive CBT action (exam published,
+//     answer key changed, attempt reset, grade overridden, ...) — no
+//     separate CBT audit table.
+//   - A graded, official CBTAttempt writes one Score row (below, existing
+//     model) against the AssessmentComponent the exam was configured
+//     against — report-card computation (computeReportCard) already sums
+//     Score by component with no CBT-specific grading formula, per the
+//     "respect the school's existing grading configuration" requirement.
+//     There is deliberately no separate "CBTResult" model: CBTAttempt IS
+//     the result: isOfficialResult flags which attempt (of possibly
+//     several, see maxAttempts) is the one that counted.
+// ---------------------------------------------------------------------------
+
+/// A school's catalog of examination "types" (brief: CBT Test, Class
+/// Test, Continuous Assessment, ...) — seeded with the built-in set
+/// (isSystem, not deletable) plus whatever a school adds of its own,
+/// mirroring the GradeBand/AssessmentComponent "seeded but tenant-
+/// editable list" pattern already used for grading configuration.
+model CBTExamTypeOption {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  key      String
+  label    String
+  isSystem Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  exams CBTExam[]
+
+  @@unique([schoolId, key])
+  @@index([schoolId])
+}
+
+enum CBTQuestionType {
+  MULTIPLE_CHOICE
+  MULTIPLE_SELECT
+  TRUE_FALSE
+  SHORT_ANSWER
+  FILL_IN_BLANK
+  ESSAY
+  MATCHING
+  ORDERING
+}
+
+enum CBTDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+/// DRAFT: teacher is still editing, not usable in an exam yet.
+/// AI_PENDING_REVIEW: AI-generated, not yet reviewed — never selectable
+/// into an exam (brief section 6/7: AI output must never silently become
+/// a published question). APPROVED: usable in exams, whether hand-written
+/// or AI-generated-then-approved. ARCHIVED: retired, kept for history.
+enum CBTQuestionStatus {
+  DRAFT
+  AI_PENDING_REVIEW
+  APPROVED
+  ARCHIVED
+}
+
+enum CBTQuestionSource {
+  MANUAL
+  AI_GENERATED
+  IMPORTED
+}
+
+/// A single question bank entry. `content`-shaped data (options, correct
+/// answer(s), accepted free-text answers) lives in typed columns/the
+/// related CBTQuestionOption rows rather than one opaque JSON blob, so
+/// auto-grading and tenant-scoped queries stay ordinary Prisma queries —
+/// but see src/lib/cbt/question-view.ts (Phase 4) for the hard rule that
+/// answer-bearing fields are never selected into a student-facing payload
+/// before that student has actually submitted (brief section 48).
+model CBTQuestion {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  subjectId    String
+  subject      Subject     @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  classGroupId String?
+  classGroup   ClassGroup? @relation(fields: [classGroupId], references: [id])
+
+  type       CBTQuestionType
+  status     CBTQuestionStatus @default(DRAFT)
+  difficulty CBTDifficulty     @default(MEDIUM)
+  source     CBTQuestionSource @default(MANUAL)
+
+  topic             String?
+  subtopic          String?
+  learningObjective String?
+
+  prompt   String
+  imageUrl String?
+  audioUrl String?
+
+  marks       Int     @default(1)
+  explanation String?
+
+  /// SHORT_ANSWER / FILL_IN_BLANK only — accepted answer strings (matched
+  /// case-insensitively, trimmed), so more than one phrasing can be
+  /// correct. Null for every other question type.
+  acceptedAnswers Json?
+
+  /// ESSAY only — grading guidance shown to the teacher/AI-assist during
+  /// manual grading. Never used to auto-grade.
+  rubric String?
+
+  createdById String
+  createdBy   User      @relation("CBTQuestionCreatedBy", fields: [createdById], references: [id])
+  approvedById String?
+  approvedBy   User?     @relation("CBTQuestionApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  options     CBTQuestionOption[]
+  tags        CBTQuestionTagAssignment[]
+  examLinks   CBTExamQuestion[]
+  attemptUses CBTAttemptQuestion[]
+  answers     CBTAnswer[]
+
+  @@index([schoolId])
+  @@index([schoolId, subjectId])
+  @@index([schoolId, status])
+  @@index([schoolId, subjectId, topic, difficulty])
+}
+
+/// Choice-shaped data for MULTIPLE_CHOICE/MULTIPLE_SELECT/TRUE_FALSE
+/// (isCorrect flags the answer key), MATCHING (text <-> matchText pairs)
+/// and ORDERING (`order` itself IS the correct sequence; isCorrect
+/// unused). Never populated for SHORT_ANSWER/FILL_IN_BLANK/ESSAY.
+model CBTQuestionOption {
+  id         String      @id @default(cuid())
+  questionId String
+  question   CBTQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  text      String
+  matchText String?
+  isCorrect Boolean @default(false)
+  order     Int     @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([questionId])
+}
+
+model CBTQuestionTag {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name     String
+
+  questions CBTQuestionTagAssignment[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+model CBTQuestionTagAssignment {
+  questionId String
+  question   CBTQuestion    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  tagId      String
+  tag        CBTQuestionTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, tagId])
+}
+
+enum CBTExamStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  LIVE
+  ENDED
+  GRADING
+  COMPLETED
+  ARCHIVED
+}
+
+/// MANUAL: the exam uses exactly the CBTExamQuestion rows a teacher
+/// picked, same order/set for every candidate (order still randomizable
+/// per-student via randomizeQuestionOrder). BLUEPRINT: at attempt-start
+/// time, the engine randomly selects questions per CBTExamBlueprintRule
+/// (topic/difficulty distribution) — see src/lib/cbt/attempt-start.ts.
+enum CBTQuestionSelectionMode {
+  MANUAL
+  BLUEPRINT
+}
+
+/// Controls what a student can see about their own attempt once grading
+/// is done (brief section 25) — a school-wide default lives in
+/// src/lib/cbt/config.ts; this is the per-exam override.
+enum CBTResultVisibility {
+  IMMEDIATE
+  AFTER_GRADING
+  MANUAL_RELEASE
+}
+
+model CBTExam {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  title      String
+  examTypeId String
+  examType   CBTExamTypeOption @relation(fields: [examTypeId], references: [id])
+  subjectId  String
+  subject    Subject           @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  termId     String
+  term       Term              @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  /// The gradebook component this exam's official score is written
+  /// against once graded (a Score row, keyed by this + subject/term/
+  /// student). Null for practice exams, which never touch the gradebook.
+  assessmentComponentId String?
+  assessmentComponent   AssessmentComponent? @relation(fields: [assessmentComponentId], references: [id])
+
+  instructions String?
+  status       CBTExamStatus @default(DRAFT)
+  isPractice   Boolean       @default(false)
+
+  questionSelectionMode CBTQuestionSelectionMode @default(MANUAL)
+  totalMarks            Int                      @default(0)
+
+  randomizeQuestionOrder Boolean @default(false)
+  randomizeOptionOrder   Boolean @default(false)
+
+  negativeMarkingEnabled Boolean @default(false)
+  /// Marks deducted per wrong answer when negative marking is on, e.g.
+  /// 0.25 — a fraction, so CBTAnswer.marksAwarded/CBTAttempt.score are
+  /// Float even though CBTQuestion.marks itself is a whole Int.
+  negativeMarkPerWrong Float @default(0)
+
+  startAt         DateTime
+  endAt           DateTime
+  durationMinutes Int
+
+  requireFullscreen  Boolean @default(false)
+  detectTabSwitch    Boolean @default(true)
+  restrictCopyPaste  Boolean @default(false)
+  restrictRightClick Boolean @default(false)
+  maxAttempts        Int     @default(1)
+  autoSubmitOnExpiry Boolean @default(true)
+  desktopOnly        Boolean @default(false)
+
+  resultVisibility   CBTResultVisibility @default(AFTER_GRADING)
+  showCorrectAnswers Boolean             @default(false)
+  showExplanations   Boolean             @default(false)
+  showRanking        Boolean             @default(false)
+
+  createdById   String
+  createdBy     User      @relation("CBTExamCreatedBy", fields: [createdById], references: [id])
+  publishedAt   DateTime?
+  publishedById String?
+  publishedBy   User?     @relation("CBTExamPublishedBy", fields: [publishedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  examQuestions CBTExamQuestion[]
+  blueprint     CBTExamBlueprint?
+  candidates    CBTExamCandidate[]
+  attempts      CBTAttempt[]
+
+  @@index([schoolId])
+  @@index([schoolId, status])
+  @@index([schoolId, subjectId])
+  @@index([schoolId, termId])
+}
+
+model CBTExamQuestion {
+  id         String      @id @default(cuid())
+  examId     String
+  exam       CBTExam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  questionId String
+  question   CBTQuestion @relation(fields: [questionId], references: [id])
+
+  order         Int  @default(0)
+  marksOverride Int?
+
+  @@unique([examId, questionId])
+  @@index([examId])
+}
+
+model CBTExamBlueprint {
+  id     String  @id @default(cuid())
+  examId String  @unique
+  exam   CBTExam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  totalQuestions Int
+
+  rules CBTExamBlueprintRule[]
+}
+
+/// One row per topic/difficulty bucket a blueprint exam must pull from,
+/// e.g. {topic: "Algebra", difficulty: EASY, count: 10} — the attempt-
+/// start selector pulls `count` random APPROVED questions matching each
+/// rule (brief section 20's worked example) rather than randomly
+/// selecting from the whole pool with no distribution guarantee.
+model CBTExamBlueprintRule {
+  id          String           @id @default(cuid())
+  blueprintId String
+  blueprint   CBTExamBlueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+
+  topic      String?
+  difficulty CBTDifficulty?
+  count      Int
+
+  @@index([blueprintId])
+}
+
+enum CBTCandidateAttendanceStatus {
+  PENDING
+  ATTEMPTED
+  ABSENT
+  EXCUSED
+  MAKEUP_SCHEDULED
+}
+
+/// Which students are sitting a given exam, plus any per-student
+/// accommodation (brief section 41) — explicit, audited (extensionGrantedBy),
+/// server-side only; a student can never grant themselves extra time.
+model CBTExamCandidate {
+  id        String  @id @default(cuid())
+  examId    String
+  exam      CBTExam @relation(fields: [examId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  schoolId  String
+  school    School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  maxAttemptsOverride Int?
+  extraTimeMinutes    Int     @default(0)
+  extensionReason     String?
+  extensionGrantedById String?
+  extensionGrantedBy   User?  @relation("CBTExtensionGrantedBy", fields: [extensionGrantedById], references: [id])
+
+  attendanceStatus CBTCandidateAttendanceStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+
+  attempts CBTAttempt[]
+
+  @@unique([examId, studentId])
+  @@index([schoolId])
+  @@index([examId])
+  @@index([studentId])
+}
+
+enum CBTAttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  AUTO_SUBMITTED
+  GRADED
+  ABANDONED
+}
+
+/// One row per sitting. `deadlineAt` (computed server-side at start from
+/// exam.durationMinutes + any candidate.extraTimeMinutes) is the ONLY
+/// authority for time remaining and auto-submit (brief section 13) — the
+/// client-side timer is display only and is never trusted for grading or
+/// submission cutoff.
+model CBTAttempt {
+  id          String           @id @default(cuid())
+  schoolId    String
+  school      School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  examId      String
+  exam        CBTExam          @relation(fields: [examId], references: [id], onDelete: Cascade)
+  candidateId String
+  candidate   CBTExamCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  attemptNumber Int              @default(1)
+  status        CBTAttemptStatus @default(IN_PROGRESS)
+  isPractice    Boolean          @default(false)
+
+  /// Marks this as the one attempt (of possibly several) whose score was
+  /// written to the gradebook — see the module-level note above on why
+  /// there is no separate CBTResult model.
+  isOfficialResult Boolean @default(false)
+
+  startedAt   DateTime  @default(now())
+  deadlineAt  DateTime
+  submittedAt DateTime?
+
+  score      Float?
+  percentage Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  questions      CBTAttemptQuestion[]
+  answers        CBTAnswer[]
+  securityEvents CBTSecurityEvent[]
+
+  @@index([schoolId])
+  @@index([examId, studentId])
+  @@index([candidateId])
+  @@index([schoolId, status])
+}
+
+/// The exact, ordered set of questions THIS attempt saw — snapshotted at
+/// attempt-start (whether MANUAL or BLUEPRINT-selected) so a later change
+/// to the exam's question list, or a re-shuffle, never affects an attempt
+/// already in progress or already graded.
+model CBTAttemptQuestion {
+  id         String      @id @default(cuid())
+  attemptId  String
+  attempt    CBTAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId String
+  question   CBTQuestion @relation(fields: [questionId], references: [id])
+
+  order Int @default(0)
+  marks Int
+
+  /// Snapshotted shuffled option id order, when the exam has
+  /// randomizeOptionOrder on. Null (options render in their natural
+  /// order) otherwise.
+  optionOrder Json?
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+}
+
+enum CBTAnswerGradingStatus {
+  PENDING
+  AUTO_GRADED
+  MANUALLY_GRADED
+  NEEDS_MANUAL_GRADING
+}
+
+/// One row per (attempt, question) — created/updated by the auto-save
+/// path (brief section 14) as the student answers, so it doubles as both
+/// "the current answer" and "the saved answer": there's nothing else to
+/// flush at final submission besides flipping the attempt's own status.
+model CBTAnswer {
+  id         String      @id @default(cuid())
+  attemptId  String
+  attempt    CBTAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId String
+  question   CBTQuestion @relation(fields: [questionId], references: [id])
+
+  /// Shape depends on the question's type: a selected option id (single-
+  /// choice/true-false), an array of option ids (multi-select/ordering),
+  /// free text (short-answer/fill-blank/essay), or match pairs.
+  response Json?
+
+  isCorrect     Boolean?
+  marksAwarded  Float?
+  gradingStatus CBTAnswerGradingStatus @default(PENDING)
+
+  manualGrade CBTManualGrade?
+
+  answeredAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+}
+
+/// The human decision for one ESSAY/SHORT_ANSWER-needs-review answer
+/// (brief section 31). aiSuggested* is advisory only, shown alongside the
+/// student's answer — the teacher's marksAwarded/feedback here is what
+/// actually counts; nothing writes AI's suggestion in as the final grade.
+model CBTManualGrade {
+  id       String    @id @default(cuid())
+  answerId String    @unique
+  answer   CBTAnswer @relation(fields: [answerId], references: [id], onDelete: Cascade)
+
+  marksAwarded        Float
+  feedback            String?
+  aiSuggestedMarks    Float?
+  aiSuggestedFeedback String?
+
+  gradedById String
+  gradedBy   User     @relation("CBTManualGradedBy", fields: [gradedById], references: [id])
+  gradedAt   DateTime @default(now())
+
+  @@index([answerId])
+}
+
+/// Logged, never auto-accusatory (brief section 21) — an authorized
+/// exam administrator reviews these; nothing in this app flags a student
+/// as cheating on its own.
+enum CBTSecurityEventType {
+  TAB_SWITCH
+  WINDOW_BLUR
+  FULLSCREEN_EXIT
+  COPY_ATTEMPT
+  PASTE_ATTEMPT
+  RIGHT_CLICK_ATTEMPT
+  CONNECTION_LOST
+  CONNECTION_RESTORED
+  SUSPICIOUS_NAVIGATION
+}
+
+model CBTSecurityEvent {
+  id        String     @id @default(cuid())
+  attemptId String
+  attempt   CBTAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  type       CBTSecurityEventType
+  metadata   Json?
+  occurredAt DateTime             @default(now())
+
+  @@index([attemptId])
 }
