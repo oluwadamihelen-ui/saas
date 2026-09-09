@@ -15,6 +15,7 @@ import {
   listApprovedQuestionsForSubject,
   type ExamInput,
 } from "@/lib/services/cbt-exams";
+import { releaseExamResults } from "@/lib/services/cbt-results";
 import { logAudit } from "@/lib/audit";
 
 const blueprintRuleSchema = z.object({
@@ -164,4 +165,17 @@ export async function createExamTypeAction(label: string): Promise<{ id: string;
 export async function fetchSubjectQuestionsAction(subjectId: string) {
   const user = await requirePermission(PERMISSIONS.CBT_CREATE);
   return listApprovedQuestionsForSubject(user.schoolId, subjectId);
+}
+
+export async function releaseExamResultsAction(examId: string): Promise<ExamActionResult> {
+  const user = await requirePermission(PERMISSIONS.CBT_PUBLISH);
+  try {
+    await releaseExamResults(user.schoolId, examId);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Could not release results." };
+  }
+  await logAudit({ schoolId: user.schoolId, userId: user.id, action: "cbt_exam.results_released", resourceType: "CBTExam", resourceId: examId });
+  revalidatePath(`/dashboard/cbt/exams/${examId}`);
+  revalidatePath(`/dashboard/cbt/exams/${examId}/results`);
+  return { status: "ok", examId };
 }

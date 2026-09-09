@@ -2294,6 +2294,10 @@ model CBTExam {
   showCorrectAnswers Boolean             @default(false)
   showExplanations   Boolean             @default(false)
   showRanking        Boolean             @default(false)
+  /// Only meaningful when resultVisibility is MANUAL_RELEASE — null until
+  /// a teacher explicitly releases results (see cbt-results.ts), even if
+  /// every attempt is already GRADED.
+  resultsReleasedAt DateTime?
 
   createdById   String
   createdBy     User      @relation("CBTExamCreatedBy", fields: [createdById], references: [id])

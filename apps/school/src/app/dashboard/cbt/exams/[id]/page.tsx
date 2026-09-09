@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
@@ -5,6 +6,7 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { getExam } from "@/lib/services/cbt-exams";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { formatDate } from "@/lib/utils";
 import { ExamLifecycleActions } from "../exam-lifecycle-actions";
@@ -42,12 +44,19 @@ export default async function ExamDetailPage({ params }: { params: Promise<{ id:
             {exam.isPractice && " · Practice exam"}
           </p>
         </div>
-        <ExamLifecycleActions
-          examId={exam.id}
-          status={exam.status}
-          canPublish={perms.has(PERMISSIONS.CBT_PUBLISH)}
-          canEdit={perms.has(PERMISSIONS.CBT_EDIT)}
-        />
+        <div className="flex flex-col items-end gap-2">
+          {perms.has(PERMISSIONS.CBT_VIEW_RESULTS) && (
+            <Button asChild size="sm" variant="secondary">
+              <Link href={`/dashboard/cbt/exams/${exam.id}/results`}>Results</Link>
+            </Button>
+          )}
+          <ExamLifecycleActions
+            examId={exam.id}
+            status={exam.status}
+            canPublish={perms.has(PERMISSIONS.CBT_PUBLISH)}
+            canEdit={perms.has(PERMISSIONS.CBT_EDIT)}
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
