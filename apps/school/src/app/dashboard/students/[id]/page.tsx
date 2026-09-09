@@ -52,6 +52,7 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
   const canDelete = perms.has(PERMISSIONS.STUDENTS_DELETE);
   const canManageGuardians = perms.has(PERMISSIONS.GUARDIANS_MANAGE);
   const canManagePortalAccess = canEdit || canManageGuardians;
+  const canViewTranscript = perms.has(PERMISSIONS.TRANSCRIPTS_VIEW);
 
   const studentInvites = canEdit ? await listPortalInvitesForStudent(user.schoolId, student.id) : [];
   const guardianInvites = canManageGuardians
@@ -97,6 +98,7 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
           <TabsTrigger value="guardians">Guardians</TabsTrigger>
           {attendance && <TabsTrigger value="attendance">Attendance</TabsTrigger>}
           {currentReportCard && <TabsTrigger value="results">Results</TabsTrigger>}
+          {canViewTranscript && <TabsTrigger value="transcript">Academic Transcript</TabsTrigger>}
           {invoices && <TabsTrigger value="finance">Finance</TabsTrigger>}
           <TabsTrigger value="health">Health</TabsTrigger>
           {canManagePortalAccess && <TabsTrigger value="portal">Portal access</TabsTrigger>}
@@ -205,6 +207,22 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
                     ))}
                   </ul>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {canViewTranscript && (
+          <TabsContent value="transcript">
+            <Card>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted">
+                  View this student&apos;s complete academic history across every session they&apos;ve attended, generate an
+                  official transcript, and download or print it as a PDF.
+                </p>
+                <Button asChild variant="secondary" size="sm">
+                  <Link href={`/dashboard/students/${student.id}/transcript`}>View Academic Transcript</Link>
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>

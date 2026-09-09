@@ -74,6 +74,8 @@ export const PERMISSIONS = {
   CBT_EXPORT: "cbt.export",
   CBT_MANAGE_QUESTION_BANK: "cbt.manage_question_bank",
   CBT_GENERATE_AI_QUESTIONS: "cbt.generate_ai_questions",
+  TRANSCRIPTS_VIEW: "transcripts.view",
+  TRANSCRIPTS_MANAGE: "transcripts.manage",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -144,6 +146,8 @@ export const PERMISSION_CATALOG: { key: PermissionKey; module: string; descripti
   { key: PERMISSIONS.CBT_EXPORT, module: "cbt", description: "Export CBT results and analytics as PDF/CSV/Excel" },
   { key: PERMISSIONS.CBT_MANAGE_QUESTION_BANK, module: "cbt", description: "Create, edit, tag and archive question bank entries" },
   { key: PERMISSIONS.CBT_GENERATE_AI_QUESTIONS, module: "cbt", description: "Generate draft CBT questions with the AI assistant" },
+  { key: PERMISSIONS.TRANSCRIPTS_VIEW, module: "transcripts", description: "View, generate, download and print student academic transcripts" },
+  { key: PERMISSIONS.TRANSCRIPTS_MANAGE, module: "transcripts", description: "Revoke an issued transcript" },
 ];
 
 /// System roles seeded into every new school (brief section 3's role list).
@@ -237,6 +241,8 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.CBT_START,
     PERMISSIONS.CBT_VIEW_RESULTS,
     PERMISSIONS.CBT_EXPORT,
+    PERMISSIONS.TRANSCRIPTS_VIEW,
+    PERMISSIONS.TRANSCRIPTS_MANAGE,
   ],
   TEACHER: [
     PERMISSIONS.DASHBOARD_VIEW,

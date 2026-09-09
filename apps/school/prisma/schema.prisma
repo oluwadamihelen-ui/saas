@@ -104,6 +104,7 @@ model School {
   assessmentComponents AssessmentComponent[]
   scores               Score[]
   reportCards          ReportCard[]
+  transcripts          Transcript[]
   feeCategories        FeeCategory[]
   feeStructures        FeeStructure[]
   invoices             Invoice[]
@@ -209,6 +210,8 @@ model User {
   submissionsGraded     AssignmentSubmission[] @relation("SubmissionGradedBy")
   scoresEntered         Score[]                @relation("ScoreEnteredBy")
   reportCardsApproved   ReportCard[]           @relation("ReportCardApprovedBy")
+  transcriptsGenerated  Transcript[]           @relation("TranscriptGeneratedBy")
+  transcriptsRevoked    Transcript[]           @relation("TranscriptRevokedBy")
   paymentsRecorded      Payment[]              @relation("PaymentRecordedBy")
   expensesCreated       Expense[]              @relation("ExpenseCreatedBy")
   expensesApproved      Expense[]              @relation("ExpenseApprovedBy")
@@ -524,6 +527,7 @@ model Student {
   submissions       AssignmentSubmission[]
   scores            Score[]
   reportCards       ReportCard[]
+  transcripts       Transcript[]
   invoices          Invoice[]
   portalInvites     PortalInvite[]
   conversations     Conversation[]
@@ -845,6 +849,51 @@ model ReportCard {
 
   @@unique([studentId, termId])
   @@index([schoolId])
+}
+
+enum TranscriptStatus {
+  ACTIVE
+  REVOKED
+}
+
+/// An issued, official academic transcript snapshot event for a student.
+/// Deliberately holds no academic data itself (no scores/grades duplicated
+/// here) — the transcript's content is always recomputed live from Score/
+/// ReportCard/AttendanceRecord at view/download time via
+/// getStudentAcademicHistory, exactly like ReportCard's totals above. This
+/// row exists only to give each issued transcript a permanent, auditable
+/// identity: a unique reference number a third party can verify, and a
+/// status that can move to REVOKED without ever deleting the record.
+model Transcript {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  /// Public-facing identifier, e.g. "WIN-TR-2026-000123" — what a viewer
+  /// types into /verify-transcript and what the QR code encodes.
+  referenceNumber String @unique
+
+  /// A second, non-guessable token stored alongside the reference number
+  /// for internal record-keeping/tamper-evidence. Not required to look a
+  /// transcript up on the public verification page.
+  verificationCode String
+
+  status TranscriptStatus @default(ACTIVE)
+
+  generatedById String
+  generatedBy   User     @relation("TranscriptGeneratedBy", fields: [generatedById], references: [id])
+  generatedAt   DateTime @default(now())
+
+  revokedById String?
+  revokedBy   User?     @relation("TranscriptRevokedBy", fields: [revokedById], references: [id])
+  revokedAt   DateTime?
+  revokedReason String?
+
+  @@index([schoolId])
+  @@index([schoolId, studentId])
 }
 
 // ---------------------------------------------------------------------------

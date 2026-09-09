@@ -39,7 +39,7 @@ export async function deleteAssessmentComponent(schoolId: string, id: string) {
   await prisma.assessmentComponent.delete({ where: { id } });
 }
 
-function gradeFor(bands: { grade: string; minScore: number; maxScore: number; remark: string }[], total: number) {
+export function gradeFor(bands: { grade: string; minScore: number; maxScore: number; remark: string }[], total: number) {
   return bands.find((b) => total >= b.minScore && total <= b.maxScore) ?? null;
 }
 

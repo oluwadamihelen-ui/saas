@@ -20,6 +20,7 @@ export default async function ResultsPage({
   const perms = await getUserPermissions(user.id);
   const canManageGrading = perms.has(PERMISSIONS.GRADING_MANAGE);
   const canEnter = perms.has(PERMISSIONS.RESULTS_ENTER);
+  const canViewTranscripts = perms.has(PERMISSIONS.TRANSCRIPTS_VIEW);
 
   const params = await searchParams;
   const [classArms, subjects, currentTerm] = await Promise.all([
@@ -48,6 +49,11 @@ export default async function ResultsPage({
           <Button asChild variant="secondary">
             <Link href="/dashboard/results/report-cards">Report cards</Link>
           </Button>
+          {canViewTranscripts && (
+            <Button asChild variant="secondary">
+              <Link href="/dashboard/results/transcripts">Transcripts</Link>
+            </Button>
+          )}
           {canManageGrading && (
             <Button asChild variant="secondary">
               <Link href="/dashboard/results/grading">Grading setup</Link>

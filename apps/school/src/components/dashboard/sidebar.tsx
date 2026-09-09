@@ -29,6 +29,7 @@ import {
   Archive,
   MonitorCheck,
   ListChecks,
+  ScrollText,
 } from "lucide-react";
 import { SchoolLogo } from "@/components/brand/school-logo";
 import { PERMISSIONS, type PermissionKey } from "@/lib/permissions";
@@ -88,7 +89,14 @@ const NAV: DashboardNavItem[] = [
   { href: "/dashboard/attendance", label: "Attendance", icon: ClipboardCheck, requiredPermission: PERMISSIONS.ATTENDANCE_VIEW },
   { href: "/dashboard/timetable", label: "Timetable", icon: CalendarDays, requiredPermission: PERMISSIONS.TIMETABLE_VIEW },
   { href: "/dashboard/assignments", label: "Assignments", icon: FileText, requiredPermission: PERMISSIONS.ASSIGNMENTS_VIEW },
-  { href: "/dashboard/results", label: "Results", icon: Award, requiredPermission: PERMISSIONS.RESULTS_VIEW },
+  {
+    label: "Results",
+    icon: Award,
+    children: [
+      { href: "/dashboard/results", label: "Results", icon: Award, requiredPermission: PERMISSIONS.RESULTS_VIEW },
+      { href: "/dashboard/results/transcripts", label: "Transcripts", icon: ScrollText, requiredPermission: PERMISSIONS.TRANSCRIPTS_VIEW },
+    ],
+  },
   {
     label: "Exams (CBT)",
     icon: MonitorCheck,
