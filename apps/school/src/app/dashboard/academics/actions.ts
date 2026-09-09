@@ -2,9 +2,10 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, requireAnyPermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { createTeacherAssignment, deleteTeacherAssignment } from "@/lib/services/teacher-assignments";
+import { createSubject } from "@/lib/services/academics";
 import { logAudit } from "@/lib/audit";
 
 const schema = z.object({
@@ -61,4 +62,43 @@ export async function deleteTeacherAssignmentAction(id: string) {
     resourceId: id,
   });
   revalidatePath("/dashboard/academics");
+}
+
+const subjectSchema = z.object({
+  name: z.string().trim().min(1, "Subject name is required").max(100),
+  code: z.string().trim().min(1, "Subject code is required").max(20),
+});
+
+export interface SubjectFormState {
+  status: "idle" | "error" | "success";
+  message?: string;
+}
+
+export async function createSubjectAction(_prev: SubjectFormState, formData: FormData): Promise<SubjectFormState> {
+  const user = await requireAnyPermission([PERMISSIONS.ACADEMICS_MANAGE, PERMISSIONS.SUBJECTS_CREATE]);
+
+  const parsed = subjectSchema.safeParse({ name: formData.get("name"), code: formData.get("code") });
+  if (!parsed.success) {
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check the subject details." };
+  }
+
+  let subject;
+  try {
+    subject = await createSubject(user.schoolId, parsed.data);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Could not create this subject." };
+  }
+
+  await logAudit({
+    schoolId: user.schoolId,
+    userId: user.id,
+    action: "subject.created",
+    resourceType: "Subject",
+    resourceId: subject.id,
+    newValue: { name: subject.name, code: subject.code },
+  });
+
+  revalidatePath("/dashboard/academics");
+  revalidatePath("/dashboard/online-learning/subjects");
+  return { status: "success", message: `"${subject.name}" added.` };
 }

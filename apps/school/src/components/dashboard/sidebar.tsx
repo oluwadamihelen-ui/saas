@@ -46,6 +46,11 @@ import { NavTree, type NavItem } from "@/components/ui/nav-tree";
 
 interface DashboardNavItem extends NavItem {
   requiredPermission?: PermissionKey;
+  /// Visible if the user holds ANY of these — for an item reachable by more
+  /// than one permission (e.g. a page both full academics admins and
+  /// subject-only teachers can open). Checked in addition to
+  /// requiredPermission, not instead of it — an item can use either or both.
+  requiredAnyPermission?: PermissionKey[];
   children?: DashboardNavItem[];
 }
 
@@ -97,7 +102,7 @@ const NAV: DashboardNavItem[] = [
     label: "Academics",
     icon: BookOpen,
     children: [
-      { href: "/dashboard/academics", label: "Academics", icon: BookOpen, requiredPermission: PERMISSIONS.ACADEMICS_MANAGE },
+      { href: "/dashboard/academics", label: "Academics", icon: BookOpen, requiredAnyPermission: [PERMISSIONS.ACADEMICS_MANAGE, PERMISSIONS.SUBJECTS_CREATE] },
       { href: "/dashboard/attendance", label: "Attendance", icon: ClipboardCheck, requiredPermission: PERMISSIONS.ATTENDANCE_VIEW },
       { href: "/dashboard/timetable", label: "Timetable", icon: CalendarDays, requiredPermission: PERMISSIONS.TIMETABLE_VIEW },
       { href: "/dashboard/assignments", label: "Assignments", icon: FileText, requiredPermission: PERMISSIONS.ASSIGNMENTS_VIEW },
@@ -179,6 +184,7 @@ const NAV: DashboardNavItem[] = [
 function filterNav(items: DashboardNavItem[], permSet: Set<string>): DashboardNavItem[] {
   return items.reduce<DashboardNavItem[]>((acc, item) => {
     if (item.requiredPermission && !permSet.has(item.requiredPermission)) return acc;
+    if (item.requiredAnyPermission && !item.requiredAnyPermission.some((p) => permSet.has(p))) return acc;
 
     if (item.children) {
       const children = filterNav(item.children, permSet);

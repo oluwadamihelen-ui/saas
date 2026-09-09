@@ -29,6 +29,21 @@ export async function requirePermission(permission: PermissionKey) {
   return user;
 }
 
+/// For a page/action reachable by more than one permission (e.g. a page
+/// that shows a full admin view to ACADEMICS_MANAGE holders and a smaller
+/// self-service view to SUBJECTS_CREATE holders) — passes as soon as the
+/// user holds any one of the listed permissions. Returns the resolved
+/// permission set alongside the user so the caller can branch on exactly
+/// which one(s) they actually have, without a second DB round trip.
+export async function requireAnyPermission(permissions: PermissionKey[]) {
+  const user = await requireSchoolUser();
+  const perms = await getUserPermissions(user.id);
+  if (!permissions.some((p) => perms.has(p))) {
+    throw new ForbiddenError(`Missing permission: one of ${permissions.join(", ")}`);
+  }
+  return { ...user, perms };
+}
+
 /// The platform Super Admin is a single global user (User.schoolId null,
 /// Role.schoolId null) — not a tenant role, so it's checked directly
 /// against the session's role key rather than going through the

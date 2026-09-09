@@ -282,10 +282,14 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
                       <Badge variant="success">Portal account active</Badge>
                     ) : (
                       <>
-                        <PortalInviteForm action={inviteStudentPortalAction.bind(null, student.id)} />
+                        <PortalInviteForm action={inviteStudentPortalAction.bind(null, student.id)} allowAdmissionNumberLogin />
                         {studentInvites.filter((i) => i.status === "PENDING").map((invite) => (
                           <div key={invite.id} className="flex items-center justify-between rounded-md border border-border p-3 text-sm">
-                            <span className="text-muted">{invite.email}</span>
+                            <span className="text-muted">
+                              {invite.email.endsWith("@portal.internal")
+                                ? `Logs in with admission number ${student.admissionNumber}`
+                                : invite.email}
+                            </span>
                             <code className="text-xs text-muted">/portal-invite/{invite.token}</code>
                           </div>
                         ))}

@@ -10,6 +10,18 @@ async function assertEmailIsFree(email: string) {
   if (existingUser) throw new Error(`${email} already has an account.`);
 }
 
+/// User.email is still the DB column NextAuth's credentials authorize()
+/// ultimately loads the account by — it must stay globally unique and
+/// non-null (schema) — but for a student who logs in with their admission
+/// number instead (see auth.ts's authorize(), which resolves
+/// admissionNumber+schoolSlug to a user before ever touching this column),
+/// nobody ever needs to type or remember this value, so it's just an opaque
+/// internal placeholder rather than anything derived from the student's own
+/// admission number.
+function generatePlaceholderLogin(): string {
+  return `student-${crypto.randomBytes(12).toString("hex")}@portal.internal`;
+}
+
 export async function listPortalInvitesForGuardian(schoolId: string, guardianId: string) {
   return prisma.portalInvite.findMany({
     where: { schoolId, guardianId },
@@ -60,13 +72,22 @@ export async function inviteGuardianToPortal(
   });
 }
 
+/// email is optional here (unlike inviteGuardianToPortal, where a guardian
+/// is always an adult) — a young student with no email address of their
+/// own can be invited with it omitted, and will log in with their
+/// admission number + school instead of an email once the invite is
+/// accepted (see the "Student login" tab on the login page, and
+/// authorize() in src/auth.ts). Either way the underlying account still
+/// gets a real User.email value — the schema requires one, and it's what
+/// PortalInvite itself is keyed on — it's simply never shown to the
+/// student as their credential when it's a generated placeholder.
 export async function inviteStudentToPortal(
   schoolId: string,
   invitedById: string,
   studentId: string,
-  email: string,
+  email?: string,
 ) {
-  const normalizedEmail = email.toLowerCase().trim();
+  const normalizedEmail = email ? email.toLowerCase().trim() : generatePlaceholderLogin();
 
   const student = await prisma.student.findFirst({ where: { id: studentId, schoolId } });
   if (!student) throw new Error("Student not found.");

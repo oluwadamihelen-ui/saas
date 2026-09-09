@@ -294,13 +294,23 @@ export async function inviteStudentPortalAction(
 ): Promise<PortalInviteState> {
   const user = await requirePermission(PERMISSIONS.STUDENTS_EDIT);
 
-  const parsed = portalInviteEmailSchema.safeParse({ email: formData.get("email") });
-  if (!parsed.success) {
-    return { status: "error", message: parsed.error.issues[0]?.message ?? "Enter a valid email." };
+  // A student too young to have their own email logs in with their
+  // admission number instead (see the "Student login" tab on /login) — the
+  // teacher/admin ticks this box instead of typing a made-up address, and
+  // the email field's own validation is skipped entirely.
+  const useAdmissionNumber = formData.get("useAdmissionNumber") === "on";
+
+  let email: string | undefined;
+  if (!useAdmissionNumber) {
+    const parsed = portalInviteEmailSchema.safeParse({ email: formData.get("email") });
+    if (!parsed.success) {
+      return { status: "error", message: parsed.error.issues[0]?.message ?? "Enter a valid email." };
+    }
+    email = parsed.data.email;
   }
 
   try {
-    await inviteStudentToPortal(user.schoolId, user.id, studentId, parsed.data.email);
+    await inviteStudentToPortal(user.schoolId, user.id, studentId, email);
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not send invite." };
   }

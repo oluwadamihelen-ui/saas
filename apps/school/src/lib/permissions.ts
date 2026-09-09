@@ -20,6 +20,7 @@ export const PERMISSIONS = {
   STAFF_MANAGE: "staff.manage",
   ROLES_MANAGE: "roles.manage",
   ACADEMICS_MANAGE: "academics.manage",
+  SUBJECTS_CREATE: "subjects.create",
   SCHOOL_SETTINGS_MANAGE: "school_settings.manage",
   AUDIT_VIEW: "audit.view",
   ATTENDANCE_VIEW: "attendance.view",
@@ -98,6 +99,7 @@ export const PERMISSION_CATALOG: { key: PermissionKey; module: string; descripti
   { key: PERMISSIONS.STAFF_MANAGE, module: "staff", description: "Edit or deactivate staff accounts" },
   { key: PERMISSIONS.ROLES_MANAGE, module: "staff", description: "Change role permission assignments" },
   { key: PERMISSIONS.ACADEMICS_MANAGE, module: "academics", description: "Manage sessions, terms, classes, subjects and teacher assignments" },
+  { key: PERMISSIONS.SUBJECTS_CREATE, module: "academics", description: "Add new subjects to the school's subject catalog" },
   { key: PERMISSIONS.SCHOOL_SETTINGS_MANAGE, module: "school", description: "Edit school profile and branding" },
   { key: PERMISSIONS.AUDIT_VIEW, module: "administration", description: "View the audit log" },
   { key: PERMISSIONS.ATTENDANCE_VIEW, module: "attendance", description: "View attendance records" },
@@ -285,6 +287,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.LIVE_CLASSES_VIEW,
     PERMISSIONS.LIVE_CLASSES_MANAGE,
     PERMISSIONS.LIVE_CLASSES_START,
+    PERMISSIONS.SUBJECTS_CREATE,
   ],
   ACCOUNTANT: [
     PERMISSIONS.DASHBOARD_VIEW,

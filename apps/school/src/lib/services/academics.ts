@@ -127,3 +127,30 @@ export async function getCurrentTerm(schoolId: string) {
 export async function listSubjects(schoolId: string) {
   return prisma.subject.findMany({ where: { schoolId }, orderBy: { name: "asc" } });
 }
+
+/// Reachable by anyone holding ACADEMICS_MANAGE (school admin/owner/
+/// principal) or the narrower SUBJECTS_CREATE (teachers, by default) — see
+/// requireAnyPermission in src/lib/auth/require.ts. Deliberately just a
+/// name+code insert with a friendly duplicate check; unlike
+/// setupAcademicStructure this never touches sessions/terms/classes, so a
+/// teacher granted only SUBJECTS_CREATE can never restructure the school's
+/// academic calendar or class list, only add to the subject catalog.
+export async function createSubject(schoolId: string, input: { name: string; code: string }) {
+  const name = input.name.trim();
+  const code = input.code.trim().toUpperCase();
+  if (!name) throw new Error("Subject name is required.");
+  if (!code) throw new Error("Subject code is required.");
+
+  const existing = await prisma.subject.findFirst({
+    where: { schoolId, OR: [{ code }, { name: { equals: name, mode: "insensitive" } }] },
+  });
+  if (existing) {
+    throw new Error(
+      existing.code === code
+        ? `A subject with code "${code}" already exists.`
+        : `A subject named "${name}" already exists.`
+    );
+  }
+
+  return prisma.subject.create({ data: { schoolId, name, code } });
+}
