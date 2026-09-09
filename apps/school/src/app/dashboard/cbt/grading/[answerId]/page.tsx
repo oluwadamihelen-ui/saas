@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getAnswerForGrading } from "@/lib/services/cbt-grading";
+import { isCbtAiConfigured } from "@/lib/services/cbt-ai";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { GradeForm } from "./grade-form";
 
@@ -53,6 +54,7 @@ export default async function GradeAnswerPage({ params }: { params: Promise<{ an
             maxMarks={answer.question.marks}
             initialMarks={answer.manualGrade?.marksAwarded ?? undefined}
             initialFeedback={answer.manualGrade?.feedback ?? ""}
+            aiConfigured={isCbtAiConfigured()}
           />
         </CardContent>
       </Card>

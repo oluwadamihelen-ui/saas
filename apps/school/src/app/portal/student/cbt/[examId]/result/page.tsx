@@ -3,8 +3,10 @@ import { requireSchoolUser } from "@/lib/auth/require";
 import { getStudentForUser } from "@/lib/services/portal";
 import { getExamForCandidate } from "@/lib/services/cbt-attempts";
 import { getExamResultForStudent } from "@/lib/services/cbt-results";
+import { isCbtAiConfigured } from "@/lib/services/cbt-ai";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { RevisionPlan } from "./revision-plan";
 
 export default async function StudentExamResultPage({ params }: { params: Promise<{ examId: string }> }) {
   const user = await requireSchoolUser();
@@ -77,6 +79,8 @@ export default async function StudentExamResultPage({ params }: { params: Promis
               ))}
             </CardContent>
           </Card>
+
+          <RevisionPlan examId={examId} aiConfigured={isCbtAiConfigured()} />
         </>
       )}
     </div>

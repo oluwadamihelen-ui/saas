@@ -11,11 +11,13 @@ import {
   archiveQuestion,
   restoreQuestion,
   deleteQuestion,
+  approveQuestion,
   parseImportCsv,
   commitImportRows,
   type QuestionInput,
   type QuestionOptionInput,
 } from "@/lib/services/cbt-questions";
+import { generateQuestionsWithAI, GENERATABLE_TYPES, type GenerateQuestionsInput } from "@/lib/services/cbt-ai";
 import { logAudit } from "@/lib/audit";
 import type { CBTQuestionType, CBTDifficulty } from "@/generated/prisma/client";
 
@@ -274,4 +276,62 @@ export async function confirmImportAction(
 
   revalidatePath("/dashboard/cbt/question-bank");
   return { status: "done", created };
+}
+
+export async function approveQuestionAction(questionId: string) {
+  const user = await requirePermission(PERMISSIONS.CBT_MANAGE_QUESTION_BANK);
+  await approveQuestion(user.schoolId, user.id, questionId);
+  await logAudit({ schoolId: user.schoolId, userId: user.id, action: "cbt_question.ai_approved", resourceType: "CBTQuestion", resourceId: questionId });
+  revalidatePath("/dashboard/cbt/question-bank");
+}
+
+const generateSchema = z.object({
+  subjectId: z.string().trim().min(1, "Choose a subject"),
+  type: z.enum(GENERATABLE_TYPES),
+  topic: z.string().trim().min(1, "Describe the topic"),
+  difficulty: z.enum(["EASY", "MEDIUM", "HARD"]),
+  count: z.coerce.number().int().min(1).max(10),
+});
+
+export interface GenerateQuestionsState {
+  status: "idle" | "error" | "done";
+  message?: string;
+  created?: number;
+  skipped?: { prompt: string; reason: string }[];
+}
+
+export async function generateQuestionsAction(
+  _prev: GenerateQuestionsState,
+  formData: FormData
+): Promise<GenerateQuestionsState> {
+  const user = await requirePermission(PERMISSIONS.CBT_GENERATE_AI_QUESTIONS);
+
+  const parsed = generateSchema.safeParse({
+    subjectId: formData.get("subjectId"),
+    type: formData.get("type"),
+    topic: formData.get("topic"),
+    difficulty: formData.get("difficulty"),
+    count: formData.get("count"),
+  });
+  if (!parsed.success) {
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check the details." };
+  }
+
+  let result;
+  try {
+    result = await generateQuestionsWithAI(user.schoolId, user.id, parsed.data as GenerateQuestionsInput);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Could not generate questions." };
+  }
+
+  await logAudit({
+    schoolId: user.schoolId,
+    userId: user.id,
+    action: "cbt_question.ai_generated",
+    resourceType: "CBTQuestion",
+    newValue: { count: result.created, subjectId: parsed.data.subjectId, topic: parsed.data.topic },
+  });
+
+  revalidatePath("/dashboard/cbt/question-bank");
+  return { status: "done", created: result.created, skipped: result.skipped };
 }

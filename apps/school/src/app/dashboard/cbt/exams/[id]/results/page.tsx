@@ -3,10 +3,12 @@ import { requirePermission } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getExamAnalytics } from "@/lib/services/cbt-results";
+import { isCbtAiConfigured } from "@/lib/services/cbt-ai";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { ReleaseResultsButton } from "./release-results-button";
+import { ExamInsights } from "./exam-insights";
 import type { CBTAttemptStatus } from "@/generated/prisma/client";
 
 const STATUS_VARIANT: Record<CBTAttemptStatus, "neutral" | "accent" | "success" | "warning"> = {
@@ -67,6 +69,8 @@ export default async function ExamResultsPage({ params }: { params: Promise<{ id
           </CardContent>
         </Card>
       </div>
+
+      <ExamInsights examId={id} aiConfigured={isCbtAiConfigured()} />
 
       <Card>
         <CardHeader>

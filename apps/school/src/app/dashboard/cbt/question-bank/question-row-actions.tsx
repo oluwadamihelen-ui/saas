@@ -3,7 +3,7 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { archiveQuestionAction, restoreQuestionAction, deleteQuestionAction } from "./actions";
+import { archiveQuestionAction, restoreQuestionAction, deleteQuestionAction, approveQuestionAction } from "./actions";
 
 export function QuestionRowActions({ id, status }: { id: string; status: string }) {
   const [isPending, startTransition] = useTransition();
@@ -22,6 +22,37 @@ export function QuestionRowActions({ id, status }: { id: string; status: string 
       >
         Restore
       </Button>
+    );
+  }
+
+  if (status === "AI_PENDING_REVIEW") {
+    return (
+      <div className="flex items-center gap-1">
+        <Button
+          size="sm"
+          disabled={isPending}
+          onClick={() => startTransition(async () => {
+            await approveQuestionAction(id);
+            router.refresh();
+          })}
+        >
+          Approve
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={isPending}
+          onClick={() => {
+            if (!confirm("Reject and permanently delete this AI-generated question?")) return;
+            startTransition(async () => {
+              await deleteQuestionAction(id);
+              router.refresh();
+            });
+          }}
+        >
+          Reject
+        </Button>
+      </div>
     );
   }
 

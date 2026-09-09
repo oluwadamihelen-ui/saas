@@ -3,6 +3,7 @@
 import { requireSchoolUser } from "@/lib/auth/require";
 import { getStudentForUser } from "@/lib/services/portal";
 import { startAttempt, saveAnswer, submitAttempt } from "@/lib/services/cbt-attempts";
+import { generateRevisionPlan, type RevisionPlanResult } from "@/lib/services/cbt-ai";
 import { notifyCbtExamSubmitted } from "@/lib/services/notifications";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
@@ -65,5 +66,21 @@ export async function submitAttemptAction(attemptId: string): Promise<SubmitAtte
     return { status: "ok" };
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not submit the exam." };
+  }
+}
+
+export interface RevisionPlanActionResult {
+  status: "ok" | "error";
+  message?: string;
+  plan?: RevisionPlanResult;
+}
+
+export async function generateRevisionPlanAction(examId: string): Promise<RevisionPlanActionResult> {
+  const { user, student } = await currentStudent();
+  try {
+    const plan = await generateRevisionPlan(user.schoolId, student.id, examId);
+    return { status: "ok", plan };
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Could not generate a revision plan." };
   }
 }

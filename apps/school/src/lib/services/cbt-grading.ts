@@ -285,7 +285,18 @@ export async function getAnswerForGrading(schoolId: string, answerId: string) {
 
 /// The human decision is always what's written — aiSuggested* (Phase 7)
 /// is advisory only and never substituted in here, per spec section 31.
-export async function gradeAnswer(schoolId: string, gradedById: string, answerId: string, marksAwarded: number, feedback: string | null) {
+/// aiSuggested* is purely a record of what Phase 7's suggestGrade()
+/// showed the grader before they decided — stored alongside, never
+/// instead of, the human's own marksAwarded/feedback below.
+export async function gradeAnswer(
+  schoolId: string,
+  gradedById: string,
+  answerId: string,
+  marksAwarded: number,
+  feedback: string | null,
+  aiSuggestedMarks?: number | null,
+  aiSuggestedFeedback?: string | null
+) {
   const answer = await prisma.cBTAnswer.findFirst({
     where: { id: answerId, attempt: { schoolId } },
     include: { question: { select: { marks: true } }, attempt: true },
@@ -298,8 +309,8 @@ export async function gradeAnswer(schoolId: string, gradedById: string, answerId
   await prisma.$transaction(async (tx) => {
     await tx.cBTManualGrade.upsert({
       where: { answerId },
-      create: { answerId, marksAwarded, feedback, gradedById, gradedAt: new Date() },
-      update: { marksAwarded, feedback, gradedById, gradedAt: new Date() },
+      create: { answerId, marksAwarded, feedback, gradedById, gradedAt: new Date(), aiSuggestedMarks, aiSuggestedFeedback },
+      update: { marksAwarded, feedback, gradedById, gradedAt: new Date(), aiSuggestedMarks, aiSuggestedFeedback },
     });
     await tx.cBTAnswer.update({ where: { id: answerId }, data: { marksAwarded, gradingStatus: "MANUALLY_GRADED" } });
   });

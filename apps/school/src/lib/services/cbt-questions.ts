@@ -268,16 +268,28 @@ export async function restoreQuestion(schoolId: string, id: string) {
   return prisma.cBTQuestion.update({ where: { id }, data: { status: "APPROVED" } });
 }
 
-/// Hard delete is only ever offered for a DRAFT question — nothing else
-/// (an exam, an attempt, a manual grade) can reference one yet, since
-/// DRAFT questions were never eligible for exam selection. Anything past
-/// DRAFT goes through archiveQuestion instead, so a future exam link is
-/// never left dangling.
+/// The one and only path an AI_GENERATED question can reach APPROVED —
+/// a human reviewer explicitly signs off, recorded the same way a
+/// manually-authored question is self-approved at creation (spec
+/// sections 6-7: AI output is never silently usable).
+export async function approveQuestion(schoolId: string, approvedById: string, id: string) {
+  const existing = await prisma.cBTQuestion.findFirst({ where: { schoolId, id } });
+  if (!existing) throw new Error("Question not found.");
+  if (existing.status !== "AI_PENDING_REVIEW") throw new Error("Only AI-generated questions pending review can be approved here.");
+  return prisma.cBTQuestion.update({ where: { id }, data: { status: "APPROVED", approvedById, approvedAt: new Date() } });
+}
+
+/// Hard delete is only ever offered for a DRAFT or AI_PENDING_REVIEW
+/// question — nothing else (an exam, an attempt, a manual grade) can
+/// reference one yet, since neither status was ever eligible for exam
+/// selection (spec sections 6-7: AI output isn't usable until approved).
+/// Anything past those goes through archiveQuestion instead, so a future
+/// exam link is never left dangling.
 export async function deleteQuestion(schoolId: string, id: string) {
   const existing = await prisma.cBTQuestion.findFirst({ where: { schoolId, id } });
   if (!existing) throw new Error("Question not found.");
-  if (existing.status !== "DRAFT") {
-    throw new Error("Only draft questions can be permanently deleted. Archive it instead.");
+  if (existing.status !== "DRAFT" && existing.status !== "AI_PENDING_REVIEW") {
+    throw new Error("Only draft or AI-pending questions can be permanently deleted. Archive it instead.");
   }
   await prisma.cBTQuestion.delete({ where: { id } });
 }

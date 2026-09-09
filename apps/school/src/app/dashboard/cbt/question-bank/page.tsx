@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ListChecks } from "lucide-react";
+import { ListChecks, Sparkles } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -55,6 +55,7 @@ export default async function QuestionBankPage({
   const user = await requirePermission(PERMISSIONS.CBT_VIEW);
   const perms = await getUserPermissions(user.id);
   const canManage = perms.has(PERMISSIONS.CBT_MANAGE_QUESTION_BANK);
+  const canGenerateAi = perms.has(PERMISSIONS.CBT_GENERATE_AI_QUESTIONS);
   const params = await searchParams;
 
   const [{ questions, total, page, pageCount }, subjects, classGroups] = await Promise.all([
@@ -78,14 +79,23 @@ export default async function QuestionBankPage({
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Question bank</h1>
           <p className="text-sm text-muted">{total} question{total === 1 ? "" : "s"}</p>
         </div>
-        {canManage && (
+        {(canManage || canGenerateAi) && (
           <div className="flex gap-2">
-            <Button asChild variant="secondary">
-              <Link href="/dashboard/cbt/question-bank/import">Import CSV</Link>
-            </Button>
-            <Button asChild>
-              <Link href="/dashboard/cbt/question-bank/new">Add question</Link>
-            </Button>
+            {canGenerateAi && (
+              <Button asChild variant="secondary">
+                <Link href="/dashboard/cbt/question-bank/generate"><Sparkles className="h-4 w-4" /> Generate with AI</Link>
+              </Button>
+            )}
+            {canManage && (
+              <>
+                <Button asChild variant="secondary">
+                  <Link href="/dashboard/cbt/question-bank/import">Import CSV</Link>
+                </Button>
+                <Button asChild>
+                  <Link href="/dashboard/cbt/question-bank/new">Add question</Link>
+                </Button>
+              </>
+            )}
           </div>
         )}
       </div>
