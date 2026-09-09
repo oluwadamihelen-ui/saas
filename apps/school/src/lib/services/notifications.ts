@@ -298,3 +298,32 @@ export async function notifyCbtExamSubmitted(schoolId: string, studentId: string
   const recipients = await studentAndGuardianUserIds(schoolId, studentId);
   await notifyRecipients(schoolId, recipients, "CBT_EXAM_SUBMITTED", "Exam submitted", `"${examTitle}" has been submitted successfully.`);
 }
+
+/// Same "whoever holds the permission right now" pattern as
+/// billingManagerUserIds — cbt.grade is a role-assigned permission
+/// (PRINCIPAL/TEACHER by default, see permissions.ts), not a fixed owner
+/// per exam.
+async function cbtGradersUserIds(schoolId: string): Promise<string[]> {
+  const staff = await prisma.user.findMany({
+    where: { schoolId, role: { rolePermissions: { some: { permission: { key: "cbt.grade" } } } } },
+    select: { id: true },
+  });
+  return staff.map((s) => s.id);
+}
+
+export async function notifyCbtManualGradingRequired(schoolId: string, examId: string, examTitle: string) {
+  const recipients = await cbtGradersUserIds(schoolId);
+  await notifyRecipients(
+    schoolId,
+    recipients,
+    "CBT_MANUAL_GRADING_REQUIRED",
+    "Manual grading needed",
+    `"${examTitle}" has answers waiting to be graded.`,
+    `/dashboard/cbt/grading?examId=${examId}`
+  );
+}
+
+export async function notifyCbtResultAvailable(schoolId: string, studentId: string, examTitle: string) {
+  const recipients = await studentAndGuardianUserIds(schoolId, studentId);
+  await notifyRecipients(schoolId, recipients, "CBT_RESULT_AVAILABLE", "Result available", `Your result for "${examTitle}" is ready.`);
+}

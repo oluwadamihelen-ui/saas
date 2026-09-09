@@ -2521,7 +2521,7 @@ model CBTManualGrade {
   aiSuggestedFeedback String?
 
   gradedById String
-  gradedBy   User     @relation("CBTManualGradedBy", fields: [gradedById], references: [id])
+  gradedBy   User     @relation("CBTManualGradedBy", fields: [gradedById], references: [id], onDelete: Cascade)
   gradedAt   DateTime @default(now())
 
   @@index([answerId])

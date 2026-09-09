@@ -183,8 +183,11 @@ describe("CBT attempt submission — idempotent and server-clock enforced", () =
     const attempt = await startAttempt(f.school.id, f.student.id, f.exam.id);
     const first = await submitAttempt(f.school.id, f.student.id, attempt.id);
     const second = await submitAttempt(f.school.id, f.student.id, attempt.id);
-    expect(first.status).toBe("SUBMITTED");
-    expect(second.status).toBe("SUBMITTED");
+    // The fixture's questions are all auto-gradable (Phase 5), so
+    // submission immediately finalizes grading in the same call — GRADED
+    // is the resting state here, not the transient SUBMITTED.
+    expect(first.status).toBe("GRADED");
+    expect(second.status).toBe("GRADED");
     expect(second.submittedAt?.getTime()).toBe(first.submittedAt?.getTime());
   });
 
@@ -195,7 +198,9 @@ describe("CBT attempt submission — idempotent and server-clock enforced", () =
 
     await expect(saveAnswer(f.school.id, f.student.id, attempt.id, f.q1.id, "4")).rejects.toThrow(/time is up/i);
     const reconciled = await prisma.cBTAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
-    expect(reconciled.status).toBe("AUTO_SUBMITTED");
+    // Same as above: the lazy expiry reconcile auto-submits AND grades in
+    // one pass, so a fully auto-gradable attempt lands on GRADED.
+    expect(reconciled.status).toBe("GRADED");
   });
 
   it("saveAnswer persists a response that getAttemptForTaking later returns as savedResponse", async () => {

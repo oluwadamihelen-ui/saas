@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { gradeAttempt } from "@/lib/services/cbt-grading";
 import type { CBTAttemptStatus, CBTDifficulty, CBTExamStatus, CBTQuestionType, Prisma } from "@/generated/prisma/client";
 
 /// Fisher-Yates — used for randomizeQuestionOrder/randomizeOptionOrder and
@@ -206,6 +207,13 @@ async function buildAttemptQuestions(schoolId: string, exam: { id: string; subje
 /// this attempt right now" — auto-submits (lazily, on read, same pattern
 /// as exam status reconciliation) the moment `deadlineAt` has passed,
 /// server-side, regardless of what the client's own timer displayed.
+/// Grading runs synchronously the moment that transition actually
+/// happens (updated.count > 0 — never on a read that finds it already
+/// AUTO_SUBMITTED from an earlier call, so this only fires once). Not
+/// fire-and-forget: this app has no background job runner, so an
+/// un-awaited promise here could be torn down with the request before it
+/// finishes, exactly the class of bug this whole reconciliation pattern
+/// exists to avoid.
 async function reconcileAttemptExpiry(attempt: { id: string; status: CBTAttemptStatus; deadlineAt: Date }) {
   if (attempt.status !== "IN_PROGRESS" || attempt.deadlineAt > new Date()) return attempt;
   const updated = await prisma.cBTAttempt.updateMany({
@@ -213,7 +221,8 @@ async function reconcileAttemptExpiry(attempt: { id: string; status: CBTAttemptS
     data: { status: "AUTO_SUBMITTED", submittedAt: attempt.deadlineAt },
   });
   if (updated.count === 0) return prisma.cBTAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
-  return { ...attempt, status: "AUTO_SUBMITTED" as CBTAttemptStatus };
+  await gradeAttempt(attempt.id);
+  return prisma.cBTAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
 }
 
 /// Question payload is built with an explicit Prisma `select` (never
@@ -337,10 +346,12 @@ export async function submitAttempt(schoolId: string, studentId: string, attempt
   const submittedAt = now > attempt.deadlineAt ? attempt.deadlineAt : now;
   // Conditional on status again here (not just the read above) is what
   // makes this idempotent under a real race — two concurrent submits
-  // only ever let one UPDATE actually match.
-  await prisma.cBTAttempt.updateMany({
+  // only ever let one UPDATE actually match, and only that one goes on
+  // to grade.
+  const result = await prisma.cBTAttempt.updateMany({
     where: { id: attemptId, status: "IN_PROGRESS" },
     data: { status: "SUBMITTED", submittedAt },
   });
+  if (result.count > 0) await gradeAttempt(attemptId);
   return prisma.cBTAttempt.findUniqueOrThrow({ where: { id: attemptId } });
 }
