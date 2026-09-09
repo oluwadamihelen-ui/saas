@@ -83,6 +83,26 @@ export async function createTestSchool(opts: {
   return { school, subscription, plan };
 }
 
+/// Grants a bare test school (one created directly via prisma.school.create,
+/// not createTestSchool) enough CBT entitlement to exercise the module —
+/// PROFESSIONAL covers cbt, cbt_question_bank and cbt_ai_generation, which
+/// is every boolean CBT fixtures outside entitlements.test.ts itself need
+/// (that file tests plan-tier/limit boundaries directly and sets up its own
+/// subscriptions). Without this, requireFeature("cbt", ...) now correctly
+/// fails closed on a school with no Subscription row at all — CBT service
+/// functions call it as of CBT Phase 9, so every pre-existing CBT test
+/// fixture needs a subscription to keep representing real usage.
+export async function attachCbtSubscription(schoolId: string) {
+  const plans = await ensureTestPlans();
+  const plan = plans.find((p) => p.slug === "PROFESSIONAL")!;
+  const now = new Date();
+  const periodEnd = new Date(now);
+  periodEnd.setMonth(periodEnd.getMonth() + 1);
+  return prisma.subscription.create({
+    data: { schoolId, planId: plan.id, status: "ACTIVE", currentPeriodStart: now, currentPeriodEnd: periodEnd },
+  });
+}
+
 /// Creates `count` ACTIVE students for a test school — the exact
 /// active-student-counting rule (only ACTIVE/SUSPENDED count) lives in
 /// entitlements.ts itself; this just needs enough real Student rows to

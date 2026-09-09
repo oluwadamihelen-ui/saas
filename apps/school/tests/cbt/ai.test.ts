@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { createExam, publishExam, listExamTypes } from "@/lib/services/cbt-exams";
 import { approveQuestion, deleteQuestion, createQuestion } from "@/lib/services/cbt-questions";
 import { startAttempt, saveAnswer, submitAttempt } from "@/lib/services/cbt-attempts";
-import { cleanupTestSchools } from "../helpers/factories";
+import { cleanupTestSchools, attachCbtSubscription } from "../helpers/factories";
 import type { ExamInput } from "@/lib/services/cbt-exams";
 import type { AiProvider } from "@/lib/ai/types";
 
@@ -32,6 +32,7 @@ async function makeFixture() {
   counter += 1;
   const slug = `vitest-cbtai-${Date.now()}-${counter}`;
   const school = await prisma.school.create({ data: { name: slug, slug, status: "ACTIVE" } });
+  await attachCbtSubscription(school.id);
   const role = await prisma.role.create({ data: { schoolId: school.id, key: "TEACHER", name: "Teacher" } });
   const teacher = await prisma.user.create({
     data: { schoolId: school.id, roleId: role.id, email: `${slug}-t@vitest.local`, passwordHash: "x", name: "Teacher" },

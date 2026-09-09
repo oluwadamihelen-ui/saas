@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { gradeAttempt } from "@/lib/services/cbt-grading";
+import { requireFeature } from "@/lib/billing/entitlements";
 import type { CBTAttemptStatus, CBTDifficulty, CBTExamStatus, CBTQuestionType, Prisma } from "@/generated/prisma/client";
 
 /// Fisher-Yates — used for randomizeQuestionOrder/randomizeOptionOrder and
@@ -63,6 +64,7 @@ export async function getExamForCandidate(schoolId: string, studentId: string, e
 /// from anything the client sends, so a student can never grant
 /// themselves extra time (spec section 41).
 export async function startAttempt(schoolId: string, studentId: string, examId: string) {
+  await requireFeature(schoolId, "cbt");
   const candidate = await prisma.cBTExamCandidate.findFirst({
     where: { schoolId, studentId, examId },
     include: { exam: true },

@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
+import { requireFeature, requireCbtActiveExamCapacity, requireCbtCandidateCapacity } from "@/lib/billing/entitlements";
 import type {
   CBTExamStatus,
   CBTQuestionSelectionMode,
@@ -219,6 +220,7 @@ function computeManualTotalMarks(
 }
 
 export async function createExam(schoolId: string, createdById: string, input: ExamInput) {
+  await requireFeature(schoolId, "cbt");
   validateExamInput(input);
 
   let totalMarks = 0;
@@ -235,6 +237,9 @@ export async function createExam(schoolId: string, createdById: string, input: E
   }
 
   const candidateStudentIds = await resolveCandidateStudentIds(schoolId, input.classArmIds);
+  if (candidateStudentIds.length > 0) {
+    await requireCbtCandidateCapacity(schoolId, input.termId, candidateStudentIds);
+  }
 
   return prisma.$transaction(async (tx) => {
     const exam = await tx.cBTExam.create({
@@ -325,6 +330,9 @@ export async function updateExam(schoolId: string, id: string, input: ExamInput)
   }
 
   const candidateStudentIds = await resolveCandidateStudentIds(schoolId, input.classArmIds);
+  if (candidateStudentIds.length > 0) {
+    await requireCbtCandidateCapacity(schoolId, input.termId, candidateStudentIds, id);
+  }
 
   return prisma.$transaction(async (tx) => {
     await tx.cBTExamQuestion.deleteMany({ where: { examId: id } });
@@ -406,6 +414,7 @@ export async function publishExam(schoolId: string, publishedById: string, id: s
   }
   if (exam._count.candidates === 0) throw new Error("Assign at least one candidate before publishing.");
   if (exam.endAt <= new Date()) throw new Error("This exam's end time is already in the past.");
+  await requireCbtActiveExamCapacity(schoolId);
 
   return prisma.cBTExam.update({
     where: { id },

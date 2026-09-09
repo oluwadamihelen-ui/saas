@@ -13,7 +13,7 @@ import {
   listExamTypes,
   type ExamInput,
 } from "@/lib/services/cbt-exams";
-import { cleanupTestSchools } from "../helpers/factories";
+import { cleanupTestSchools, attachCbtSubscription } from "../helpers/factories";
 
 afterAll(cleanupTestSchools);
 
@@ -22,6 +22,7 @@ async function makeFixture() {
   counter += 1;
   const slug = `vitest-cbtexam-${Date.now()}-${counter}`;
   const school = await prisma.school.create({ data: { name: slug, slug, status: "ACTIVE" } });
+  await attachCbtSubscription(school.id);
   const role = await prisma.role.create({ data: { schoolId: school.id, key: "TEACHER", name: "Teacher" } });
   const user = await prisma.user.create({
     data: { schoolId: school.id, roleId: role.id, email: `${slug}@vitest.local`, passwordHash: "x", name: "Test Teacher" },

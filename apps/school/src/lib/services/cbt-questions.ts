@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
+import { requireFeature, requireCbtQuestionBankCapacity } from "@/lib/billing/entitlements";
 import type { CBTQuestionType, CBTDifficulty, CBTQuestionStatus } from "@/generated/prisma/client";
 
 const PAGE_SIZE = 20;
@@ -168,6 +169,8 @@ function validateQuestionInput(input: QuestionInput) {
 /// questions (Phase 7) land in AI_PENDING_REVIEW and need a separate
 /// approval step before becoming usable.
 export async function createQuestion(schoolId: string, createdById: string, input: QuestionInput) {
+  await requireFeature(schoolId, "cbt");
+  await requireCbtQuestionBankCapacity(schoolId);
   validateQuestionInput(input);
   const tagIds = await resolveTagIds(schoolId, input.tagNames);
 
@@ -421,6 +424,8 @@ export async function parseImportCsv(
 }
 
 export async function commitImportRows(schoolId: string, createdById: string, rows: QuestionInput[]) {
+  await requireFeature(schoolId, "cbt_question_bank");
+  await requireCbtQuestionBankCapacity(schoolId, rows.length);
   let created = 0;
   await prisma.$transaction(async (tx) => {
     for (const input of rows) {

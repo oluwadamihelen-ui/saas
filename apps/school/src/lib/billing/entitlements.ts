@@ -20,6 +20,25 @@ export class StudentLimitError extends Error {
   }
 }
 
+/// One error class for every CBT numeric plan limit (spec section 9, CBT
+/// Phase 9) rather than four near-identical ones — `resource` just picks
+/// the wording, `limit` is always the plan's own ceiling.
+const CBT_LIMIT_LABELS = {
+  cbt_active_exams: "active CBT exams",
+  cbt_question_bank: "questions in your CBT question bank",
+  cbt_ai_questions_per_month: "AI-generated CBT questions this month",
+  cbt_candidates: "CBT candidates this term",
+} as const;
+
+export class CbtPlanLimitError extends Error {
+  constructor(
+    public resource: keyof typeof CBT_LIMIT_LABELS,
+    public limit: number
+  ) {
+    super(`Your plan supports up to ${limit} ${CBT_LIMIT_LABELS[resource]}. Upgrade your plan for more.`);
+  }
+}
+
 type SubscriptionWithPlan = Subscription & { plan: SubscriptionPlan };
 
 export interface EffectiveSubscription {
@@ -168,4 +187,153 @@ export async function requireStudentCapacity(schoolId: string): Promise<void> {
     await notifyStudentLimitReachedOnce(schoolId, limit);
     throw new StudentLimitError(limit);
   }
+}
+
+// ---------------------------------------------------------------------
+// CBT numeric plan limits (CBT Phase 9). Same shape as the student-limit
+// functions above in every case: a getLimit() that resolves the plan's
+// column (fail-open null on a missing subscription, matching
+// getStudentLimit's own precedent — a school in a broken provisioning
+// state shouldn't suddenly lose CBT capacity it had yesterday), a usage
+// counter, and a single require*Capacity() choke point called from the
+// CBT service layer (never trust a hidden UI control alone).
+// ---------------------------------------------------------------------
+
+async function getPlan(schoolId: string): Promise<SubscriptionPlan | null> {
+  const subscription = await prisma.subscription.findUnique({ where: { schoolId }, include: { plan: true } });
+  return subscription?.plan ?? null;
+}
+
+export async function getCbtActiveExamLimit(schoolId: string): Promise<number | null> {
+  const plan = await getPlan(schoolId);
+  return plan?.cbtActiveExamLimit ?? null;
+}
+
+/// PUBLISHED and LIVE are the two statuses an exam occupies a "live seat"
+/// in — DRAFT/SCHEDULED never went live, and ENDED/GRADING/COMPLETED/
+/// ARCHIVED have already freed theirs, same as how CBTExamStatus's own
+/// lifecycle treats them.
+export async function getCbtActiveExamCount(schoolId: string): Promise<number> {
+  return prisma.cBTExam.count({ where: { schoolId, status: { in: ["PUBLISHED", "LIVE"] } } });
+}
+
+/// Called from publishExam() — a DRAFT exam being authored never counts
+/// against this limit, only the act of publishing (occupying a seat)
+/// does, so a school can draft as many exams as it likes and only pays
+/// the capacity cost when one actually goes live.
+export async function requireCbtActiveExamCapacity(schoolId: string): Promise<void> {
+  const limit = await getCbtActiveExamLimit(schoolId);
+  if (limit === null) return;
+  const count = await getCbtActiveExamCount(schoolId);
+  if (count >= limit) throw new CbtPlanLimitError("cbt_active_exams", limit);
+}
+
+export async function getCbtQuestionBankLimit(schoolId: string): Promise<number | null> {
+  const plan = await getPlan(schoolId);
+  return plan?.cbtQuestionBankLimit ?? null;
+}
+
+/// Non-archived rows only — matches listQuestions' own default filter
+/// (status not ARCHIVED) for "the bank" as a teacher actually sees it;
+/// archiving a question frees the seat it used to occupy.
+export async function getCbtQuestionBankCount(schoolId: string): Promise<number> {
+  return prisma.cBTQuestion.count({ where: { schoolId, status: { not: "ARCHIVED" } } });
+}
+
+/// `additionalCount` lets a batch caller (CSV import, AI generation of
+/// several questions at once) check the whole batch up front rather than
+/// row-by-row, so a request that would blow the limit fails atomically
+/// before any of it is written, not partway through.
+export async function requireCbtQuestionBankCapacity(schoolId: string, additionalCount = 1): Promise<void> {
+  const limit = await getCbtQuestionBankLimit(schoolId);
+  if (limit === null) return;
+  const count = await getCbtQuestionBankCount(schoolId);
+  if (count + additionalCount > limit) throw new CbtPlanLimitError("cbt_question_bank", limit);
+}
+
+export async function getCbtAiMonthlyLimit(schoolId: string): Promise<number | null> {
+  const plan = await getPlan(schoolId);
+  return plan?.cbtAiQuestionsPerMonthLimit ?? null;
+}
+
+/// Since the 1st of the current calendar month, local to the server
+/// (this app has no per-school timezone concept elsewhere either) —
+/// mirrors how getActiveStudentCount is the one place its own counting
+/// rule is decided, so nothing else recomputes "this month" independently.
+export async function getCbtAiMonthlyUsage(schoolId: string): Promise<number> {
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+  return prisma.cBTQuestion.count({ where: { schoolId, source: "AI_GENERATED", createdAt: { gte: startOfMonth } } });
+}
+
+export async function requireCbtAiCapacity(schoolId: string, additionalCount = 1): Promise<void> {
+  const limit = await getCbtAiMonthlyLimit(schoolId);
+  if (limit === null) return;
+  const used = await getCbtAiMonthlyUsage(schoolId);
+  if (used + additionalCount > limit) throw new CbtPlanLimitError("cbt_ai_questions_per_month", limit);
+}
+
+export async function getCbtCandidateLimit(schoolId: string): Promise<number | null> {
+  const plan = await getPlan(schoolId);
+  return plan?.cbtCandidateLimit ?? null;
+}
+
+/// Distinct students assigned as a CBT candidate to any exam in the given
+/// term — deliberately distinct (not a row count), so a student assigned
+/// to five exams in one term still only occupies one seat, and
+/// deliberately term-scoped rather than school-lifetime, so the ceiling
+/// resets each term the way the rest of the CBT module (CBTExam.termId)
+/// is already organized. `excludeExamId` lets updateExam() ask "how many
+/// seats are used by OTHER exams this term" so re-saving the same exam's
+/// own candidate list never double-counts against itself.
+export async function getCbtCandidateUsage(schoolId: string, termId: string, excludeExamId?: string): Promise<number> {
+  const rows = await prisma.cBTExamCandidate.findMany({
+    where: { schoolId, exam: { termId }, ...(excludeExamId ? { examId: { not: excludeExamId } } : {}) },
+    select: { studentId: true },
+    distinct: ["studentId"],
+  });
+  return rows.length;
+}
+
+export async function requireCbtCandidateCapacity(
+  schoolId: string,
+  termId: string,
+  studentIds: string[],
+  excludeExamId?: string
+): Promise<void> {
+  const limit = await getCbtCandidateLimit(schoolId);
+  if (limit === null) return;
+  const existing = await prisma.cBTExamCandidate.findMany({
+    where: { schoolId, exam: { termId }, ...(excludeExamId ? { examId: { not: excludeExamId } } : {}) },
+    select: { studentId: true },
+    distinct: ["studentId"],
+  });
+  const union = new Set([...existing.map((e) => e.studentId), ...studentIds]);
+  if (union.size > limit) throw new CbtPlanLimitError("cbt_candidates", limit);
+}
+
+export interface CbtUsageSummary {
+  activeExams: { count: number; limit: number | null };
+  questionBank: { count: number; limit: number | null };
+  aiQuestionsThisMonth: { count: number; limit: number | null };
+}
+
+/// Aggregate view for a billing/usage page (getStudentUsage's own
+/// counterpart) — not currently gating anything itself, just the read
+/// path a school's own dashboard shows them.
+export async function getCbtUsageSummary(schoolId: string): Promise<CbtUsageSummary> {
+  const [activeExams, examLimit, questionBank, bankLimit, aiUsage, aiLimit] = await Promise.all([
+    getCbtActiveExamCount(schoolId),
+    getCbtActiveExamLimit(schoolId),
+    getCbtQuestionBankCount(schoolId),
+    getCbtQuestionBankLimit(schoolId),
+    getCbtAiMonthlyUsage(schoolId),
+    getCbtAiMonthlyLimit(schoolId),
+  ]);
+  return {
+    activeExams: { count: activeExams, limit: examLimit },
+    questionBank: { count: questionBank, limit: bankLimit },
+    aiQuestionsThisMonth: { count: aiUsage, limit: aiLimit },
+  };
 }

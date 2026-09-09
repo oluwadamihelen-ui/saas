@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { getEffectiveSubscription, getStudentUsage } from "@/lib/billing/entitlements";
+import { getEffectiveSubscription, getStudentUsage, getCbtUsageSummary } from "@/lib/billing/entitlements";
 import { planPriceForInterval } from "@/lib/services/platform";
 import { notifyPlanChanged, notifySubscriptionCancelled, notifySubscriptionRenewed } from "@/lib/services/notifications";
 import type { BillingInterval } from "@/generated/prisma/client";
@@ -9,13 +9,14 @@ import type { BillingInterval } from "@/generated/prisma/client";
 /// from src/lib/services/platform.ts, which is Super-Admin-scoped and can
 /// see/change every school's billing.
 export async function getSchoolBilling(schoolId: string) {
-  const [effective, invoices, usage] = await Promise.all([
+  const [effective, invoices, usage, cbtUsage] = await Promise.all([
     getEffectiveSubscription(schoolId),
     prisma.platformInvoice.findMany({ where: { schoolId }, orderBy: { periodStart: "desc" } }),
     getStudentUsage(schoolId),
+    getCbtUsageSummary(schoolId),
   ]);
   if (!effective) return null;
-  return { ...effective, invoices, usage };
+  return { ...effective, invoices, usage, cbtUsage };
 }
 
 export class DowngradeBlockedError extends Error {

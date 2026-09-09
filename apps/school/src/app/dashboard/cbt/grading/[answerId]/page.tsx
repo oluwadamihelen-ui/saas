@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getAnswerForGrading } from "@/lib/services/cbt-grading";
 import { isCbtAiConfigured } from "@/lib/services/cbt-ai";
+import { hasFeature } from "@/lib/billing/entitlements";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { GradeForm } from "./grade-form";
 
@@ -10,7 +11,10 @@ export default async function GradeAnswerPage({ params }: { params: Promise<{ an
   const user = await requirePermission(PERMISSIONS.CBT_GRADE);
   const { answerId } = await params;
 
-  const answer = await getAnswerForGrading(user.schoolId, answerId);
+  const [answer, canGenerateAi] = await Promise.all([
+    getAnswerForGrading(user.schoolId, answerId),
+    hasFeature(user.schoolId, "cbt_ai_generation"),
+  ]);
   if (!answer) notFound();
 
   const response = typeof answer.response === "string" ? answer.response : JSON.stringify(answer.response);
@@ -54,7 +58,7 @@ export default async function GradeAnswerPage({ params }: { params: Promise<{ an
             maxMarks={answer.question.marks}
             initialMarks={answer.manualGrade?.marksAwarded ?? undefined}
             initialFeedback={answer.manualGrade?.feedback ?? ""}
-            aiConfigured={isCbtAiConfigured()}
+            aiConfigured={isCbtAiConfigured() && canGenerateAi}
           />
         </CardContent>
       </Card>

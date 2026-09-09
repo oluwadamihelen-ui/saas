@@ -12,6 +12,8 @@ import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { listQuestions } from "@/lib/services/cbt-questions";
 import { listSubjects, listClassGroups } from "@/lib/services/academics";
+import { hasFeature, getCbtQuestionBankCount, getCbtQuestionBankLimit } from "@/lib/billing/entitlements";
+import { FeatureLocked } from "@/components/billing/feature-locked";
 import { QuestionRowActions } from "./question-row-actions";
 import type { CBTQuestionType, CBTDifficulty, CBTQuestionStatus } from "@/generated/prisma/client";
 
@@ -55,10 +57,18 @@ export default async function QuestionBankPage({
   const user = await requirePermission(PERMISSIONS.CBT_VIEW);
   const perms = await getUserPermissions(user.id);
   const canManage = perms.has(PERMISSIONS.CBT_MANAGE_QUESTION_BANK);
-  const canGenerateAi = perms.has(PERMISSIONS.CBT_GENERATE_AI_QUESTIONS);
   const params = await searchParams;
 
-  const [{ questions, total, page, pageCount }, subjects, classGroups] = await Promise.all([
+  if (!(await hasFeature(user.schoolId, "cbt"))) {
+    return (
+      <FeatureLocked
+        description="Online examinations (CBT) aren't included in your current plan."
+        canViewBilling={perms.has(PERMISSIONS.BILLING_VIEW)}
+      />
+    );
+  }
+
+  const [{ questions, total, page, pageCount }, subjects, classGroups, canImport, canGenerateAi, bankCount, bankLimit] = await Promise.all([
     listQuestions(user.schoolId, {
       search: params.q,
       subjectId: params.subjectId,
@@ -70,6 +80,10 @@ export default async function QuestionBankPage({
     }),
     listSubjects(user.schoolId),
     listClassGroups(user.schoolId),
+    hasFeature(user.schoolId, "cbt_question_bank"),
+    perms.has(PERMISSIONS.CBT_GENERATE_AI_QUESTIONS) ? hasFeature(user.schoolId, "cbt_ai_generation") : Promise.resolve(false),
+    getCbtQuestionBankCount(user.schoolId),
+    getCbtQuestionBankLimit(user.schoolId),
   ]);
 
   return (
@@ -77,7 +91,10 @@ export default async function QuestionBankPage({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Question bank</h1>
-          <p className="text-sm text-muted">{total} question{total === 1 ? "" : "s"}</p>
+          <p className="text-sm text-muted">
+            {total} question{total === 1 ? "" : "s"}
+            {bankLimit !== null && ` · ${bankCount} of ${bankLimit} used`}
+          </p>
         </div>
         {(canManage || canGenerateAi) && (
           <div className="flex gap-2">
@@ -88,9 +105,11 @@ export default async function QuestionBankPage({
             )}
             {canManage && (
               <>
-                <Button asChild variant="secondary">
-                  <Link href="/dashboard/cbt/question-bank/import">Import CSV</Link>
-                </Button>
+                {canImport && (
+                  <Button asChild variant="secondary">
+                    <Link href="/dashboard/cbt/question-bank/import">Import CSV</Link>
+                  </Button>
+                )}
                 <Button asChild>
                   <Link href="/dashboard/cbt/question-bank/new">Add question</Link>
                 </Button>

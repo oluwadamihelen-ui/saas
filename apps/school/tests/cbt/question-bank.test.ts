@@ -9,7 +9,7 @@ import {
   parseImportCsv,
   type QuestionInput,
 } from "@/lib/services/cbt-questions";
-import { cleanupTestSchools } from "../helpers/factories";
+import { cleanupTestSchools, attachCbtSubscription } from "../helpers/factories";
 
 afterAll(cleanupTestSchools);
 
@@ -18,6 +18,7 @@ async function makeSchoolWithSubjectAndUser() {
   counter += 1;
   const slug = `vitest-cbt-${Date.now()}-${counter}`;
   const school = await prisma.school.create({ data: { name: slug, slug, status: "ACTIVE" } });
+  await attachCbtSubscription(school.id);
   const role = await prisma.role.create({ data: { schoolId: school.id, key: "TEACHER", name: "Teacher" } });
   const user = await prisma.user.create({
     data: {

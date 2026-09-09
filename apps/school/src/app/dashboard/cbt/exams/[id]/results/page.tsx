@@ -4,6 +4,7 @@ import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getExamAnalytics } from "@/lib/services/cbt-results";
 import { isCbtAiConfigured } from "@/lib/services/cbt-ai";
+import { hasFeature } from "@/lib/billing/entitlements";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -24,7 +25,11 @@ export default async function ExamResultsPage({ params }: { params: Promise<{ id
   const perms = await getUserPermissions(user.id);
   const { id } = await params;
 
-  const analytics = await getExamAnalytics(user.schoolId, id);
+  const [analytics, canGenerateAi, canSeeAdvancedAnalytics] = await Promise.all([
+    getExamAnalytics(user.schoolId, id),
+    hasFeature(user.schoolId, "cbt_ai_generation"),
+    hasFeature(user.schoolId, "cbt_advanced_analytics"),
+  ]);
   if (!analytics) notFound();
 
   return (
@@ -70,7 +75,7 @@ export default async function ExamResultsPage({ params }: { params: Promise<{ id
         </Card>
       </div>
 
-      <ExamInsights examId={id} aiConfigured={isCbtAiConfigured()} />
+      {canGenerateAi && <ExamInsights examId={id} aiConfigured={isCbtAiConfigured()} />}
 
       <Card>
         <CardHeader>
@@ -108,40 +113,52 @@ export default async function ExamResultsPage({ params }: { params: Promise<{ id
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Question analysis</CardTitle>
-          <CardDescription>Facility = share of graded students who answered correctly. Essays show average marks instead.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {analytics.questionStats.length === 0 ? (
-            <p className="text-sm text-muted">No graded answers yet.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Question</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Marks</TableHead>
-                  <TableHead>Facility</TableHead>
-                  <TableHead>Avg. marks</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {analytics.questionStats.map((q) => (
-                  <TableRow key={q.questionId}>
-                    <TableCell className="max-w-sm truncate">{q.prompt}</TableCell>
-                    <TableCell className="text-muted">{q.type.replace(/_/g, " ")}</TableCell>
-                    <TableCell className="text-muted">{q.marks}</TableCell>
-                    <TableCell className="text-muted">{q.facility != null ? `${q.facility}%` : "—"}</TableCell>
-                    <TableCell className="text-muted">{q.averageMarks ?? "—"}</TableCell>
+      {canSeeAdvancedAnalytics ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Question analysis</CardTitle>
+            <CardDescription>Facility = share of graded students who answered correctly. Essays show average marks instead.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {analytics.questionStats.length === 0 ? (
+              <p className="text-sm text-muted">No graded answers yet.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Question</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Marks</TableHead>
+                    <TableHead>Facility</TableHead>
+                    <TableHead>Avg. marks</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {analytics.questionStats.map((q) => (
+                    <TableRow key={q.questionId}>
+                      <TableCell className="max-w-sm truncate">{q.prompt}</TableCell>
+                      <TableCell className="text-muted">{q.type.replace(/_/g, " ")}</TableCell>
+                      <TableCell className="text-muted">{q.marks}</TableCell>
+                      <TableCell className="text-muted">{q.facility != null ? `${q.facility}%` : "—"}</TableCell>
+                      <TableCell className="text-muted">{q.averageMarks ?? "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Question analysis</CardTitle>
+            <CardDescription>Per-question facility and average-marks breakdown.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted">Advanced CBT analytics isn&apos;t included in your current plan.</p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

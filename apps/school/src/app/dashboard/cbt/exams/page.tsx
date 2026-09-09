@@ -12,6 +12,8 @@ import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { listExams } from "@/lib/services/cbt-exams";
 import { listSubjects, listTerms } from "@/lib/services/academics";
+import { hasFeature, getCbtActiveExamCount, getCbtActiveExamLimit } from "@/lib/billing/entitlements";
+import { FeatureLocked } from "@/components/billing/feature-locked";
 import { formatDate } from "@/lib/utils";
 import type { CBTExamStatus } from "@/generated/prisma/client";
 
@@ -36,7 +38,16 @@ export default async function ExamsPage({
   const canCreate = perms.has(PERMISSIONS.CBT_CREATE);
   const params = await searchParams;
 
-  const [{ exams, total, page, pageCount }, subjects, terms] = await Promise.all([
+  if (!(await hasFeature(user.schoolId, "cbt"))) {
+    return (
+      <FeatureLocked
+        description="Online examinations (CBT) aren't included in your current plan."
+        canViewBilling={perms.has(PERMISSIONS.BILLING_VIEW)}
+      />
+    );
+  }
+
+  const [{ exams, total, page, pageCount }, subjects, terms, activeExamCount, activeExamLimit] = await Promise.all([
     listExams(user.schoolId, {
       search: params.q,
       subjectId: params.subjectId,
@@ -46,6 +57,8 @@ export default async function ExamsPage({
     }),
     listSubjects(user.schoolId),
     listTerms(user.schoolId),
+    getCbtActiveExamCount(user.schoolId),
+    getCbtActiveExamLimit(user.schoolId),
   ]);
 
   return (
@@ -53,7 +66,10 @@ export default async function ExamsPage({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Exams</h1>
-          <p className="text-sm text-muted">{total} exam{total === 1 ? "" : "s"}</p>
+          <p className="text-sm text-muted">
+            {total} exam{total === 1 ? "" : "s"}
+            {activeExamLimit !== null && ` · ${activeExamCount} of ${activeExamLimit} active exams used`}
+          </p>
         </div>
         {canCreate && (
           <Button asChild>

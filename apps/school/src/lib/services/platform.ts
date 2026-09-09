@@ -289,6 +289,10 @@ export interface PlanInput {
   currency?: string;
   isCustomPricing?: boolean;
   studentLimit?: number | null;
+  cbtActiveExamLimit?: number | null;
+  cbtQuestionBankLimit?: number | null;
+  cbtAiQuestionsPerMonthLimit?: number | null;
+  cbtCandidateLimit?: number | null;
   isMostPopular?: boolean;
   features?: Record<string, boolean>;
 }
@@ -305,6 +309,10 @@ export async function createPlan(slug: string, input: PlanInput) {
       currency: input.currency ?? "NGN",
       isCustomPricing: input.isCustomPricing ?? false,
       studentLimit: input.studentLimit ?? null,
+      cbtActiveExamLimit: input.cbtActiveExamLimit ?? null,
+      cbtQuestionBankLimit: input.cbtQuestionBankLimit ?? null,
+      cbtAiQuestionsPerMonthLimit: input.cbtAiQuestionsPerMonthLimit ?? null,
+      cbtCandidateLimit: input.cbtCandidateLimit ?? null,
       isMostPopular: input.isMostPopular ?? false,
       sortOrder: (maxSort._max.sortOrder ?? 0) + 1,
       features: input.features ?? {},
@@ -328,6 +336,10 @@ export async function updatePlan(planId: string, input: PlanInput) {
       currency: input.currency,
       isCustomPricing: input.isCustomPricing,
       studentLimit: input.studentLimit,
+      cbtActiveExamLimit: input.cbtActiveExamLimit,
+      cbtQuestionBankLimit: input.cbtQuestionBankLimit,
+      cbtAiQuestionsPerMonthLimit: input.cbtAiQuestionsPerMonthLimit,
+      cbtCandidateLimit: input.cbtCandidateLimit,
       isMostPopular: input.isMostPopular,
       features: input.features,
     },

@@ -60,7 +60,7 @@ export default async function BillingPage() {
     );
   }
 
-  const { subscription, effectiveStatus, isTrialing, trialDaysRemaining, invoices, usage } = billing;
+  const { subscription, effectiveStatus, isTrialing, trialDaysRemaining, invoices, usage, cbtUsage } = billing;
   const { plan } = subscription;
   const isCancelable = effectiveStatus === "ACTIVE" || effectiveStatus === "PAST_DUE" || isTrialing;
   const isReactivatable = effectiveStatus === "CANCELED" || effectiveStatus === "EXPIRED" || effectiveStatus === "SUSPENDED";
@@ -142,6 +142,30 @@ export default async function BillingPage() {
           {usage.percentUsed != null && usage.percentUsed >= USAGE_WARNING_THRESHOLD * 100 && usage.percentUsed < 100 && (
             <p className="text-sm text-warning">You&apos;re approaching your plan&apos;s student limit.</p>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>CBT usage</CardTitle></CardHeader>
+        <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div>
+            <p className="text-xs text-muted">Active exams</p>
+            <p className="text-sm text-foreground">
+              {cbtUsage.activeExams.count}{cbtUsage.activeExams.limit != null ? ` of ${cbtUsage.activeExams.limit}` : " (unlimited)"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted">Question bank</p>
+            <p className="text-sm text-foreground">
+              {cbtUsage.questionBank.count}{cbtUsage.questionBank.limit != null ? ` of ${cbtUsage.questionBank.limit}` : " (unlimited)"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted">AI questions this month</p>
+            <p className="text-sm text-foreground">
+              {cbtUsage.aiQuestionsThisMonth.count}{cbtUsage.aiQuestionsThisMonth.limit != null ? ` of ${cbtUsage.aiQuestionsThisMonth.limit}` : " (unlimited)"}
+            </p>
+          </div>
         </CardContent>
       </Card>
 

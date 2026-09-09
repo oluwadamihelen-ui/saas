@@ -4,6 +4,7 @@ import { getStudentForUser } from "@/lib/services/portal";
 import { getExamForCandidate } from "@/lib/services/cbt-attempts";
 import { getExamResultForStudent } from "@/lib/services/cbt-results";
 import { isCbtAiConfigured } from "@/lib/services/cbt-ai";
+import { hasFeature } from "@/lib/billing/entitlements";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RevisionPlan } from "./revision-plan";
@@ -17,7 +18,10 @@ export default async function StudentExamResultPage({ params }: { params: Promis
   const candidate = await getExamForCandidate(user.schoolId, student.id, examId);
   if (!candidate) notFound();
 
-  const result = await getExamResultForStudent(user.schoolId, student.id, examId);
+  const [result, canGenerateAi] = await Promise.all([
+    getExamResultForStudent(user.schoolId, student.id, examId),
+    hasFeature(user.schoolId, "cbt_ai_generation"),
+  ]);
   if (!result) notFound();
 
   return (
@@ -80,7 +84,7 @@ export default async function StudentExamResultPage({ params }: { params: Promis
             </CardContent>
           </Card>
 
-          <RevisionPlan examId={examId} aiConfigured={isCbtAiConfigured()} />
+          {canGenerateAi && <RevisionPlan examId={examId} aiConfigured={isCbtAiConfigured()} />}
         </>
       )}
     </div>

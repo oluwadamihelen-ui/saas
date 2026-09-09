@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { getAiProvider } from "@/lib/ai/providers/registry";
 import { getExamAnalytics, getExamResultForStudent } from "@/lib/services/cbt-results";
+import { requireFeature, requireCbtAiCapacity, requireCbtQuestionBankCapacity } from "@/lib/billing/entitlements";
 import type { CBTDifficulty } from "@/generated/prisma/client";
 
 export function isCbtAiConfigured(): boolean {
@@ -93,6 +94,14 @@ export async function generateQuestionsWithAI(
   createdById: string,
   input: GenerateQuestionsInput
 ): Promise<GeneratedQuestionsResult> {
+  await requireFeature(schoolId, "cbt_ai_generation");
+  // Checked up front for the whole requested batch — a generation that
+  // would blow either ceiling fails before calling the (metered, costly)
+  // AI provider at all, not partway through after some questions are
+  // already created.
+  await requireCbtAiCapacity(schoolId, input.count);
+  await requireCbtQuestionBankCapacity(schoolId, input.count);
+
   const provider = getAiProvider();
   if (!provider) throw new Error("AI question generation isn't configured for this deployment.");
 
@@ -162,6 +171,7 @@ overall relative to the total marks, and one concrete, actionable suggestion for
 No markdown, no headings, just prose. If there isn't enough graded data yet, say so plainly instead of guessing.`;
 
 export async function generateExamInsights(schoolId: string, examId: string): Promise<string> {
+  await requireFeature(schoolId, "cbt_ai_generation");
   const provider = getAiProvider();
   if (!provider) throw new Error("AI insights aren't configured for this deployment.");
 
@@ -212,6 +222,7 @@ export interface RevisionPlanResult {
 }
 
 export async function generateRevisionPlan(schoolId: string, studentId: string, examId: string): Promise<RevisionPlanResult> {
+  await requireFeature(schoolId, "cbt_ai_generation");
   const provider = getAiProvider();
   if (!provider) throw new Error("AI revision plans aren't configured for this deployment.");
 
@@ -257,6 +268,7 @@ export interface GradingSuggestion {
 }
 
 export async function suggestGrade(schoolId: string, answerId: string): Promise<GradingSuggestion> {
+  await requireFeature(schoolId, "cbt_ai_generation");
   const provider = getAiProvider();
   if (!provider) throw new Error("AI grading suggestions aren't configured for this deployment.");
 

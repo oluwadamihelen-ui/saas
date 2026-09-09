@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { createQuestion } from "@/lib/services/cbt-questions";
 import { createExam, publishExam, listExamTypes } from "@/lib/services/cbt-exams";
 import { startAttempt, getAttemptForTaking, saveAnswer, submitAttempt } from "@/lib/services/cbt-attempts";
-import { cleanupTestSchools } from "../helpers/factories";
+import { cleanupTestSchools, attachCbtSubscription } from "../helpers/factories";
 import type { ExamInput } from "@/lib/services/cbt-exams";
 
 afterAll(cleanupTestSchools);
@@ -18,6 +18,7 @@ async function makeLiveExamFixture(opts: { extraTimeMinutes?: number; maxAttempt
   counter += 1;
   const slug = `vitest-cbtattempt-${Date.now()}-${counter}`;
   const school = await prisma.school.create({ data: { name: slug, slug, status: "ACTIVE" } });
+  await attachCbtSubscription(school.id);
   const role = await prisma.role.create({ data: { schoolId: school.id, key: "TEACHER", name: "Teacher" } });
   const teacher = await prisma.user.create({
     data: { schoolId: school.id, roleId: role.id, email: `${slug}-t@vitest.local`, passwordHash: "x", name: "Teacher" },

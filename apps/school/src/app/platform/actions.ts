@@ -119,6 +119,10 @@ const planSchema = z.object({
   priceMonthly: z.string().trim().optional().or(z.literal("")),
   priceAnnual: z.string().trim().optional().or(z.literal("")),
   studentLimit: z.string().trim().optional().or(z.literal("")),
+  cbtActiveExamLimit: z.string().trim().optional().or(z.literal("")),
+  cbtQuestionBankLimit: z.string().trim().optional().or(z.literal("")),
+  cbtAiQuestionsPerMonthLimit: z.string().trim().optional().or(z.literal("")),
+  cbtCandidateLimit: z.string().trim().optional().or(z.literal("")),
   isMostPopular: z.literal("on").optional(),
 });
 
@@ -130,6 +134,10 @@ function parsePlanForm(formData: FormData) {
     priceMonthly: formData.get("priceMonthly") ?? "",
     priceAnnual: formData.get("priceAnnual") ?? "",
     studentLimit: formData.get("studentLimit") ?? "",
+    cbtActiveExamLimit: formData.get("cbtActiveExamLimit") ?? "",
+    cbtQuestionBankLimit: formData.get("cbtQuestionBankLimit") ?? "",
+    cbtAiQuestionsPerMonthLimit: formData.get("cbtAiQuestionsPerMonthLimit") ?? "",
+    cbtCandidateLimit: formData.get("cbtCandidateLimit") ?? "",
     isMostPopular: formData.get("isMostPopular") ?? undefined,
   });
 }
@@ -143,6 +151,10 @@ function planInputFromParsed(parsed: z.infer<typeof planSchema>) {
     priceMonthlyMinor: !isCustomPricing && parsed.priceMonthly ? toMinorUnits(Number(parsed.priceMonthly)) : null,
     priceAnnualMinor: !isCustomPricing && parsed.priceAnnual ? toMinorUnits(Number(parsed.priceAnnual)) : null,
     studentLimit: parsed.studentLimit ? Number(parsed.studentLimit) : null,
+    cbtActiveExamLimit: parsed.cbtActiveExamLimit ? Number(parsed.cbtActiveExamLimit) : null,
+    cbtQuestionBankLimit: parsed.cbtQuestionBankLimit ? Number(parsed.cbtQuestionBankLimit) : null,
+    cbtAiQuestionsPerMonthLimit: parsed.cbtAiQuestionsPerMonthLimit ? Number(parsed.cbtAiQuestionsPerMonthLimit) : null,
+    cbtCandidateLimit: parsed.cbtCandidateLimit ? Number(parsed.cbtCandidateLimit) : null,
     isMostPopular: parsed.isMostPopular === "on",
   };
 }

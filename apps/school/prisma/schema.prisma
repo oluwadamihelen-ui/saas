@@ -1707,6 +1707,16 @@ model SubscriptionPlan {
   sortOrder         Int     @default(0)
   isActive          Boolean @default(true)
 
+  /// CBT numeric plan limits (spec section 9, CBT Phase 9) — same null-
+  /// means-unlimited convention as studentLimit above, and enforced the
+  /// same way (a require*Capacity() check in src/lib/billing/
+  /// entitlements.ts, called from the CBT service layer, never trusting a
+  /// hidden UI control alone).
+  cbtActiveExamLimit          Int? // exams concurrently PUBLISHED or LIVE
+  cbtQuestionBankLimit        Int? // total non-archived CBTQuestion rows
+  cbtAiQuestionsPerMonthLimit Int? // AI_GENERATED questions created since the 1st of the current calendar month
+  cbtCandidateLimit           Int? // distinct students assigned as CBT exam candidates within the current term
+
   /// Record<FeatureKey, boolean> — see src/lib/billing/features.ts for the
   /// canonical key list. The tenant-editable part of entitlement, the same
   /// way RolePermission is the tenant-editable part of the fixed

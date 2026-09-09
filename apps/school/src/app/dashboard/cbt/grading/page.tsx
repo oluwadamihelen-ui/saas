@@ -5,12 +5,25 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requirePermission } from "@/lib/auth/require";
+import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { listGradingQueue } from "@/lib/services/cbt-grading";
+import { hasFeature } from "@/lib/billing/entitlements";
+import { FeatureLocked } from "@/components/billing/feature-locked";
 
 export default async function GradingQueuePage({ searchParams }: { searchParams: Promise<{ examId?: string }> }) {
   const user = await requirePermission(PERMISSIONS.CBT_GRADE);
   const params = await searchParams;
+
+  if (!(await hasFeature(user.schoolId, "cbt"))) {
+    const perms = await getUserPermissions(user.id);
+    return (
+      <FeatureLocked
+        description="Online examinations (CBT) aren't included in your current plan."
+        canViewBilling={perms.has(PERMISSIONS.BILLING_VIEW)}
+      />
+    );
+  }
 
   const queue = await listGradingQueue(user.schoolId, { examId: params.examId });
 

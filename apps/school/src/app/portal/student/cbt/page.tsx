@@ -6,12 +6,18 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { requireSchoolUser } from "@/lib/auth/require";
 import { getStudentForUser } from "@/lib/services/portal";
 import { listCandidateExamsForStudent } from "@/lib/services/cbt-attempts";
+import { hasFeature } from "@/lib/billing/entitlements";
+import { FeatureLocked } from "@/components/billing/feature-locked";
 import { formatDate } from "@/lib/utils";
 
 export default async function StudentCbtPage() {
   const user = await requireSchoolUser();
   const student = await getStudentForUser(user.schoolId, user.id);
   if (!student) notFound();
+
+  if (!(await hasFeature(user.schoolId, "cbt"))) {
+    return <FeatureLocked description="Online examinations aren't available for your school right now." canViewBilling={false} />;
+  }
 
   const rows = await listCandidateExamsForStudent(user.schoolId, student.id);
 

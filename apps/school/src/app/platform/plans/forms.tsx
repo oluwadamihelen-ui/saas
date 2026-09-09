@@ -19,6 +19,10 @@ export interface PlanBrief {
   priceAnnualMinor: number | null;
   currency: string;
   studentLimit: number | null;
+  cbtActiveExamLimit: number | null;
+  cbtQuestionBankLimit: number | null;
+  cbtAiQuestionsPerMonthLimit: number | null;
+  cbtCandidateLimit: number | null;
   isCustomPricing: boolean;
   isMostPopular: boolean;
   isActive: boolean;
@@ -96,6 +100,56 @@ function PlanFields({ plan }: { plan?: PlanBrief }) {
           Mark as &quot;Most popular&quot;
         </label>
       </div>
+
+      <div className="space-y-2 rounded-md border border-dashed border-border p-3">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted">CBT limits (optional — blank means unlimited)</p>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="space-y-1.5">
+            <Label htmlFor={`cbtActiveExamLimit-${plan?.id ?? "new"}`}>Active exams</Label>
+            <Input
+              id={`cbtActiveExamLimit-${plan?.id ?? "new"}`}
+              name="cbtActiveExamLimit"
+              type="number"
+              min={0}
+              placeholder="Unlimited"
+              defaultValue={plan?.cbtActiveExamLimit ?? ""}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`cbtQuestionBankLimit-${plan?.id ?? "new"}`}>Question bank size</Label>
+            <Input
+              id={`cbtQuestionBankLimit-${plan?.id ?? "new"}`}
+              name="cbtQuestionBankLimit"
+              type="number"
+              min={0}
+              placeholder="Unlimited"
+              defaultValue={plan?.cbtQuestionBankLimit ?? ""}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`cbtAiQuestionsPerMonthLimit-${plan?.id ?? "new"}`}>AI questions/month</Label>
+            <Input
+              id={`cbtAiQuestionsPerMonthLimit-${plan?.id ?? "new"}`}
+              name="cbtAiQuestionsPerMonthLimit"
+              type="number"
+              min={0}
+              placeholder="Unlimited"
+              defaultValue={plan?.cbtAiQuestionsPerMonthLimit ?? ""}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`cbtCandidateLimit-${plan?.id ?? "new"}`}>CBT candidates/term</Label>
+            <Input
+              id={`cbtCandidateLimit-${plan?.id ?? "new"}`}
+              name="cbtCandidateLimit"
+              type="number"
+              min={0}
+              placeholder="Unlimited"
+              defaultValue={plan?.cbtCandidateLimit ?? ""}
+            />
+          </div>
+        </div>
+      </div>
     </>
   );
 }
@@ -135,6 +189,8 @@ export function PlanRow({ plan }: { plan: PlanBrief }) {
               : `${plan.priceMonthlyMinor != null ? formatMoney(plan.priceMonthlyMinor, plan.currency) : "—"}/mo · ${plan.priceAnnualMinor != null ? formatMoney(plan.priceAnnualMinor, plan.currency) : "—"}/yr`}
             {" · "}
             {plan.studentLimit ? `up to ${plan.studentLimit} students` : "unlimited students"}
+            {" · "}
+            {plan.cbtActiveExamLimit ? `${plan.cbtActiveExamLimit} active CBT exams` : "unlimited active CBT exams"}
           </p>
         </div>
         <div className="flex items-center gap-2">

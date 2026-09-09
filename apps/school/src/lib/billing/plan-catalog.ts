@@ -20,6 +20,16 @@ export interface PlanCatalogEntry {
   priceAnnualMinor: number | null;
   currency: string;
   studentLimit: number | null;
+  /// CBT numeric limits — null means unlimited, same convention as
+  /// studentLimit. Only meaningful for tiers that actually have the
+  /// corresponding boolean feature (see features.ts); a tier without
+  /// cbt_ai_generation, for instance, never reaches the AI limit check at
+  /// all since requireFeature() blocks it first — the 0 here is belt and
+  /// suspenders, not the primary gate.
+  cbtActiveExamLimit: number | null;
+  cbtQuestionBankLimit: number | null;
+  cbtAiQuestionsPerMonthLimit: number | null;
+  cbtCandidateLimit: number | null;
   isCustomPricing: boolean;
   isMostPopular: boolean;
   sortOrder: number;
@@ -36,6 +46,10 @@ export const PLAN_CATALOG: Record<PlanTier, PlanCatalogEntry> = {
     priceAnnualMinor: 250_000_00,
     currency: "NGN",
     studentLimit: 150,
+    cbtActiveExamLimit: 2,
+    cbtQuestionBankLimit: 100,
+    cbtAiQuestionsPerMonthLimit: 0,
+    cbtCandidateLimit: 150,
     isCustomPricing: false,
     isMostPopular: false,
     sortOrder: 0,
@@ -50,6 +64,10 @@ export const PLAN_CATALOG: Record<PlanTier, PlanCatalogEntry> = {
     priceAnnualMinor: 600_000_00,
     currency: "NGN",
     studentLimit: 500,
+    cbtActiveExamLimit: 10,
+    cbtQuestionBankLimit: 1_000,
+    cbtAiQuestionsPerMonthLimit: 100,
+    cbtCandidateLimit: 500,
     isCustomPricing: false,
     isMostPopular: true,
     sortOrder: 1,
@@ -64,6 +82,10 @@ export const PLAN_CATALOG: Record<PlanTier, PlanCatalogEntry> = {
     priceAnnualMinor: 1_200_000_00,
     currency: "NGN",
     studentLimit: 1_500,
+    cbtActiveExamLimit: 50,
+    cbtQuestionBankLimit: 5_000,
+    cbtAiQuestionsPerMonthLimit: 500,
+    cbtCandidateLimit: 1_500,
     isCustomPricing: false,
     isMostPopular: false,
     sortOrder: 2,
@@ -78,6 +100,10 @@ export const PLAN_CATALOG: Record<PlanTier, PlanCatalogEntry> = {
     priceAnnualMinor: null,
     currency: "NGN",
     studentLimit: null,
+    cbtActiveExamLimit: null,
+    cbtQuestionBankLimit: null,
+    cbtAiQuestionsPerMonthLimit: null,
+    cbtCandidateLimit: null,
     isCustomPricing: true,
     isMostPopular: false,
     sortOrder: 3,
