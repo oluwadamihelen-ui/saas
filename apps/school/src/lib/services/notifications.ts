@@ -293,3 +293,8 @@ export async function notifyStudentLimitReachedOnce(schoolId: string, limit: num
   if (alreadySent) return;
   await notifyStudentLimitReached(schoolId, limit);
 }
+
+export async function notifyCbtExamSubmitted(schoolId: string, studentId: string, examTitle: string) {
+  const recipients = await studentAndGuardianUserIds(schoolId, studentId);
+  await notifyRecipients(schoolId, recipients, "CBT_EXAM_SUBMITTED", "Exam submitted", `"${examTitle}" has been submitted successfully.`);
+}

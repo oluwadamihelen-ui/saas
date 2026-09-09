@@ -142,7 +142,9 @@ function validateQuestionInput(input: QuestionInput) {
     if (input.options.length < 2) {
       throw new Error("Add at least two options.");
     }
-    if (input.type !== "ORDERING" && !input.options.some((o) => o.isCorrect)) {
+    // ORDERING's answer key is the option order itself, and MATCHING's is
+    // each option's own text/matchText pairing — neither uses isCorrect.
+    if (input.type !== "ORDERING" && input.type !== "MATCHING" && !input.options.some((o) => o.isCorrect)) {
       throw new Error("Mark at least one option as correct.");
     }
     if (input.type === "MULTIPLE_CHOICE" || input.type === "TRUE_FALSE") {

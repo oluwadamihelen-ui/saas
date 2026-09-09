@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LayoutDashboard, Users, CalendarDays, FileText, Award, ClipboardCheck, Megaphone, MessageSquare, MessageCircle } from "lucide-react";
+import { LayoutDashboard, Users, CalendarDays, FileText, Award, ClipboardCheck, Megaphone, MessageSquare, MessageCircle, MonitorCheck } from "lucide-react";
 import { SchoolLogo } from "@/components/brand/school-logo";
 import { NavDrawer } from "@/components/ui/nav-drawer";
 import { NavTree, type NavItem } from "@/components/ui/nav-tree";
@@ -16,6 +16,7 @@ const PARENT_NAV: NavItem[] = [
 const STUDENT_NAV: NavItem[] = [
   { href: "/portal/student", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/portal/student/timetable", label: "Timetable", icon: CalendarDays },
+  { href: "/portal/student/cbt", label: "Exams", icon: MonitorCheck },
   { href: "/portal/student/assignments", label: "Assignments", icon: FileText },
   { href: "/portal/student/results", label: "Results", icon: Award },
   { href: "/portal/student/attendance", label: "Attendance", icon: ClipboardCheck },

@@ -170,17 +170,19 @@ export function QuestionForm({
           <div className="space-y-2">
             {options.map((option, i) => (
               <div key={i} className="flex items-center gap-2">
-                <label className="flex items-center gap-1.5 text-xs text-muted">
-                  <input
-                    type={SINGLE_CORRECT_TYPES.has(type) ? "radio" : "checkbox"}
-                    name="optionCorrect"
-                    value={String(i)}
-                    checked={option.isCorrect}
-                    onChange={() => toggleCorrect(i)}
-                    aria-label={`Option ${i + 1} is correct`}
-                  />
-                  Correct
-                </label>
+                {type !== "MATCHING" && type !== "ORDERING" && (
+                  <label className="flex items-center gap-1.5 text-xs text-muted">
+                    <input
+                      type={SINGLE_CORRECT_TYPES.has(type) ? "radio" : "checkbox"}
+                      name="optionCorrect"
+                      value={String(i)}
+                      checked={option.isCorrect}
+                      onChange={() => toggleCorrect(i)}
+                      aria-label={`Option ${i + 1} is correct`}
+                    />
+                    Correct
+                  </label>
+                )}
                 <Input
                   name="optionText"
                   value={option.text}
