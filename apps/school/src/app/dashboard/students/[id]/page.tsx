@@ -69,7 +69,16 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
     <div className="max-w-4xl space-y-6">
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
-          <Avatar name={`${student.firstName} ${student.lastName}`} className="h-14 w-14 text-base" />
+          {student.photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- data: URL, next/image can't optimize it
+            <img
+              src={student.photoUrl}
+              alt={`${student.firstName} ${student.lastName}`}
+              className="h-14 w-14 shrink-0 rounded-md border border-border object-cover"
+            />
+          ) : (
+            <Avatar name={`${student.firstName} ${student.lastName}`} className="h-14 w-14 text-base" />
+          )}
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               {student.firstName} {student.lastName}

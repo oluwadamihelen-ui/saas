@@ -9,6 +9,22 @@ import { createStudent, updateStudent, withdrawStudent, addGuardianToStudent } f
 import { inviteGuardianToPortal, inviteStudentToPortal } from "@/lib/services/portal-invites";
 import { logAudit } from "@/lib/audit";
 import { StudentLimitError } from "@/lib/billing/entitlements";
+import { fileToStudentPhotoDataUrl } from "@/lib/logo-upload";
+
+/// Only returns a value when a new photo was actually chosen — leaving the
+/// result undefined (rather than null) lets both create and update pass it
+/// straight through to StudentInput.photoUrl without ever accidentally
+/// clearing an existing photo just because the (browser-unfillable) file
+/// input was left empty on an edit.
+async function extractPhotoUrl(formData: FormData): Promise<{ photoUrl?: string; error?: string }> {
+  const file = formData.get("photo");
+  if (!(file instanceof File) || file.size === 0) return {};
+  try {
+    return { photoUrl: await fileToStudentPhotoDataUrl(file) };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Could not process this photo." };
+  }
+}
 
 const genderEnum = z.enum(["MALE", "FEMALE"]);
 const relationshipEnum = z.enum(["FATHER", "MOTHER", "GUARDIAN", "OTHER"]);
@@ -80,6 +96,11 @@ export async function createStudentAction(_prev: StudentFormState, formData: For
     return { status: "error", message: "Please check the guardian's details." };
   }
 
+  const { photoUrl, error: photoError } = await extractPhotoUrl(formData);
+  if (photoError) {
+    return { status: "error", message: photoError };
+  }
+
   const g = guardianParsed.data;
   const hasGuardian = Boolean(g.guardianFirstName && g.guardianLastName && g.guardianPhone && g.guardianRelationship);
 
@@ -89,6 +110,7 @@ export async function createStudentAction(_prev: StudentFormState, formData: For
       firstName: parsed.data.firstName,
       lastName: parsed.data.lastName,
       otherNames: parsed.data.otherNames || null,
+      photoUrl,
       dateOfBirth: parsed.data.dateOfBirth ? new Date(parsed.data.dateOfBirth) : null,
       gender: (parsed.data.gender as "MALE" | "FEMALE") || null,
       bloodGroup: parsed.data.bloodGroup || null,
@@ -141,10 +163,16 @@ export async function updateStudentAction(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check the student's details." };
   }
 
+  const { photoUrl, error: photoError } = await extractPhotoUrl(formData);
+  if (photoError) {
+    return { status: "error", message: photoError };
+  }
+
   await updateStudent(user.schoolId, studentId, {
     firstName: parsed.data.firstName,
     lastName: parsed.data.lastName,
     otherNames: parsed.data.otherNames || null,
+    photoUrl,
     dateOfBirth: parsed.data.dateOfBirth ? new Date(parsed.data.dateOfBirth) : null,
     gender: (parsed.data.gender as "MALE" | "FEMALE") || null,
     bloodGroup: parsed.data.bloodGroup || null,

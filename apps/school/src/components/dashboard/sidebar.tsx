@@ -30,6 +30,7 @@ import {
   MonitorCheck,
   ListChecks,
   ScrollText,
+  Building2,
 } from "lucide-react";
 import { SchoolLogo } from "@/components/brand/school-logo";
 import { PERMISSIONS, type PermissionKey } from "@/lib/permissions";
@@ -85,34 +86,58 @@ const NAV: DashboardNavItem[] = [
       { href: "/dashboard/administration/feedback", label: "Feedback", icon: MessageCircle, requiredPermission: PERMISSIONS.FEEDBACK_VIEW },
     ],
   },
-  { href: "/dashboard/academics", label: "Academics", icon: BookOpen, requiredPermission: PERMISSIONS.ACADEMICS_MANAGE },
-  { href: "/dashboard/attendance", label: "Attendance", icon: ClipboardCheck, requiredPermission: PERMISSIONS.ATTENDANCE_VIEW },
-  { href: "/dashboard/timetable", label: "Timetable", icon: CalendarDays, requiredPermission: PERMISSIONS.TIMETABLE_VIEW },
-  { href: "/dashboard/assignments", label: "Assignments", icon: FileText, requiredPermission: PERMISSIONS.ASSIGNMENTS_VIEW },
   {
-    label: "Results",
-    icon: Award,
+    label: "Academics",
+    icon: BookOpen,
     children: [
-      { href: "/dashboard/results", label: "Results", icon: Award, requiredPermission: PERMISSIONS.RESULTS_VIEW },
-      { href: "/dashboard/results/transcripts", label: "Transcripts", icon: ScrollText, requiredPermission: PERMISSIONS.TRANSCRIPTS_VIEW },
+      { href: "/dashboard/academics", label: "Academics", icon: BookOpen, requiredPermission: PERMISSIONS.ACADEMICS_MANAGE },
+      { href: "/dashboard/attendance", label: "Attendance", icon: ClipboardCheck, requiredPermission: PERMISSIONS.ATTENDANCE_VIEW },
+      { href: "/dashboard/timetable", label: "Timetable", icon: CalendarDays, requiredPermission: PERMISSIONS.TIMETABLE_VIEW },
+      { href: "/dashboard/assignments", label: "Assignments", icon: FileText, requiredPermission: PERMISSIONS.ASSIGNMENTS_VIEW },
+      {
+        label: "Results",
+        icon: Award,
+        children: [
+          { href: "/dashboard/results", label: "Results", icon: Award, requiredPermission: PERMISSIONS.RESULTS_VIEW },
+          { href: "/dashboard/results/transcripts", label: "Transcripts", icon: ScrollText, requiredPermission: PERMISSIONS.TRANSCRIPTS_VIEW },
+        ],
+      },
+      {
+        label: "Exams (CBT)",
+        icon: MonitorCheck,
+        children: [
+          { href: "/dashboard/cbt/exams", label: "Exams", icon: MonitorCheck, requiredPermission: PERMISSIONS.CBT_VIEW },
+          { href: "/dashboard/cbt/question-bank", label: "Question Bank", icon: ListChecks, requiredPermission: PERMISSIONS.CBT_VIEW },
+          { href: "/dashboard/cbt/grading", label: "Grading", icon: ClipboardCheck, requiredPermission: PERMISSIONS.CBT_GRADE },
+        ],
+      },
     ],
   },
   {
-    label: "Exams (CBT)",
-    icon: MonitorCheck,
+    label: "Finance",
+    icon: Wallet,
     children: [
-      { href: "/dashboard/cbt/exams", label: "Exams", icon: MonitorCheck, requiredPermission: PERMISSIONS.CBT_VIEW },
-      { href: "/dashboard/cbt/question-bank", label: "Question Bank", icon: ListChecks, requiredPermission: PERMISSIONS.CBT_VIEW },
-      { href: "/dashboard/cbt/grading", label: "Grading", icon: ClipboardCheck, requiredPermission: PERMISSIONS.CBT_GRADE },
+      { href: "/dashboard/finance", label: "Overview", icon: Wallet, requiredPermission: PERMISSIONS.FINANCE_VIEW },
+      { href: "/dashboard/payroll", label: "Payroll", icon: Banknote, requiredPermission: PERMISSIONS.PAYROLL_VIEW },
     ],
   },
-  { href: "/dashboard/finance", label: "Finance", icon: Wallet, requiredPermission: PERMISSIONS.FINANCE_VIEW },
-  { href: "/dashboard/payroll", label: "Payroll", icon: Banknote, requiredPermission: PERMISSIONS.PAYROLL_VIEW },
-  { href: "/dashboard/library", label: "Library", icon: Library, requiredPermission: PERMISSIONS.LIBRARY_VIEW },
-  { href: "/dashboard/transport", label: "Transport", icon: Bus, requiredPermission: PERMISSIONS.TRANSPORT_VIEW },
-  { href: "/dashboard/hostel", label: "Hostel", icon: BedDouble, requiredPermission: PERMISSIONS.HOSTEL_VIEW },
-  { href: "/dashboard/announcements", label: "Announcements", icon: Megaphone, requiredPermission: PERMISSIONS.ANNOUNCEMENTS_VIEW },
-  { href: "/dashboard/messages", label: "Messages", icon: MessageSquare, requiredPermission: PERMISSIONS.MESSAGES_VIEW },
+  {
+    label: "Operations",
+    icon: Building2,
+    children: [
+      { href: "/dashboard/library", label: "Library", icon: Library, requiredPermission: PERMISSIONS.LIBRARY_VIEW },
+      { href: "/dashboard/transport", label: "Transport", icon: Bus, requiredPermission: PERMISSIONS.TRANSPORT_VIEW },
+      { href: "/dashboard/hostel", label: "Hostel", icon: BedDouble, requiredPermission: PERMISSIONS.HOSTEL_VIEW },
+    ],
+  },
+  {
+    label: "Communication",
+    icon: MessageSquare,
+    children: [
+      { href: "/dashboard/announcements", label: "Announcements", icon: Megaphone, requiredPermission: PERMISSIONS.ANNOUNCEMENTS_VIEW },
+      { href: "/dashboard/messages", label: "Messages", icon: MessageSquare, requiredPermission: PERMISSIONS.MESSAGES_VIEW },
+    ],
+  },
   { href: "/dashboard/assistant", label: "AI Assistant", icon: Sparkles, requiredPermission: PERMISSIONS.ASSISTANT_USE },
   { href: "/dashboard/billing", label: "Billing", icon: CreditCard, requiredPermission: PERMISSIONS.BILLING_VIEW },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },

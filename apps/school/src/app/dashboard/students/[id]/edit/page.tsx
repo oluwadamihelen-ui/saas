@@ -31,6 +31,7 @@ export default async function EditStudentPage({ params }: { params: Promise<{ id
             action={action}
             classArms={classArms}
             submitLabel="Save changes"
+            currentPhotoUrl={student.photoUrl}
             defaults={{
               firstName: student.firstName,
               lastName: student.lastName,

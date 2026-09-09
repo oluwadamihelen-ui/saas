@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Avatar } from "@/components/ui/avatar";
 
 export interface StudentFormState {
   status: "idle" | "error";
@@ -33,19 +34,53 @@ export function StudentForm({
   defaults,
   submitLabel,
   showGuardianFields,
+  currentPhotoUrl,
 }: {
   action: (prevState: StudentFormState, formData: FormData) => Promise<StudentFormState>;
   classArms: { id: string; name: string; classGroup: { name: string } }[];
   defaults?: StudentFormDefaults;
   submitLabel: string;
   showGuardianFields?: boolean;
+  /// The student's currently saved photo, if any — shown as a preview
+  /// only. File inputs can't be pre-filled by the browser, so leaving
+  /// this field empty on submit must never clear an existing photo (see
+  /// extractPhotoUrl in actions.ts).
+  currentPhotoUrl?: string | null;
 }) {
   const [state, formAction, isPending] = useActionState(action, { status: "idle" } as StudentFormState);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(currentPhotoUrl ?? null);
+  const studentName = `${defaults?.firstName ?? ""} ${defaults?.lastName ?? ""}`.trim() || "Student";
 
   return (
-    <form action={formAction} className="space-y-8">
+    <form action={formAction} className="space-y-8" encType="multipart/form-data">
       <section className="space-y-4">
         <h3 className="text-sm font-semibold text-foreground">Personal information</h3>
+        <div className="flex items-center gap-4">
+          {photoPreview ? (
+            // eslint-disable-next-line @next/next/no-img-element -- data: URL from a local file, next/image can't optimize it
+            <img src={photoPreview} alt={studentName} className="h-20 w-16 shrink-0 rounded-md border border-border object-cover" />
+          ) : (
+            <Avatar name={studentName} className="h-20 w-16 shrink-0 rounded-md text-base" />
+          )}
+          <div className="space-y-1.5">
+            <Label htmlFor="photo">Passport photograph</Label>
+            <input
+              id="photo"
+              name="photo"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => setPhotoPreview(typeof reader.result === "string" ? reader.result : null);
+                reader.readAsDataURL(file);
+              }}
+              className="block text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-muted-surface file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground"
+            />
+            <p className="text-xs text-muted">PNG, JPEG or WebP, up to 2MB. Optional.</p>
+          </div>
+        </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="firstName">First name</Label>

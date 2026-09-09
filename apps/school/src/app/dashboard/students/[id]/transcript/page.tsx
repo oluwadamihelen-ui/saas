@@ -68,7 +68,7 @@ export default async function StudentTranscriptPage({ params }: { params: Promis
       </div>
 
       <Card>
-        <CardContent className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+        <CardContent className="space-y-6">
           <div className="flex items-start gap-4">
             <SchoolLogo name={school.name} logoUrl={school.logoUrl} height={44} />
             <div>
@@ -81,8 +81,8 @@ export default async function StudentTranscriptPage({ params }: { params: Promis
             </div>
           </div>
 
-          <div className="flex items-start gap-4">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-1">
+          <div className="flex flex-col gap-4 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap gap-x-8 gap-y-3 text-sm">
               <Field label="Full name" value={`${student.firstName} ${student.otherNames ? student.otherNames + " " : ""}${student.lastName}`.trim()} />
               <Field label="Admission No" value={student.admissionNumber} />
               {student.gender && <Field label="Gender" value={student.gender === "MALE" ? "Male" : "Female"} />}

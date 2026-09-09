@@ -78,6 +78,7 @@ export interface StudentInput {
   firstName: string;
   lastName: string;
   otherNames?: string | null;
+  photoUrl?: string | null;
   dateOfBirth?: Date | null;
   gender?: Gender | null;
   bloodGroup?: string | null;
@@ -114,6 +115,7 @@ export async function createStudent(schoolId: string, input: StudentInput) {
         firstName: input.firstName,
         lastName: input.lastName,
         otherNames: input.otherNames || null,
+        photoUrl: input.photoUrl || null,
         dateOfBirth: input.dateOfBirth ?? null,
         gender: input.gender ?? null,
         bloodGroup: input.bloodGroup || null,
@@ -163,6 +165,7 @@ export async function updateStudent(schoolId: string, id: string, input: Partial
       firstName: input.firstName,
       lastName: input.lastName,
       otherNames: input.otherNames,
+      photoUrl: input.photoUrl,
       dateOfBirth: input.dateOfBirth,
       gender: input.gender,
       bloodGroup: input.bloodGroup,
