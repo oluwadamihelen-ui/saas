@@ -7,9 +7,11 @@ import {
   archiveQuestion,
   deleteQuestion,
   parseImportCsv,
+  commitImportRows,
   type QuestionInput,
 } from "@/lib/services/cbt-questions";
-import { cleanupTestSchools, attachCbtSubscription } from "../helpers/factories";
+import { EntitlementError } from "@/lib/billing/entitlements";
+import { cleanupTestSchools, attachCbtSubscription, createTestSchool } from "../helpers/factories";
 
 afterAll(cleanupTestSchools);
 
@@ -197,5 +199,50 @@ describe("CBT CSV import parsing", () => {
 
     const { rows } = await parseImportCsv(school.id, csv);
     expect(rows[0].data?.prompt).toBe("What is 1, plus 1?");
+  });
+});
+
+describe("CBT CSV import commit", () => {
+  it("creates each valid row as an APPROVED, IMPORTED question", async () => {
+    const { school, user, subject } = await makeSchoolWithSubjectAndUser();
+    const rows: QuestionInput[] = [
+      { ...baseMcq, subjectId: subject.id, prompt: "Imported Q1" },
+      { ...baseMcq, subjectId: subject.id, prompt: "Imported Q2" },
+    ];
+
+    const created = await commitImportRows(school.id, user.id, rows);
+    expect(created).toBe(2);
+
+    const { questions } = await listQuestions(school.id);
+    const imported = questions.filter((q) => q.prompt.startsWith("Imported"));
+    expect(imported).toHaveLength(2);
+    for (const q of imported) {
+      expect(q.status).toBe("APPROVED");
+      expect(q.source).toBe("IMPORTED");
+    }
+  });
+
+  it("re-validates each row and rejects the whole batch if one row is invalid", async () => {
+    const { school, user, subject } = await makeSchoolWithSubjectAndUser();
+    const rows: QuestionInput[] = [
+      { ...baseMcq, subjectId: subject.id, prompt: "Valid row" },
+      { ...baseMcq, subjectId: subject.id, prompt: "Invalid row", options: [] },
+    ];
+
+    await expect(commitImportRows(school.id, user.id, rows)).rejects.toThrow();
+    const { questions } = await listQuestions(school.id);
+    expect(questions.some((q) => q.prompt === "Valid row")).toBe(false); // the transaction rolled back entirely
+  });
+
+  it("requires cbt_question_bank — a Starter-tier school (cbt but not cbt_question_bank) is refused", async () => {
+    const { school } = await createTestSchool({ planTier: "STARTER" });
+    const role = await prisma.role.create({ data: { schoolId: school.id, key: "TEACHER", name: "Teacher" } });
+    const user = await prisma.user.create({
+      data: { schoolId: school.id, roleId: role.id, email: `${school.slug}@vitest.local`, passwordHash: "x", name: "Teacher" },
+    });
+    const subject = await prisma.subject.create({ data: { schoolId: school.id, name: "Mathematics", code: "MTH" } });
+    const rows: QuestionInput[] = [{ ...baseMcq, subjectId: subject.id }];
+
+    await expect(commitImportRows(school.id, user.id, rows)).rejects.toBeInstanceOf(EntitlementError);
   });
 });

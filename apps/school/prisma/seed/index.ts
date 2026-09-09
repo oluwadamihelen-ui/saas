@@ -34,6 +34,15 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+function shuffleArray<T>(arr: T[]): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
 function slugify(name: string) {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
@@ -1006,6 +1015,161 @@ async function main() {
     });
   }
 
+  // A ready-to-take CBT practice exam for the demo student (CBT Phase 10) —
+  // built with raw Prisma calls, not the cbt-exams.ts/cbt-questions.ts
+  // service functions, since those import "server-only" and this script
+  // runs standalone under tsx. isPractice: true means a retake never
+  // touches the gradebook (finalizeAttemptScore's own early return), so a
+  // curious demo student can attempt it more than once with no side
+  // effects on their real assessment record.
+  console.log("Seeding a CBT practice exam...");
+  const cbtExamType = await prisma.cBTExamTypeOption.upsert({
+    where: { schoolId_key: { schoolId: school.id, key: "QUIZ" } },
+    create: { schoolId: school.id, key: "QUIZ", label: "Quiz", isSystem: true },
+    update: {},
+  });
+
+  function randomInt(min: number, max: number) {
+    return min + Math.floor(Math.random() * (max - min + 1));
+  }
+
+  const practiceQuestionIds: string[] = [];
+  for (let i = 0; i < 14; i++) {
+    const a = randomInt(2, 50);
+    const b = randomInt(2, 50);
+    const op = pick(["+", "-", "×"] as const);
+    const correct = op === "+" ? a + b : op === "-" ? a - b : a * b;
+    const distractors = new Set<number>([correct + randomInt(1, 5), Math.max(0, correct - randomInt(1, 5)), correct + randomInt(6, 12)]);
+    distractors.delete(correct);
+    const options = shuffleArray([
+      { text: String(correct), isCorrect: true },
+      ...[...distractors].slice(0, 3).map((n) => ({ text: String(n), isCorrect: false })),
+    ]);
+    const question = await prisma.cBTQuestion.create({
+      data: {
+        schoolId: school.id,
+        subjectId: numeracy.id,
+        type: "MULTIPLE_CHOICE",
+        status: "APPROVED",
+        source: "MANUAL",
+        difficulty: "EASY",
+        topic: op === "+" ? "Addition" : op === "-" ? "Subtraction" : "Multiplication",
+        prompt: `What is ${a} ${op} ${b}?`,
+        marks: 1,
+        explanation: `${a} ${op} ${b} = ${correct}.`,
+        createdById: teacher1.id,
+        approvedById: teacher1.id,
+        approvedAt: new Date(),
+        options: { create: options.map((o, idx) => ({ text: o.text, isCorrect: o.isCorrect, order: idx })) },
+      },
+    });
+    practiceQuestionIds.push(question.id);
+  }
+
+  const trueFalseFacts: { statement: string; isTrue: boolean; topic: string }[] = [
+    { statement: "An even number is always divisible by 2.", isTrue: true, topic: "Number properties" },
+    { statement: "Zero is a positive number.", isTrue: false, topic: "Number properties" },
+    { statement: "A triangle has four sides.", isTrue: false, topic: "Shapes" },
+  ];
+  for (const fact of trueFalseFacts) {
+    const question = await prisma.cBTQuestion.create({
+      data: {
+        schoolId: school.id,
+        subjectId: numeracy.id,
+        type: "TRUE_FALSE",
+        status: "APPROVED",
+        source: "MANUAL",
+        difficulty: "EASY",
+        topic: fact.topic,
+        prompt: fact.statement,
+        marks: 1,
+        createdById: teacher1.id,
+        approvedById: teacher1.id,
+        approvedAt: new Date(),
+        options: {
+          create: [
+            { text: "True", isCorrect: fact.isTrue, order: 0 },
+            { text: "False", isCorrect: !fact.isTrue, order: 1 },
+          ],
+        },
+      },
+    });
+    practiceQuestionIds.push(question.id);
+  }
+
+  const shortAnswers: { prompt: string; answers: string[]; topic: string }[] = [
+    { prompt: "How many days are there in a week?", answers: ["7", "seven"], topic: "General knowledge" },
+    { prompt: "What is the next number after 99?", answers: ["100", "one hundred"], topic: "Counting" },
+    { prompt: "How many sides does a square have?", answers: ["4", "four"], topic: "Shapes" },
+  ];
+  for (const sa of shortAnswers) {
+    const question = await prisma.cBTQuestion.create({
+      data: {
+        schoolId: school.id,
+        subjectId: numeracy.id,
+        type: "SHORT_ANSWER",
+        status: "APPROVED",
+        source: "MANUAL",
+        difficulty: "EASY",
+        topic: sa.topic,
+        prompt: sa.prompt,
+        marks: 1,
+        acceptedAnswers: sa.answers,
+        createdById: teacher1.id,
+        approvedById: teacher1.id,
+        approvedAt: new Date(),
+      },
+    });
+    practiceQuestionIds.push(question.id);
+  }
+
+  const practiceStartAt = new Date();
+  practiceStartAt.setDate(practiceStartAt.getDate() - 1); // already open
+  const practiceEndAt = new Date();
+  practiceEndAt.setDate(practiceEndAt.getDate() + 90); // generous window for a demo
+
+  const practiceExam = await prisma.cBTExam.create({
+    data: {
+      schoolId: school.id,
+      title: "Numeracy Practice Test",
+      examTypeId: cbtExamType.id,
+      subjectId: numeracy.id,
+      termId: currentTerm.id,
+      instructions: "A short, ungraded practice test — retake it as many times as you like. Your score never affects your official results.",
+      isPractice: true,
+      status: "PUBLISHED",
+      publishedAt: new Date(),
+      publishedById: teacher1.id,
+      questionSelectionMode: "MANUAL",
+      totalMarks: practiceQuestionIds.length,
+      startAt: practiceStartAt,
+      endAt: practiceEndAt,
+      durationMinutes: 30,
+      requireFullscreen: false,
+      detectTabSwitch: true,
+      restrictCopyPaste: false,
+      restrictRightClick: false,
+      maxAttempts: 3,
+      autoSubmitOnExpiry: true,
+      desktopOnly: false,
+      resultVisibility: "IMMEDIATE",
+      showCorrectAnswers: true,
+      showExplanations: true,
+      showRanking: false,
+      createdById: teacher1.id,
+      examQuestions: { create: practiceQuestionIds.map((questionId, order) => ({ questionId, order })) },
+    },
+  });
+
+  const practiceCandidates = await prisma.student.findMany({
+    where: { schoolId: school.id, classArmId: demoClassArmId!, status: "ACTIVE" },
+    select: { id: true },
+  });
+  await prisma.cBTExamCandidate.createMany({
+    data: practiceCandidates.map((s) => ({ examId: practiceExam.id, studentId: s.id, schoolId: school.id })),
+    skipDuplicates: true,
+  });
+
   let superAdminRole = await prisma.role.findFirst({ where: { schoolId: null, key: "SUPER_ADMIN" } });
   if (!superAdminRole) {
     superAdminRole = await prisma.role.create({
@@ -1093,6 +1257,7 @@ async function main() {
   console.log(`\nPortal demo accounts (same password: ${DEMO_PASSWORD}):`);
   console.log(`  PARENT           ${parentUser.email}`);
   console.log(`  STUDENT          ${studentUser.email}`);
+  console.log(`\nA "Numeracy Practice Test" CBT exam is live and ready — log in as the student above and visit /portal/student/cbt.`);
   console.log(`\nPlatform admin (same password: ${DEMO_PASSWORD}):`);
   console.log(`  SUPER_ADMIN      superadmin@winfield.demo`);
   console.log(`\nSecond demo school "${trialSchoolName}" (Starter plan, 14-day trial, same password: ${DEMO_PASSWORD}):`);

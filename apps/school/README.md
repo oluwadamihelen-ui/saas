@@ -283,7 +283,10 @@ submissions, and a distinct brand color plus a connected-but-inactive
 demo Paystack credential (a fake test key — "Pay online" still runs the
 simulated gateway; connecting it as *active* would only work with a
 real Paystack account) so Settings has real examples of both features
-to look at — plus these accounts, all with password `Passw0rd!23`:
+to look at, and a live, retakeable CBT "Numeracy Practice Test" (20
+auto-graded questions, 30 minutes) the demo student is already enrolled
+in at `/portal/student/cbt` — plus these accounts, all with password
+`Passw0rd!23`:
 
 | Role | Email |
 |---|---|

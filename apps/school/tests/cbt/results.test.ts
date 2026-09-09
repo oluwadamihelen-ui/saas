@@ -224,3 +224,42 @@ describe("CBT exam analytics", () => {
     expect(analytics?.average).toBe(4);
   });
 });
+
+describe("CBT practice exam results", () => {
+  it("a practice attempt is visible to the student even though it never becomes isOfficialResult", async () => {
+    const f = await makeResultsFixture({ isPractice: true, resultVisibility: "IMMEDIATE" as CBTResultVisibility, maxAttempts: 2, assessmentComponentId: null });
+    const graded = await answerCorrectlyAndSubmit(f.school.id, f.studentA.id, f.exam.id, f.mcq.id);
+    expect(graded.isOfficialResult).toBe(false); // finalizeAttemptScore returns before promotion for isPractice exams
+
+    const result = await getExamResultForStudent(f.school.id, f.studentA.id, f.exam.id);
+    expect(result?.status).toBe("visible");
+    expect(result?.score).toBe(4);
+  });
+
+  it("a practice retake shows the latest graded attempt, not the highest-scoring one", async () => {
+    const f = await makeResultsFixture({ isPractice: true, resultVisibility: "IMMEDIATE" as CBTResultVisibility, maxAttempts: 2, assessmentComponentId: null });
+    await answerCorrectlyAndSubmit(f.school.id, f.studentA.id, f.exam.id, f.mcq.id); // attempt 1: 4/4
+
+    const attempt2 = await startAttempt(f.school.id, f.studentA.id, f.exam.id);
+    const options = await prisma.cBTQuestionOption.findMany({ where: { questionId: f.mcq.id } });
+    const wrong = options.find((o) => !o.isCorrect)!;
+    await saveAnswer(f.school.id, f.studentA.id, attempt2.id, f.mcq.id, wrong.id);
+    await submitAttempt(f.school.id, f.studentA.id, attempt2.id); // attempt 2: 0/4, lower score
+
+    const result = await getExamResultForStudent(f.school.id, f.studentA.id, f.exam.id);
+    expect(result?.score).toBe(0); // the most recent retake, even though it scored lower
+  });
+
+  it("a practice attempt never appears in analytics or posts to the gradebook", async () => {
+    const f = await makeResultsFixture({ isPractice: true, resultVisibility: "IMMEDIATE" as CBTResultVisibility });
+    await answerCorrectlyAndSubmit(f.school.id, f.studentA.id, f.exam.id, f.mcq.id);
+
+    const analytics = await getExamAnalytics(f.school.id, f.exam.id);
+    expect(analytics?.gradedCount).toBe(0); // analytics still counts only isOfficialResult attempts
+
+    const score = await prisma.score.findUnique({
+      where: { studentId_subjectId_termId_componentId: { studentId: f.studentA.id, subjectId: f.subject.id, termId: f.term.id, componentId: f.component.id } },
+    });
+    expect(score).toBeNull();
+  });
+});

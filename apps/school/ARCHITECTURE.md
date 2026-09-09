@@ -828,6 +828,190 @@ MIME type in `src/lib/logo-upload.ts`) — simpler than standing up file
 storage for a small crest image, and just as durable as a file on disk
 would be in this single-instance deployment.
 
+## Computer-based testing (CBT)
+
+Online examinations — question authoring, exam scheduling, timed
+student attempts, auto+manual grading, results/analytics, AI-assisted
+authoring and grading, security event logging, and per-plan entitlement
+limits. Built across ten focused phases in one continuous window;
+documented here as one section since the design decisions interlock.
+15 models and 11 enums (`prisma/schema.prisma`, appended after
+`Feedback`), all designed up front in Phase 1 so later phases never
+needed a schema change beyond the plan-limit columns Phase 9 added.
+
+**Question bank.** `CBTQuestion` supports eight types
+(`MULTIPLE_CHOICE`, `MULTIPLE_SELECT`, `TRUE_FALSE`, `SHORT_ANSWER`,
+`FILL_IN_BLANK`, `ESSAY`, `MATCHING`, `ORDERING`). A manually authored
+question is immediately `APPROVED` — teacher authorship *is* the
+review; only `AI_GENERATED` questions land in `AI_PENDING_REVIEW` and
+need an explicit `approveQuestion()` call before an exam can use them.
+For `ORDERING`, the answer key is the option's own `order` field; for
+`MATCHING`, it's each option's own `text`/`matchText` pairing — neither
+type uses `isCorrect`, unlike every other option-based type. CSV import
+(`src/lib/services/cbt-questions.ts`) is a deliberately scoped preview-
+then-confirm flow covering only the three types a flat spreadsheet row
+can express unambiguously (`MULTIPLE_CHOICE`/`MULTIPLE_SELECT`/
+`TRUE_FALSE`); essay/matching/ordering need the full form.
+
+**Exam creation.** `CBTExam` supports two question-selection modes:
+`MANUAL` (a fixed, ordered list via `CBTExamQuestion`) or `BLUEPRINT`
+(rules — topic/difficulty/count — that resolve to a fresh random draw
+from the approved pool *at attempt-start*, via `CBTExamBlueprintRule`).
+Candidates are snapshotted once, from the selected class arms' currently
+ACTIVE students, into `CBTExamCandidate` rows at creation/edit time —
+not a live query — the same one-time-snapshot pattern
+`createAssignment` already used for `AssignmentSubmission`, so who's
+sitting an exam is an explicit, auditable list that a later class-roster
+change never silently alters. A published exam is locked: `updateExam`,
+`archiveExam` (while LIVE) and `deleteExam` all require `DRAFT` status;
+`unpublishExam` only works before `startAt` — once a student could be
+mid-attempt, there's no path back to editable.
+
+**Exam status is a lazy-reconciled cache, not a live computation.** This
+app has no background job runner, so `PUBLISHED → LIVE` (at `startAt`)
+and `LIVE → ENDED` (at `endAt`) are computed — and persisted — the next
+time anything reads the exam (`reconcileExamStatus` in
+`cbt-exams.ts`), mirroring the exact pattern `entitlements.ts` already
+used for subscription status. `GRADING`/`COMPLETED` are set explicitly
+by the grading pipeline, never time-driven.
+
+**The exam timer is server-authoritative, full stop.** `CBTAttempt.deadlineAt`
+is computed exactly once, at `startAttempt()`, from
+`exam.durationMinutes + candidate.extraTimeMinutes` — the client never
+supplies a duration, and `extraTimeMinutes` comes only from a staff-set
+`CBTExamCandidate` field a student can never write to. Every
+`saveAnswer`/`submitAttempt`/read re-checks the deadline server-side
+(`reconcileAttemptExpiry`, the same lazy-reconciliation pattern as exam
+status); the client-side countdown in `exam-attempt.tsx` is display-only
+and independently re-syncs whenever the server itself reports time is
+up. The student-facing question payload (`getAttemptForTaking`) is built
+with an explicit Prisma `select` — never `include` — so
+`isCorrect`/`acceptedAnswers`/`rubric`/a `MATCHING` option's true pairing
+are structurally impossible to leak into the response, not merely
+omitted after the fact; a dedicated test (`attempts.test.ts`) asserts
+the exact response shape excludes them. Submission is idempotent by
+construction: a conditional `UPDATE … WHERE status = 'IN_PROGRESS'`
+means a double-click or a retried request after a dropped response
+matches zero rows the second time and safely no-ops.
+
+**Auto-grading covers every objective type**; `ESSAY` (and any
+un-auto-gradable answer) always lands in `NEEDS_MANUAL_GRADING` — grading
+is never silently skipped. `MULTIPLE_SELECT` is all-or-nothing;
+`MATCHING` gives proportional credit per correctly matched pair.
+Negative marking is off by default and configurable per exam
+(`negativeMarkPerWrong`), and only ever deducts for an answered-and-wrong
+objective question — a blank answer is never penalized. "Best attempt
+counts": a `GRADED` attempt is promoted to `isOfficialResult = true`
+only if it beats (or is the first for) the student's current official
+attempt, and only a promotion writes to the gradebook — reusing the
+existing `saveScores()` — so a lower-scoring retake never overwrites a
+better one. There's deliberately no separate `CBTResult` model;
+`isOfficialResult` on `CBTAttempt` *is* the result record. AI grading
+suggestions (below) are advisory only: `CBTManualGrade.aiSuggestedMarks`/
+`aiSuggestedFeedback` are stored alongside — never instead of — the
+human's own `marksAwarded`/`feedback`.
+
+**Practice exams retake without ever touching the gradebook.**
+`CBTExam.isPractice` makes `finalizeAttemptScore` return before the
+official-attempt promotion — a retake is graded (the student still sees
+a score) but never becomes `isOfficialResult`, so it can never post to
+`Score` or skew `getExamAnalytics`'s aggregates. That meant
+`getExamResultForStudent`'s original `isOfficialResult: true` lookup
+could never find *any* attempt for a practice exam — a real bug caught
+only once Phase 10 actually took the seeded practice exam through the
+full student flow via Playwright, not by any of the 100+ existing unit
+tests, none of which had ever exercised `isPractice: true` end-to-end.
+Fixed by branching that lookup (and the student portal's "View result"
+link) on `exam.isPractice`: a practice exam shows the *most recent*
+`GRADED` attempt instead of the one official one — the natural analogue
+of "the result" when retakes are unlimited and none is more official
+than any other.
+
+**Result visibility is a three-way gate** (`CBTExam.resultVisibility`):
+`IMMEDIATE` shows a student their own result the moment their own
+attempt is `GRADED`, independent of anyone else; `AFTER_GRADING`
+withholds it from *everyone* until the whole exam's grading is done
+(`isExamFullyGraded`) — so an early finisher can never see, or leak, the
+answer key while classmates are still sitting the exam; `MANUAL_RELEASE`
+withholds it until a teacher explicitly sets `resultsReleasedAt`.
+`showCorrectAnswers`/`showExplanations`/`showRanking` are independent
+per-exam opt-ins layered on top of whichever gate applies.
+
+**AI functionality** (`src/lib/services/cbt-ai.ts`) reuses the Phase 5
+`AiProvider` registry directly — one-shot `provider.generate()` calls,
+not the multi-turn `AiConversation` machinery — and, like the assistant,
+never fakes a response: `isCbtAiConfigured()` gates every entry point
+with an honest "isn't configured" message when no `OPENAI_API_KEY`/
+`ANTHROPIC_API_KEY` is set. Four features: **question generation**
+(always `AI_PENDING_REVIEW`/`AI_GENERATED`, the same never-auto-approved
+rule as manual authoring's opposite — AI output is never usable until a
+human explicitly approves each one); **exam insights** for teachers,
+fed only aggregate `ExamAnalytics` — no student name or ID ever reaches
+the model; **revision plans** for students, built only from that
+student's own already-visible result, with ephemeral practice questions
+shown once and never written into `CBTQuestion` (they're a private study
+aid, not future exam content, so they don't need the review step real
+generated questions do); and **grading suggestions**, advisory-only per
+the `CBTManualGrade` note above.
+
+**Security logging is observational, never punitive.** `CBTSecurityEvent`
+records what happened during an attempt — tab switches, window blur,
+fullscreen exits, copy/paste/right-click attempts, connection loss — for
+a staff member with `cbt.view_results` to review at
+`/dashboard/cbt/exams/[id]/security`; nothing here auto-flags, scores,
+or blocks a student on its own. Client-side detectors
+(`exam-attempt.tsx`) are throttled per event type so a burst (rapid
+alt-tabbing) doesn't spam a write per occurrence. `requireFullscreen` is
+enforced with a real gate — the exam UI doesn't render until the student
+clicks into fullscreen, since browsers refuse `requestFullscreen()`
+without a user gesture — but exiting mid-exam only logs and re-shows the
+gate; the timer keeps running regardless, a nudge rather than a
+technical lock. Exam extensions (`grantExamExtension`) let a
+`cbt.start` holder set a candidate's total accommodation and, if an
+attempt is already in progress, shift its `deadlineAt` by the delta so
+the extension takes effect mid-sitting, not just on a future attempt.
+
+**Subscription entitlements** wire the four CBT feature flags — defined
+in `src/lib/billing/features.ts` since Phase 1 but, like every other
+feature flag in the app, never actually enforced anywhere until CBT
+Phase 9 — into real `requireFeature()`/`hasFeature()` gates for the
+first time in this codebase. `cbt` gates the whole module; `cbt_question_bank`
+gates CSV import specifically (manual single-question authoring is base
+`cbt`); `cbt_ai_generation` gates all four AI features; `cbt_advanced_analytics`
+gates the per-question facility/analysis breakdown on the results page.
+Four numeric plan limits (`SubscriptionPlan.cbtActiveExamLimit`/
+`cbtQuestionBankLimit`/`cbtAiQuestionsPerMonthLimit`/`cbtCandidateLimit`,
+`null` = unlimited, editable from `/platform/plans` the same way
+`studentLimit` already was) are enforced at the real choke points: a
+`DRAFT` exam never counts against the active-exam ceiling, only
+*publishing* does; a question-bank batch (CSV import, an AI generation
+request) is checked up front so it fails atomically rather than partway
+through; the candidate ceiling counts *distinct* students across all of
+a school's exams in the same term, not a row per exam, so one student
+sitting five exams occupies one seat. Because the `SubscriptionPlan`
+rows already provisioned in this environment predated these four feature
+keys entirely — `createPlan`/`ensureDefaultPlans`/the seed script only
+ever set `features` on a plan's first `INSERT`, by design, so a Super
+Admin's live edits in `/platform/plans` survive a redeploy — every real
+seeded school would have read as lacking `cbt` outright the moment these
+gates landed. Fixed with a one-time `jsonb`-merge backfill in Phase 9's
+own migration, guarded by `NOT (features ? 'key')` so it only ever adds
+a key that's actually missing.
+
+**Testing.** 124 tests across 12 files in `tests/cbt/` — every service
+function's tenant isolation, every grading rule per question type, the
+full result-visibility matrix, the AI provider's fake-and-verify pattern
+(`vi.mock` on the registry, since no real API key exists in a sandbox),
+every plan-limit boundary, and the practice-exam regression above.
+
+Full phase order: 1 database foundation → 2 question bank → 3 exam
+creation → 4 student examination interface → 5 submission and grading →
+6 results and analytics → 7 AI functionality → 8 security and audit →
+9 subscription integration → 10 testing and polish (a seeded "Numeracy
+Practice Test" — 20 auto-generated questions, 30 minutes, `isPractice`,
+retakeable — so `student@winfield.demo` can experience the whole flow
+without touching their real assessment record).
+
 ## Phased roadmap
 
 Matches the brief exactly: Phase 1 Foundation → Phase 2 Academics → Phase 3
@@ -837,5 +1021,5 @@ billing & platform admin → Administration (nested nav, admission, calendar,
 feedback) → multi-provider payments & portal branding → Subscription &
 billing system (four real-priced tiers, centralized entitlements,
 self-serve upgrade/downgrade, platform-billing Paystack + webhook, billing
-dashboard, Enterprise inquiries), each landing as the brief's own
-priorities evolved.
+dashboard, Enterprise inquiries) → Computer-based testing (ten phases,
+detailed above), each landing as the brief's own priorities evolved.

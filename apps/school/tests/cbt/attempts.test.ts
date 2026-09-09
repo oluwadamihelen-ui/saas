@@ -241,3 +241,42 @@ describe("CBT attempt cross-student isolation", () => {
     await expect(submitAttempt(f.school.id, studentB.id, attempt.id)).rejects.toThrow(/not found/i);
   });
 });
+
+describe("CBT auto-submit on expiry", () => {
+  it("a read past deadlineAt auto-submits the attempt and grades it, exactly once", async () => {
+    const f = await makeLiveExamFixture();
+    const attempt = await startAttempt(f.school.id, f.student.id, f.exam.id);
+    await saveAnswer(f.school.id, f.student.id, attempt.id, f.q1.id, "wrong-answer"); // left ungraded-correct on purpose
+
+    // Force the deadline into the past — same effect as real time passing,
+    // without an actual 30-minute wait in a test.
+    await prisma.cBTAttempt.update({ where: { id: attempt.id }, data: { deadlineAt: new Date(Date.now() - 1000) } });
+
+    const reconciled = await getAttemptForTaking(f.school.id, f.student.id, attempt.id);
+    expect(reconciled?.status).toBe("GRADED"); // both questions are auto-gradable, so grading finalizes immediately
+
+    const finalAttempt = await prisma.cBTAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
+    expect(finalAttempt.status).toBe("GRADED");
+    expect(finalAttempt.submittedAt).not.toBeNull();
+    expect(finalAttempt.score).not.toBeNull();
+
+    // A second read after the transition must never re-grade or change submittedAt.
+    const submittedAtFirst = finalAttempt.submittedAt;
+    await getAttemptForTaking(f.school.id, f.student.id, attempt.id);
+    const afterSecondRead = await prisma.cBTAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
+    expect(afterSecondRead.submittedAt?.getTime()).toBe(submittedAtFirst?.getTime());
+  });
+
+  it("saveAnswer and submitAttempt both trigger the same auto-submit reconciliation, not just getAttemptForTaking", async () => {
+    const f = await makeLiveExamFixture();
+    const attempt = await startAttempt(f.school.id, f.student.id, f.exam.id);
+    await prisma.cBTAttempt.update({ where: { id: attempt.id }, data: { deadlineAt: new Date(Date.now() - 1000) } });
+
+    await expect(saveAnswer(f.school.id, f.student.id, attempt.id, f.q1.id, "too-late")).rejects.toThrow(/time is up/i);
+    const afterSave = await prisma.cBTAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
+    expect(afterSave.status).toBe("GRADED");
+
+    // submitAttempt on an already-auto-submitted (now GRADED) attempt is a harmless no-op, not an error.
+    await expect(submitAttempt(f.school.id, f.student.id, attempt.id)).resolves.toMatchObject({ status: "GRADED" });
+  });
+});

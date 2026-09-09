@@ -85,8 +85,16 @@ export async function getExamResultForStudent(schoolId: string, studentId: strin
   const exam = await prisma.cBTExam.findFirst({ where: { schoolId, id: examId } });
   if (!exam) return null;
 
+  // A practice attempt never becomes isOfficialResult (finalizeAttemptScore
+  // returns before that promotion for isPractice exams, by design — a
+  // retake must never touch the gradebook). So "which attempt is this
+  // student's result" means something different for a practice exam: the
+  // most recent GRADED attempt, the same way a fresh retake naturally
+  // supersedes the last one, rather than the single best-scoring attempt a
+  // real exam tracks.
   const attempt = await prisma.cBTAttempt.findFirst({
-    where: { schoolId, studentId, examId, isOfficialResult: true },
+    where: exam.isPractice ? { schoolId, studentId, examId, status: "GRADED" } : { schoolId, studentId, examId, isOfficialResult: true },
+    orderBy: exam.isPractice ? { attemptNumber: "desc" } : undefined,
     include: {
       questions: { include: { question: { include: { options: { orderBy: { order: "asc" } } } } }, orderBy: { order: "asc" } },
       answers: { include: { manualGrade: true } },

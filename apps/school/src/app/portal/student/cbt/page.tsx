@@ -34,7 +34,12 @@ export default async function StudentCbtPage() {
         <ul className="divide-y divide-border rounded-md border border-border">
           {rows.map(({ candidate, exam, attempts }) => {
             const inProgress = attempts.find((a) => a.status === "IN_PROGRESS");
-            const official = attempts.find((a) => a.isOfficialResult);
+            // A practice attempt never becomes isOfficialResult (a retake
+            // must never touch the gradebook) — attempts is already
+            // ordered newest-first, so this picks the latest graded retake
+            // as "the" result the same way a real exam's one official
+            // attempt is "the" result.
+            const official = exam.isPractice ? attempts.find((a) => a.status === "GRADED") : attempts.find((a) => a.isOfficialResult);
             const usedAttempts = attempts.filter((a) => a.status !== "ABANDONED").length;
             const maxAttempts = candidate.maxAttemptsOverride ?? exam.maxAttempts;
 

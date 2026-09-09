@@ -191,4 +191,14 @@ describe("CBT exam extensions", () => {
     await expect(grantExamExtension(f.school.id, f.teacher.id, candidate.id, -5, null)).rejects.toThrow(/negative/i);
     await expect(grantExamExtension(f.school.id, f.teacher.id, "nonexistent", 5, null)).rejects.toThrow(/not found/i);
   });
+
+  it("a school can never grant an extension to another school's candidate", async () => {
+    const a = await makeSecurityFixture();
+    const b = await makeSecurityFixture();
+    const candidateB = await prisma.cBTExamCandidate.findFirstOrThrow({ where: { examId: b.exam.id, studentId: b.student.id } });
+
+    await expect(grantExamExtension(a.school.id, a.teacher.id, candidateB.id, 10, null)).rejects.toThrow(/not found/i);
+    const unchanged = await prisma.cBTExamCandidate.findUniqueOrThrow({ where: { id: candidateB.id } });
+    expect(unchanged.extraTimeMinutes).toBe(0);
+  });
 });
