@@ -23,3 +23,13 @@ export function initials(name: string): string {
     .map((part) => part[0]?.toUpperCase())
     .join("");
 }
+
+export function calculateAge(dateOfBirth: Date): number {
+  const now = new Date();
+  let age = now.getFullYear() - dateOfBirth.getFullYear();
+  const hadBirthdayThisYear =
+    now.getMonth() > dateOfBirth.getMonth() ||
+    (now.getMonth() === dateOfBirth.getMonth() && now.getDate() >= dateOfBirth.getDate());
+  if (!hadBirthdayThisYear) age -= 1;
+  return age;
+}

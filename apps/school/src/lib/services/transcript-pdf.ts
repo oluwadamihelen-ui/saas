@@ -3,6 +3,7 @@ import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import { prisma } from "@/lib/db";
 import { getStudentAcademicHistory, computeTranscriptSummary } from "@/lib/services/transcripts";
+import { calculateAge } from "@/lib/utils";
 
 const COLORS = {
   heading: "#131a2b",
@@ -17,6 +18,21 @@ const PAGE_MARGIN = 50;
 function baseUrl() {
   if (process.env.APP_URL) return process.env.APP_URL;
   return "http://localhost:3001";
+}
+
+/// School logos and student photos are both stored as data: URLs (this app
+/// has no external object storage) — decode straight to a Buffer pdfkit
+/// can embed. Returns null for anything else (unset, or a future non-data
+/// URL scheme) so the caller can just skip drawing it.
+function dataUrlToBuffer(dataUrl: string | null | undefined): Buffer | null {
+  if (!dataUrl || !dataUrl.startsWith("data:")) return null;
+  const comma = dataUrl.indexOf(",");
+  if (comma === -1) return null;
+  try {
+    return Buffer.from(dataUrl.slice(comma + 1), "base64");
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -44,6 +60,10 @@ export async function generateTranscriptPdfBuffer(schoolId: string, transcriptId
   const verifyUrl = `${baseUrl()}/verify-transcript?ref=${encodeURIComponent(t.referenceNumber)}`;
   const qrBuffer = await QRCode.toBuffer(verifyUrl, { width: 90, margin: 0 }).catch(() => null);
 
+  const accentColor = school.brandColor || COLORS.accent;
+  const logoBuffer = dataUrlToBuffer(school.logoUrl);
+  const photoBuffer = dataUrlToBuffer(student.photoUrl);
+
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: PAGE_MARGIN, bufferPages: true, autoFirstPage: false });
     const chunks: Buffer[] = [];
@@ -59,19 +79,31 @@ export async function generateTranscriptPdfBuffer(schoolId: string, transcriptId
       const top = doc.page.margins.top;
       const l = left();
       const r = right();
+      const textX = logoBuffer ? l + 42 : l;
 
-      doc.fontSize(13).font("Helvetica-Bold").fillColor(COLORS.heading).text(school.name, l, top, { width: 300 });
+      if (logoBuffer) {
+        // A corrupt or unsupported image (pdfkit's PNG/JPEG decoder is
+        // stricter than a browser's) must never fail the whole transcript —
+        // just skip the logo and keep going.
+        try {
+          doc.image(logoBuffer, l, top, { fit: [34, 34], align: "center", valign: "center" });
+        } catch {
+          /* skip logo */
+        }
+      }
+
+      doc.fontSize(13).font("Helvetica-Bold").fillColor(COLORS.heading).text(school.name, textX, top, { width: 300 - (textX - l) });
       doc.fontSize(8).font("Helvetica").fillColor(COLORS.muted);
       const address = [school.addressLine, school.city, school.state, school.country].filter(Boolean).join(", ");
-      if (address) doc.text(address, l, doc.y, { width: 300 });
+      if (address) doc.text(address, textX, doc.y, { width: 300 - (textX - l) });
       const contact = [school.phone, school.email, school.website].filter(Boolean).join("  ·  ");
-      if (contact) doc.text(contact, l, doc.y, { width: 300 });
+      if (contact) doc.text(contact, textX, doc.y, { width: 300 - (textX - l) });
 
       doc.fontSize(8).font("Helvetica").fillColor(COLORS.muted).text(`Ref: ${t.referenceNumber}`, r - 200, top, { width: 200, align: "right" });
       doc.text(`Generated: ${t.generatedAt.toLocaleDateString()}`, r - 200, top + 12, { width: 200, align: "right" });
 
       const titleY = top + 46;
-      doc.fontSize(12).font("Helvetica-Bold").fillColor(COLORS.accent).text("OFFICIAL ACADEMIC TRANSCRIPT", l, titleY, { width: r - l, align: "center" });
+      doc.fontSize(12).font("Helvetica-Bold").fillColor(accentColor).text("OFFICIAL ACADEMIC TRANSCRIPT", l, titleY, { width: r - l, align: "center" });
 
       const ruleY = titleY + 20;
       doc.moveTo(l, ruleY).lineTo(r, ruleY).strokeColor(COLORS.rule).stroke();
@@ -88,15 +120,40 @@ export async function generateTranscriptPdfBuffer(schoolId: string, transcriptId
 
     // ---- Student info (shown once, on the first page) --------------------
     const l0 = left();
+    const r0 = right();
+    const infoTop = doc.y;
+    const photoBoxW = 66;
+    const photoBoxH = 84;
+    const textWidth = photoBuffer ? r0 - l0 - photoBoxW - 14 : r0 - l0;
+
     const fullName = `${student.firstName} ${student.otherNames ? student.otherNames + " " : ""}${student.lastName}`.trim();
-    doc.fontSize(11).font("Helvetica-Bold").fillColor(COLORS.heading).text(fullName, l0);
+    doc.fontSize(11).font("Helvetica-Bold").fillColor(COLORS.heading).text(fullName, l0, infoTop, { width: textWidth });
     doc.fontSize(9).font("Helvetica").fillColor(COLORS.muted);
-    doc.text(`Admission No: ${student.admissionNumber}`, l0);
-    if (student.gender) doc.text(`Gender: ${student.gender === "MALE" ? "Male" : "Female"}`, l0);
-    if (student.dateOfBirth) doc.text(`Date of Birth: ${student.dateOfBirth.toLocaleDateString()}`, l0);
-    doc.text(`Admission Date: ${student.admissionDate.toLocaleDateString()}`, l0);
-    doc.text(`Current Class: ${student.classArm ? `${student.classArm.classGroup.name} ${student.classArm.name}` : "—"}`, l0);
-    doc.text(`Transcript Generated: ${t.generatedAt.toLocaleDateString()}`, l0);
+    doc.text(`Admission No: ${student.admissionNumber}`, l0, doc.y, { width: textWidth });
+    if (student.gender) doc.text(`Gender: ${student.gender === "MALE" ? "Male" : "Female"}`, l0, doc.y, { width: textWidth });
+    if (student.dateOfBirth) {
+      const age = calculateAge(student.dateOfBirth);
+      doc.text(`Date of Birth: ${student.dateOfBirth.toLocaleDateString()} (Age: ${age})`, l0, doc.y, { width: textWidth });
+    }
+    const address = [student.addressLine, student.city, student.state].filter(Boolean).join(", ");
+    if (address) doc.text(`Address: ${address}`, l0, doc.y, { width: textWidth });
+    doc.text(`Admission Date: ${student.admissionDate.toLocaleDateString()}`, l0, doc.y, { width: textWidth });
+    doc.text(`Current Class: ${student.classArm ? `${student.classArm.classGroup.name} ${student.classArm.name}` : "—"}`, l0, doc.y, { width: textWidth });
+    doc.text(`Transcript Generated: ${t.generatedAt.toLocaleDateString()}`, l0, doc.y, { width: textWidth });
+    const textBottom = doc.y;
+
+    if (photoBuffer) {
+      const boxX = r0 - photoBoxW;
+      doc.rect(boxX, infoTop, photoBoxW, photoBoxH).strokeColor(COLORS.rule).stroke();
+      try {
+        doc.image(photoBuffer, boxX, infoTop, { fit: [photoBoxW, photoBoxH], align: "center", valign: "center" });
+      } catch {
+        // Corrupt or unsupported image data — leave the bordered slot empty
+        // rather than failing the whole transcript.
+      }
+    }
+
+    doc.y = Math.max(textBottom, photoBuffer ? infoTop + photoBoxH : textBottom);
     doc.moveDown(1);
 
     // ---- Academic history, grouped by session then term ------------------
@@ -109,7 +166,7 @@ export async function generateTranscriptPdfBuffer(schoolId: string, transcriptId
 
       for (const term of session.terms) {
         ensureSpace(50);
-        doc.fontSize(10).font("Helvetica-Bold").fillColor(COLORS.accent).text(term.termName, l, doc.y, { continued: true });
+        doc.fontSize(10).font("Helvetica-Bold").fillColor(accentColor).text(term.termName, l, doc.y, { continued: true });
         doc.font("Helvetica").fillColor(COLORS.muted).text(`   Class: ${term.classLabel ?? "Not recorded"}`);
         doc.moveDown(0.3);
 
@@ -125,8 +182,8 @@ export async function generateTranscriptPdfBuffer(schoolId: string, transcriptId
         doc.text("Subject", l, tableTop, { width: 180 });
         doc.text("Score", l + 180, tableTop, { width: 60, align: "right" });
         doc.text("Class Avg", l + 240, tableTop, { width: 65, align: "right" });
-        doc.text("Grade", l + 305, tableTop, { width: 50, align: "right" });
-        doc.text("Remark", l + 355, tableTop, { width: r - (l + 355) });
+        doc.text("Grade", l + 305, tableTop, { width: 40, align: "right" });
+        doc.text("Remark", l + 353, tableTop, { width: r - (l + 353) });
         doc.moveTo(l, tableTop + 13).lineTo(r, tableTop + 13).strokeColor(COLORS.rule).stroke();
         doc.y = tableTop + 18;
 
@@ -138,8 +195,8 @@ export async function generateTranscriptPdfBuffer(schoolId: string, transcriptId
           doc.text(row.subjectName, l, y, { width: 180 });
           doc.text(`${row.total}/${row.maxTotal}`, l + 180, y, { width: 60, align: "right" });
           doc.text(`${row.classAverage}`, l + 240, y, { width: 65, align: "right" });
-          doc.text(row.grade ?? "—", l + 305, y, { width: 50, align: "right" });
-          doc.text(row.remark ?? "—", l + 355, y, { width: r - (l + 355) });
+          doc.text(row.grade ?? "—", l + 305, y, { width: 40, align: "right" });
+          doc.text(row.remark ?? "—", l + 353, y, { width: r - (l + 353) });
           doc.y = y + 15;
         }
 

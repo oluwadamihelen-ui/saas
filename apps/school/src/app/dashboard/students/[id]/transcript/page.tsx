@@ -5,12 +5,14 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Avatar } from "@/components/ui/avatar";
+import { SchoolLogo } from "@/components/brand/school-logo";
 import { requirePermission } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { getStudentAcademicHistory, computeTranscriptSummary, listTranscriptsForStudent } from "@/lib/services/transcripts";
-import { formatDate } from "@/lib/utils";
+import { formatDate, calculateAge } from "@/lib/utils";
 import { GenerateButton } from "./generate-button";
 import { RevokeButton } from "./revoke-button";
 
@@ -27,7 +29,8 @@ export default async function StudentTranscriptPage({ params }: { params: Promis
   });
   if (!student) notFound();
 
-  const [{ sessions, isIncomplete }, transcripts] = await Promise.all([
+  const [school, { sessions, isIncomplete }, transcripts] = await Promise.all([
+    prisma.school.findUniqueOrThrow({ where: { id: user.schoolId } }),
     getStudentAcademicHistory(user.schoolId, studentId),
     listTranscriptsForStudent(user.schoolId, studentId),
   ]);
@@ -63,6 +66,52 @@ export default async function StudentTranscriptPage({ params }: { params: Promis
           <GenerateButton studentId={studentId} hasExisting={transcripts.length > 0} />
         </div>
       </div>
+
+      <Card>
+        <CardContent className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-4">
+            <SchoolLogo name={school.name} logoUrl={school.logoUrl} height={44} />
+            <div>
+              <p className="text-base font-semibold text-foreground">{school.name}</p>
+              <p className="text-xs text-muted">
+                {[school.addressLine, school.city, school.state, school.country].filter(Boolean).join(", ") || "—"}
+              </p>
+              <p className="text-xs text-muted">{[school.phone, school.email, school.website].filter(Boolean).join(" · ") || "—"}</p>
+              <p className="mt-2 text-sm font-semibold text-accent">OFFICIAL ACADEMIC TRANSCRIPT</p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-4">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-1">
+              <Field label="Full name" value={`${student.firstName} ${student.otherNames ? student.otherNames + " " : ""}${student.lastName}`.trim()} />
+              <Field label="Admission No" value={student.admissionNumber} />
+              {student.gender && <Field label="Gender" value={student.gender === "MALE" ? "Male" : "Female"} />}
+              {student.dateOfBirth && (
+                <Field label="Date of birth" value={`${formatDate(student.dateOfBirth)} (Age: ${calculateAge(student.dateOfBirth)})`} />
+              )}
+              <Field
+                label="Address"
+                value={[student.addressLine, student.city, student.state].filter(Boolean).join(", ") || "—"}
+              />
+              <Field label="Admission date" value={formatDate(student.admissionDate)} />
+              <Field
+                label="Current class"
+                value={student.classArm ? `${student.classArm.classGroup.name} ${student.classArm.name}` : "—"}
+              />
+            </div>
+            {student.photoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- photoUrl is a data: URL (uploaded, no external host), which next/image cannot optimize anyway.
+              <img
+                src={student.photoUrl}
+                alt={`${student.firstName} ${student.lastName}`}
+                className="h-24 w-20 shrink-0 rounded-md border border-border object-cover"
+              />
+            ) : (
+              <Avatar name={`${student.firstName} ${student.lastName}`} className="h-24 w-20 shrink-0 rounded-md text-base" />
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {sessions.length === 0 ? (
         <EmptyState title="No academic records are currently available for this student." />
