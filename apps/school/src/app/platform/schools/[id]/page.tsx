@@ -30,7 +30,7 @@ export default async function PlatformSchoolDetailPage({ params }: { params: Pro
   if (!school) notFound();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <Button asChild variant="ghost" size="sm"><Link href="/platform/schools">&larr; Schools</Link></Button>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">{school.name}</h1>

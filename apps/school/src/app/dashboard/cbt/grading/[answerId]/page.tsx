@@ -20,7 +20,7 @@ export default async function GradeAnswerPage({ params }: { params: Promise<{ an
   const response = typeof answer.response === "string" ? answer.response : JSON.stringify(answer.response);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Grade answer</h1>
         <p className="text-sm text-muted">

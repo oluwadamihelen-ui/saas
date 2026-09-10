@@ -16,7 +16,7 @@ export default async function StudentLecturePage({ params }: { params: Promise<{
   const { lecture, progress, previous, next } = result;
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-3xl space-y-4 sm:space-y-6">
       <div>
         <p className="text-xs font-medium uppercase tracking-wide text-muted">{lecture.subject.name}</p>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">{lecture.title}</h1>

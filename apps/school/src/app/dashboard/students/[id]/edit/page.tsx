@@ -16,7 +16,7 @@ export default async function EditStudentPage({ params }: { params: Promise<{ id
   const action = updateStudentAction.bind(null, student.id);
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-3xl space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           Edit {student.firstName} {student.lastName}

@@ -18,7 +18,7 @@ export default async function ApplySchoolLayout({
   if (!school) notFound();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <BrandStyle color={school.brandColor} />
       <SchoolLogo name={school.name} logoUrl={school.logoUrl} height={28} />
       {children}

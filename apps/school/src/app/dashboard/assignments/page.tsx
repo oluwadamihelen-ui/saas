@@ -19,7 +19,7 @@ export default async function AssignmentsPage({ searchParams }: { searchParams: 
   const { assignments, total, page, pageCount } = await listAssignments(user.schoolId, params.page ? Number(params.page) : 1);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Assignments</h1>

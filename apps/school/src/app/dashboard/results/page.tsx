@@ -37,7 +37,7 @@ export default async function ResultsPage({
     : null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Results</h1>
@@ -67,7 +67,7 @@ export default async function ResultsPage({
           <CardTitle>Score entry</CardTitle>
           <CardDescription>Scores from all components combine into each subject&apos;s total on the report card.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4 sm:space-y-6">
           <form className="flex items-end gap-3" method="get">
             <div className="w-64 space-y-1.5">
               <label className="text-sm font-medium text-foreground" htmlFor="classArmId">Class</label>

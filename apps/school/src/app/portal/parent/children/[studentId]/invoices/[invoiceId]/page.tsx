@@ -39,7 +39,7 @@ export default async function PortalInvoicePage({
   const confirmedPayments = invoice.payments.filter((p) => p.status === "CONFIRMED");
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-2xl space-y-4 sm:space-y-6">
       <div>
         <Link href={`/portal/parent/children/${studentId}`} className="text-sm text-muted hover:text-accent">
           &larr; {student.firstName} {student.lastName}

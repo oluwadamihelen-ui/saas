@@ -16,7 +16,7 @@ export default async function TransportPage() {
   const [vehicles, routes] = await Promise.all([listVehicles(user.schoolId), listRoutes(user.schoolId)]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Transport</h1>
         <p className="text-sm text-muted">{routes.length} route{routes.length === 1 ? "" : "s"} · {vehicles.length} vehicle{vehicles.length === 1 ? "" : "s"}</p>

@@ -13,7 +13,7 @@ export default async function AdmissionFeePage() {
   ]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Set Admission Fee</h1>
         <p className="text-sm text-muted">Configure the fee applicants pay when they apply online.</p>

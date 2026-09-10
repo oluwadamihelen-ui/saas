@@ -19,7 +19,7 @@ export default async function PlatformSchoolsPage({ searchParams }: { searchPara
   const { schools, total, page, pageCount } = await listSchoolsForPlatform(params.q, params.page ? Number(params.page) : 1);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Schools</h1>
         <p className="text-sm text-muted">{total} school{total === 1 ? "" : "s"} on the platform</p>

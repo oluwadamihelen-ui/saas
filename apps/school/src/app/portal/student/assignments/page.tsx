@@ -16,7 +16,7 @@ export default async function StudentAssignmentsPage() {
   const assignments = await listAssignmentsForStudent(user.schoolId, student.id);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Assignments</h1>
         <p className="text-sm text-muted">Your teacher records submissions and grades here once you hand work in.</p>

@@ -11,7 +11,7 @@ export default async function NewLiveClassPage() {
   const [assignments, terms] = await Promise.all([listTeachableAssignments(user.schoolId, user.id), listTerms(user.schoolId)]);
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-3xl space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Schedule Live Class</h1>
         <p className="text-sm text-muted">Students in the selected class will be notified once this class is scheduled.</p>

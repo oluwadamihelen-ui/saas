@@ -14,7 +14,7 @@ export default async function CompletedLessonsPage() {
   const completed = lectures.filter((l) => l.progress[0]?.status === "COMPLETED");
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Completed Lessons</h1>
         <p className="text-sm text-muted">Lectures you have finished.</p>

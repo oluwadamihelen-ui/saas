@@ -25,7 +25,7 @@ export default async function StudentExamResultPage({ params }: { params: Promis
   if (!result) notFound();
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">{candidate.exam.title}</h1>
         <p className="text-sm text-muted">{candidate.exam.subject.name} · {candidate.exam.examType.label}</p>

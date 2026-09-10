@@ -16,7 +16,7 @@ export default async function InviteStaffPage() {
   const invitableRoles = allRoles.filter((r) => !["SCHOOL_OWNER", "PARENT", "STUDENT"].includes(r.key));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <OnboardingStepper current="invite-staff" />
       <Card>
         <CardHeader>
@@ -26,7 +26,7 @@ export default async function InviteStaffPage() {
             link and share it directly — they&apos;ll set their own password to activate the account.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4 sm:space-y-6">
           <InviteStaffForm roles={invitableRoles} action={sendStaffInvite} />
 
           {invites.length > 0 && (

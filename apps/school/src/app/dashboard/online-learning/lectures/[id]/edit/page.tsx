@@ -20,7 +20,7 @@ export default async function EditLecturePage({ params }: { params: Promise<{ id
   const action = updateLectureAction.bind(null, lecture.id);
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-3xl space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Edit lecture</h1>
       </div>

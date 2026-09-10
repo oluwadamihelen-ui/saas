@@ -239,7 +239,7 @@ export function ExamWizard({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-wrap gap-2">
         {STEPS.map((label, i) => (
           <button

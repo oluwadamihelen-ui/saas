@@ -24,7 +24,7 @@ export function AddVehicleForm() {
           <Input id="plateNumber" name="plateNumber" required placeholder="ABC-123-XY" />
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="space-y-1.5">
           <Label htmlFor="capacity">Capacity</Label>
           <Input id="capacity" name="capacity" type="number" min={1} required />

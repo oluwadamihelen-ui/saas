@@ -18,7 +18,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
   const hasBankDetails = invoice.school.bankName && invoice.school.bankAccountNumber;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">{invoice.school.name}</h1>
         <p className="text-sm text-muted">Invoice {invoice.invoiceNumber} for {invoice.student.firstName} {invoice.student.lastName}</p>

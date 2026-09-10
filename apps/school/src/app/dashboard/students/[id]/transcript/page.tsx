@@ -40,7 +40,7 @@ export default async function StudentTranscriptPage({ params }: { params: Promis
   const canManage = perms.has(PERMISSIONS.TRANSCRIPTS_MANAGE);
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="max-w-4xl space-y-4 sm:space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Academic Transcript</h1>
@@ -68,7 +68,7 @@ export default async function StudentTranscriptPage({ params }: { params: Promis
       </div>
 
       <Card>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4 sm:space-y-6">
           <div className="flex items-start gap-4">
             <SchoolLogo name={school.name} logoUrl={school.logoUrl} height={44} />
             <div>

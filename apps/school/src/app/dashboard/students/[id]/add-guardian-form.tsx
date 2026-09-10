@@ -22,7 +22,7 @@ export function AddGuardianForm({ studentId }: { studentId: string }) {
           <Input id="lastName" name="lastName" required />
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="space-y-1.5">
           <Label htmlFor="phone">Phone</Label>
           <Input id="phone" name="phone" required />

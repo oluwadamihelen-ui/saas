@@ -18,7 +18,7 @@ export default async function AllUsersPage({ searchParams }: { searchParams: Pro
   const { accounts, total, page, pageCount } = await listAllAccounts(user.schoolId, params.page ? Number(params.page) : 1);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <Button asChild variant="ghost" size="sm"><Link href="/dashboard/administration/users/reset-password">Reset a password</Link></Button>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">All Users</h1>

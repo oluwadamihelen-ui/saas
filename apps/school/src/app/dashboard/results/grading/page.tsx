@@ -16,7 +16,7 @@ export default async function GradingSetupPage() {
   const totalMax = components.reduce((sum, c) => sum + c.maxScore, 0);
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-3xl space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Grading setup</h1>
         <p className="text-sm text-muted">Configure how subject scores are structured and graded.</p>

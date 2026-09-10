@@ -19,7 +19,7 @@ export default async function FeedbackPage({ searchParams }: { searchParams: Pro
   const { items, total, page, pageCount } = await listFeedback(user.schoolId, params.page ? Number(params.page) : 1);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Feedback</h1>
         <p className="text-sm text-muted">{total} submission{total === 1 ? "" : "s"} from staff and parents</p>

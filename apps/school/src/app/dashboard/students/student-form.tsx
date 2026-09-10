@@ -55,14 +55,14 @@ export function StudentForm({
     <form action={formAction} className="space-y-8" encType="multipart/form-data">
       <section className="space-y-4">
         <h3 className="text-sm font-semibold text-foreground">Personal information</h3>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           {photoPreview ? (
             // eslint-disable-next-line @next/next/no-img-element -- data: URL from a local file, next/image can't optimize it
             <img src={photoPreview} alt={studentName} className="h-20 w-16 shrink-0 rounded-md border border-border object-cover" />
           ) : (
             <Avatar name={studentName} className="h-20 w-16 shrink-0 rounded-md text-base" />
           )}
-          <div className="space-y-1.5">
+          <div className="min-w-0 space-y-1.5">
             <Label htmlFor="photo">Passport photograph</Label>
             <input
               id="photo"
@@ -76,7 +76,7 @@ export function StudentForm({
                 reader.onload = () => setPhotoPreview(typeof reader.result === "string" ? reader.result : null);
                 reader.readAsDataURL(file);
               }}
-              className="block text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-muted-surface file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground"
+              className="block max-w-full text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-muted-surface file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground"
             />
             <p className="text-xs text-muted">PNG, JPEG or WebP, up to 2MB. Optional.</p>
           </div>
@@ -91,7 +91,7 @@ export function StudentForm({
             <Input id="lastName" name="lastName" required defaultValue={defaults?.lastName} />
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="otherNames">Other names</Label>
             <Input id="otherNames" name="otherNames" defaultValue={defaults?.otherNames ?? ""} />
@@ -109,7 +109,7 @@ export function StudentForm({
             </Select>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="addressLine">Address</Label>
             <Input id="addressLine" name="addressLine" defaultValue={defaults?.addressLine ?? ""} />
@@ -173,7 +173,7 @@ export function StudentForm({
               <Input id="guardianLastName" name="guardianLastName" />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="guardianPhone">Phone</Label>
               <Input id="guardianPhone" name="guardianPhone" />

@@ -16,7 +16,7 @@ export default async function CalendarArchivePage({ searchParams }: { searchPara
   const { events, total, page, pageCount } = await listArchivedCalendarEvents(user.schoolId, params.page ? Number(params.page) : 1);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <Button asChild variant="ghost" size="sm"><Link href="/dashboard/administration/calendar">&larr; Calendar</Link></Button>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Calendar Archive</h1>

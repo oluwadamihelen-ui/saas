@@ -14,7 +14,7 @@ export default async function AdminLiveClassesPage() {
   const liveClasses = await listAllLiveClassesForSchool(user.schoolId);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Live Classes</h1>
         <p className="text-sm text-muted">Scheduled, live and completed classes across the school.</p>

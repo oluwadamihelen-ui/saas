@@ -11,7 +11,7 @@ export default async function NewLecturePage() {
   const [assignments, terms] = await Promise.all([listTeachableAssignments(user.schoolId, user.id), listTerms(user.schoolId)]);
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-3xl space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Create Lecture</h1>
         <p className="text-sm text-muted">Share a self-paced lecture with one of your assigned classes.</p>

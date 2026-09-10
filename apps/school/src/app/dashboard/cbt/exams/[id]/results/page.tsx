@@ -33,7 +33,7 @@ export default async function ExamResultsPage({ params }: { params: Promise<{ id
   if (!analytics) notFound();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Results</h1>

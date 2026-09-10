@@ -16,7 +16,7 @@ export default async function ParentAnnouncementsPage({ searchParams }: { search
     : { announcements: [], page: 1, pageCount: 1 };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Announcements</h1>
         <p className="text-sm text-muted">Notices from the school and your children&apos;s classes.</p>

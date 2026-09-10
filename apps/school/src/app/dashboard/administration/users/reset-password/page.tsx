@@ -11,7 +11,7 @@ export default async function ResetPasswordPage() {
   const accounts = await listAllAccountsBrief(user.schoolId);
 
   return (
-    <div className="max-w-lg space-y-6">
+    <div className="max-w-lg space-y-4 sm:space-y-6">
       <div>
         <Button asChild variant="ghost" size="sm"><Link href="/dashboard/administration/users">&larr; All Users</Link></Button>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Reset Password</h1>

@@ -59,7 +59,7 @@ export default async function ExamSecurityPage({ params }: { params: Promise<{ i
   const summary = [...byStudent.values()].sort((a, b) => b.count - a.count);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Security log — {exam.title}</h1>
         <p className="text-sm text-muted">

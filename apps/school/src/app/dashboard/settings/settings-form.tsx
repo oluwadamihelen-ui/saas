@@ -37,7 +37,7 @@ export function SettingsForm({ school }: { school: School }) {
         <Label htmlFor="addressLine">Address</Label>
         <Input id="addressLine" name="addressLine" defaultValue={school.addressLine ?? ""} />
       </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="space-y-1.5">
           <Label htmlFor="city">City</Label>
           <Input id="city" name="city" defaultValue={school.city ?? ""} />
@@ -68,7 +68,7 @@ export function SettingsForm({ school }: { school: School }) {
       <div>
         <h3 className="mb-3 text-sm font-semibold text-foreground">Bank details</h3>
         <p className="mb-3 text-xs text-muted">Shown to parents on the pay page as a bank-transfer option. Leave blank to hide it.</p>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="bankName">Bank name</Label>
             <Input id="bankName" name="bankName" defaultValue={school.bankName ?? ""} />

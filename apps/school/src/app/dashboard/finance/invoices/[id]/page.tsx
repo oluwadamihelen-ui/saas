@@ -33,7 +33,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const payUrl = `${process.env.APP_URL ?? "http://localhost:3001"}/pay/${invoice.payToken}`;
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-3xl space-y-4 sm:space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">{invoice.invoiceNumber}</h1>

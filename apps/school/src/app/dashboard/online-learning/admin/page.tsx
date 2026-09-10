@@ -20,7 +20,7 @@ export default async function OnlineLearningAdminOverviewPage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Online Learning — Overview</h1>
         <p className="text-sm text-muted">School-wide activity across self-paced lectures and live classes.</p>

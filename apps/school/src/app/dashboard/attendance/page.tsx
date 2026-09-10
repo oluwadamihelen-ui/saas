@@ -31,14 +31,14 @@ export default async function AttendancePage({
   const roster = classArmId ? await getRosterForDate(user.schoolId, classArmId, date) : null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Attendance</h1>
         <p className="text-sm text-muted">{canMark ? "Mark daily attendance for a class." : "View daily attendance for a class."}</p>
       </div>
 
       <Card>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4 sm:space-y-6">
           <form className="flex flex-wrap items-end gap-3" method="get">
             <div className="w-64 space-y-1.5">
               <label className="text-sm font-medium text-foreground" htmlFor="classArmId">Class</label>

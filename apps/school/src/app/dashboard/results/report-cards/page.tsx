@@ -31,14 +31,14 @@ export default async function ReportCardsPage({
   const list = classArmId && termId ? await listReportCardsForClass(user.schoolId, classArmId, termId) : [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Report cards</h1>
         <p className="text-sm text-muted">Review, approve and publish each student&apos;s report card.</p>
       </div>
 
       <Card>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4 sm:space-y-6">
           <form className="flex items-end gap-3" method="get">
             <div className="w-64 space-y-1.5">
               <label className="text-sm font-medium text-foreground" htmlFor="classArmId">Class</label>

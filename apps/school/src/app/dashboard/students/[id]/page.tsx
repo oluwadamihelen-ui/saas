@@ -66,29 +66,31 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
   const guardianInviteMap = new Map(guardianInvites.map((g) => [g.guardianId, g.invites]));
 
   return (
-    <div className="max-w-4xl space-y-6">
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-4">
+    <div className="max-w-4xl space-y-4 sm:space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
           {student.photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- data: URL, next/image can't optimize it
             <img
               src={student.photoUrl}
               alt={`${student.firstName} ${student.lastName}`}
-              className="h-14 w-14 shrink-0 rounded-md border border-border object-cover"
+              className="h-12 w-12 shrink-0 rounded-md border border-border object-cover sm:h-14 sm:w-14"
             />
           ) : (
-            <Avatar name={`${student.firstName} ${student.lastName}`} className="h-14 w-14 text-base" />
+            <Avatar name={`${student.firstName} ${student.lastName}`} className="h-12 w-12 shrink-0 text-base sm:h-14 sm:w-14" />
           )}
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              {student.firstName} {student.lastName}
-            </h1>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="truncate text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+                {student.firstName} {student.lastName}
+              </h1>
+              <Badge variant={STATUS_VARIANT[student.status]}>{student.status}</Badge>
+            </div>
             <p className="text-sm text-muted">
               {student.admissionNumber} ·{" "}
               {student.classArm ? `${student.classArm.classGroup.name} ${student.classArm.name}` : "Unassigned"}
             </p>
           </div>
-          <Badge variant={STATUS_VARIANT[student.status]}>{student.status}</Badge>
         </div>
         <div className="flex items-center gap-2">
           {canEdit && (

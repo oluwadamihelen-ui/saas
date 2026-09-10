@@ -32,7 +32,7 @@ export default async function LectureDetailPage({ params }: { params: Promise<{ 
   const { summary } = await getLectureProgressForTeacher(user.schoolId, user.id, id);
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="max-w-4xl space-y-4 sm:space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">

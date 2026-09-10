@@ -20,7 +20,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
   if (!event) notFound();
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-2xl space-y-4 sm:space-y-6">
       <div>
         <Button asChild variant="ghost" size="sm"><Link href="/dashboard/administration/calendar">&larr; Calendar</Link></Button>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Edit Event</h1>

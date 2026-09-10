@@ -16,7 +16,7 @@ export default async function StudentDashboardPage() {
   const upcoming = assignments.filter((a) => a.status !== "GRADED").slice(0, 5);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           Welcome, {student.firstName}

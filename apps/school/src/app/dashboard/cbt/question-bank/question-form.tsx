@@ -101,7 +101,7 @@ export function QuestionForm({
   const showRubric = type === "ESSAY";
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form action={formAction} className="space-y-4 sm:space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="subjectId">Subject</Label>

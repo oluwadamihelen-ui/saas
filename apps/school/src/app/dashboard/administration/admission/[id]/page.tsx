@@ -36,7 +36,7 @@ export default async function ApplicantDetailPage({ params }: { params: Promise<
   const currency = school?.currency ?? "NGN";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <Link href="/dashboard/administration/admission" className="text-sm text-muted hover:text-accent">&larr; Applicants</Link>
         <div className="mt-1 flex flex-wrap items-center gap-3">

@@ -77,7 +77,7 @@ export function LectureViewer({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {primaryMedia?.fileUrl && (
         <div className="space-y-2">
           {primaryMedia.type === "VIDEO" ? (

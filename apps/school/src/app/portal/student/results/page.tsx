@@ -16,7 +16,7 @@ export default async function StudentResultsPage() {
   const reportCard = currentTerm ? await computeReportCard(user.schoolId, student.id, currentTerm.id) : null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Results</h1>
         <p className="text-sm text-muted">{reportCard?.term?.name ?? "No active term"}</p>

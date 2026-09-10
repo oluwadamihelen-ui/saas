@@ -27,7 +27,7 @@ export default async function TransportRoutePage({ params }: { params: Promise<{
   const unassignedStudents = students.filter((s) => !assignedStudentIds.has(s.id));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <Button asChild variant="ghost" size="sm"><Link href="/dashboard/transport">&larr; Transport</Link></Button>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">{route.name}</h1>

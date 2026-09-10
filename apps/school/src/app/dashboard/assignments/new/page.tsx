@@ -9,7 +9,7 @@ export default async function NewAssignmentPage() {
   const [classArms, subjects] = await Promise.all([listClassArms(user.schoolId), listSubjects(user.schoolId)]);
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-2xl space-y-4 sm:space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight text-foreground">New assignment</h1>
       <Card>
         <CardHeader>

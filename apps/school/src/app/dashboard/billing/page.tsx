@@ -46,7 +46,7 @@ export default async function BillingPage() {
 
   if (!billing) {
     return (
-      <div className="max-w-3xl space-y-6">
+      <div className="max-w-3xl space-y-4 sm:space-y-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Billing</h1>
           <p className="text-sm text-muted">Your school&apos;s subscription with Winfield.</p>
@@ -67,7 +67,7 @@ export default async function BillingPage() {
   const includedFeatureCount = Object.values((plan.features as Record<string, boolean>) ?? {}).filter(Boolean).length;
 
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="max-w-5xl space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Billing</h1>
         <p className="text-sm text-muted">Your school&apos;s subscription with Winfield.</p>

@@ -18,7 +18,7 @@ export default async function PayTokenLayout({
   if (!invoice) notFound();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <BrandStyle color={invoice.school.brandColor} />
       <SchoolLogo name={invoice.school.name} logoUrl={invoice.school.logoUrl} height={28} />
       {children}

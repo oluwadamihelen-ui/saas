@@ -13,7 +13,7 @@ export default async function StudentFeedbackPage({ searchParams }: { searchPara
   const { items, total, page, pageCount } = await listMyFeedback(user.schoolId, user.id, params.page ? Number(params.page) : 1);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Feedback</h1>
         <p className="text-sm text-muted">Share a suggestion or concern with the school.</p>

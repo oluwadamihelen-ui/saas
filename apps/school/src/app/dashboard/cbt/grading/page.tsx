@@ -28,7 +28,7 @@ export default async function GradingQueuePage({ searchParams }: { searchParams:
   const queue = await listGradingQueue(user.schoolId, { examId: params.examId });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Manual grading</h1>
         <p className="text-sm text-muted">{queue.length} answer{queue.length === 1 ? "" : "s"} waiting for a grade.</p>

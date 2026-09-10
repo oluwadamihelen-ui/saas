@@ -18,7 +18,7 @@ export default async function ParentMessagesPage({ searchParams }: { searchParam
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Messages</h1>

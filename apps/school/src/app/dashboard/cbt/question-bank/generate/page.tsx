@@ -25,7 +25,7 @@ export default async function GenerateQuestionsPage() {
 
   if (!isCbtAiConfigured()) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Generate questions with AI</h1>
         <EmptyState
           icon={<Sparkles className="h-6 w-6" />}
@@ -43,7 +43,7 @@ export default async function GenerateQuestionsPage() {
   ]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Generate questions with AI</h1>
         <p className="text-sm text-muted">

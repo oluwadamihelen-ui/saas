@@ -13,7 +13,7 @@ export default async function ApplyPage({ params }: { params: Promise<{ slug: st
   const classGroups = await listClassGroups(school.id);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">{school.name} — Admission Application</h1>
         <p className="text-sm text-muted">Tell us about your child to begin the admission process.</p>

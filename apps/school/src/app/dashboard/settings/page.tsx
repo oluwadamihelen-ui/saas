@@ -23,7 +23,7 @@ export default async function SettingsPage() {
   const credentialByProvider = new Map(credentials.map((c) => [c.provider, c]));
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-2xl space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Settings</h1>
         <p className="text-sm text-muted">School profile, branding and payment gateways.</p>

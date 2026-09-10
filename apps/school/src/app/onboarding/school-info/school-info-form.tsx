@@ -33,7 +33,7 @@ export function SchoolInfoForm() {
         <Label htmlFor="addressLine">Address</Label>
         <Input id="addressLine" name="addressLine" placeholder="12 School Road" />
       </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="space-y-1.5">
           <Label htmlFor="city">City</Label>
           <Input id="city" name="city" placeholder="Lagos" />

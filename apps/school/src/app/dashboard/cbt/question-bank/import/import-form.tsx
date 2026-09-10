@@ -33,7 +33,7 @@ export function ImportForm() {
   const validCount = previewState.rows?.filter((r) => r.valid).length ?? 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {previewState.status !== "previewed" && (
         <form action={previewAction} className="space-y-4">
           <div className="space-y-1.5">

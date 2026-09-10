@@ -39,7 +39,7 @@ export function LiveClassForm({
   const [state, formAction, isPending] = useActionState(action, { status: "idle" } as LiveClassFormState);
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form action={formAction} className="space-y-4 sm:space-y-6">
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label htmlFor="subjectClassKey">Subject &amp; class</Label>
@@ -95,7 +95,7 @@ export function LiveClassForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="space-y-1.5">
           <Label htmlFor="durationMinutes">Expected duration (minutes)</Label>
           <Input id="durationMinutes" name="durationMinutes" type="number" min={5} max={300} required defaultValue={defaults?.durationMinutes ?? 40} />

@@ -20,7 +20,7 @@ export default async function AcademicsPage() {
     : [[], [], []];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Academics</h1>
         <p className="text-sm text-muted">
@@ -58,7 +58,7 @@ export default async function AcademicsPage() {
               This determines what a teacher can mark attendance for, set assignments in, and enter scores for.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-4 sm:space-y-6">
             <TeacherAssignmentForm teachers={teachers} subjects={subjects} classArms={classArms} />
 
             {assignments.length === 0 ? (

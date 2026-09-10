@@ -49,7 +49,7 @@ export default async function TimetablePage({
         <CardHeader>
           <CardTitle>Class timetable</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4 sm:space-y-6">
           <form className="flex items-end gap-3" method="get">
             <div className="w-64 space-y-1.5">
               <label className="text-sm font-medium text-foreground" htmlFor="classArmId">Class</label>
@@ -92,7 +92,7 @@ export default async function TimetablePage({
         <CardHeader>
           <CardTitle>Teacher timetable</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4 sm:space-y-6">
           <form className="flex items-end gap-3" method="get">
             {classArmId && <input type="hidden" name="classArmId" value={classArmId} />}
             <div className="w-64 space-y-1.5">
