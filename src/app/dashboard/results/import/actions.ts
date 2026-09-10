@@ -9,7 +9,7 @@ import { logAudit } from "@/lib/audit";
 export interface ResultsImportPreviewState {
   status: "idle" | "error" | "previewed";
   message?: string;
-  rows?: { rowNumber: number; summary: string; errors: string[]; valid: boolean }[];
+  rows?: { rowNumber: number; summary: string; errors: string[]; warnings: string[]; valid: boolean }[];
   validRowsJson?: string;
 }
 
@@ -37,7 +37,7 @@ export async function previewResultsImportAction(
 
   return {
     status: "previewed",
-    rows: rows.map((r) => ({ rowNumber: r.rowNumber, summary: r.summary, errors: r.errors, valid: r.data !== null })),
+    rows: rows.map((r) => ({ rowNumber: r.rowNumber, summary: r.summary, errors: r.errors, warnings: r.warnings, valid: r.data !== null })),
     validRowsJson: JSON.stringify(validRows),
   };
 }

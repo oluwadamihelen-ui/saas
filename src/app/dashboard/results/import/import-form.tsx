@@ -36,6 +36,7 @@ export function ResultsImportForm() {
   }
 
   const validCount = previewState.rows?.filter((r) => r.valid).length ?? 0;
+  const noClassCount = previewState.rows?.filter((r) => r.valid && r.warnings.length > 0).length ?? 0;
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -62,6 +63,13 @@ export function ResultsImportForm() {
           <p className="text-sm text-foreground">
             {validCount} of {previewState.rows.length} row{previewState.rows.length === 1 ? "" : "s"} are valid and ready to import.
           </p>
+          {noClassCount > 0 && (
+            <p className="text-sm text-warning">
+              {noClassCount} of those row{noClassCount === 1 ? "" : "s"} have no class specified — they&apos;ll import with an{" "}
+              <strong>unknown historical class</strong> rather than a guessed one. Add a className column value and re-upload if you
+              want these to have a verified class on record.
+            </p>
+          )}
 
           <div className="max-h-96 overflow-y-auto rounded-md border border-border">
             <Table>
@@ -79,7 +87,16 @@ export function ResultsImportForm() {
                     <TableCell className="max-w-md truncate">{r.summary}</TableCell>
                     <TableCell>
                       {r.valid ? (
-                        <Badge variant="success">Valid</Badge>
+                        <div className="space-y-1">
+                          <Badge variant={r.warnings.length > 0 ? "warning" : "success"}>
+                            {r.warnings.length > 0 ? "Valid — no class" : "Valid"}
+                          </Badge>
+                          {r.warnings.length > 0 && (
+                            <ul className="list-disc pl-4 text-xs text-warning">
+                              {r.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                            </ul>
+                          )}
+                        </div>
                       ) : (
                         <div className="space-y-1">
                           <Badge variant="danger">Invalid</Badge>
