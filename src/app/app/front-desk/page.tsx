@@ -4,6 +4,7 @@ import { UserPlus } from "lucide-react";
 import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatCard, StatCardGrid } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -28,12 +29,12 @@ export default async function FrontDeskPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <StatCardGrid>
         <StatCard label="Arrivals Today" value={board.arrivalsToday.length} />
         <StatCard label="Departures Today" value={board.departuresToday.length} />
         <StatCard label="Current Guests" value={board.currentGuests.length} />
         <StatCard label="Available Rooms" value={board.availableRoomsCount} />
-      </div>
+      </StatCardGrid>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
@@ -159,16 +160,5 @@ export default async function FrontDeskPage() {
         </Card>
       )}
     </div>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: number }) {
-  return (
-    <Card>
-      <CardContent>
-        <p className="text-2xl font-semibold text-foreground">{value}</p>
-        <p className="text-xs text-muted">{label}</p>
-      </CardContent>
-    </Card>
   );
 }

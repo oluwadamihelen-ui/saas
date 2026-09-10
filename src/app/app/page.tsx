@@ -3,6 +3,7 @@ import Link from "next/link";
 import { CalendarCheck, LogOut, Users, BedDouble, DoorOpen, DoorClosed, SprayCan, DollarSign, AlertCircle, Percent } from "lucide-react";
 import { requireHotelUser } from "@/lib/auth/require";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatCard, StatCardGrid } from "@/components/ui/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -44,21 +45,11 @@ export default async function DashboardPage() {
         <p className="text-sm text-muted">{user.hotelName}</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
+      <StatCardGrid>
         {cards.map((card) => (
-          <Card key={card.label}>
-            <CardContent className="flex items-center gap-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent-soft">
-                <card.icon className="h-5 w-5 text-accent" />
-              </div>
-              <div>
-                <p className="text-xl font-semibold text-foreground">{card.value}</p>
-                <p className="text-xs text-muted">{card.label}</p>
-              </div>
-            </CardContent>
-          </Card>
+          <StatCard key={card.label} label={card.label} value={card.value} icon={card.icon} />
         ))}
-      </div>
+      </StatCardGrid>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">

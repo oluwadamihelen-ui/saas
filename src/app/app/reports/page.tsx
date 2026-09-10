@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatCard, StatCardGrid } from "@/components/ui/stat-card";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import {
   occupancyReport,
@@ -107,12 +108,12 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         </form>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <StatCardGrid>
         <StatCard label="Revenue" value={formatCurrency(revenue.total, currency)} />
         <StatCard label="Expenses" value={formatCurrency(expenses.total, currency)} />
         <StatCard label="Estimated Profit" value={formatCurrency(profit.estimatedProfit, currency)} />
         <StatCard label="Avg. Occupancy" value={`${occupancy.averageOccupancyRate}%`} />
-      </div>
+      </StatCardGrid>
       <p className="text-xs text-muted">
         Estimated profit is revenue collected minus recorded expenses in this window — not an accounting-grade profit figure (it does not account for
         accruals, taxes, or depreciation).
@@ -280,17 +281,6 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         </Card>
       </div>
     </div>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
-      <CardContent>
-        <p className="text-xl font-semibold text-foreground">{value}</p>
-        <p className="text-xs text-muted">{label}</p>
-      </CardContent>
-    </Card>
   );
 }
 

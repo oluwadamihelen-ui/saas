@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Building2, Users, CalendarCheck, TrendingUp, AlertTriangle } from "lucide-react";
 import { requireSuperAdmin } from "@/lib/auth/require";
 import { Card, CardContent } from "@/components/ui/card";
+import { StatCard, StatCardGrid } from "@/components/ui/stat-card";
 import { getPlatformOverview } from "@/lib/services/hotels";
 
 export const metadata: Metadata = { title: "Platform Overview" };
@@ -23,21 +24,11 @@ export default async function SuperAdminOverviewPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">Platform Overview</h1>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+      <StatCardGrid>
         {cards.map((c) => (
-          <Card key={c.label}>
-            <CardContent className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-accent-soft">
-                <c.icon className="h-5 w-5 text-accent" />
-              </div>
-              <div>
-                <p className="text-xl font-semibold text-foreground">{c.value}</p>
-                <p className="text-xs text-muted">{c.label}</p>
-              </div>
-            </CardContent>
-          </Card>
+          <StatCard key={c.label} label={c.label} value={c.value} icon={c.icon} />
         ))}
-      </div>
+      </StatCardGrid>
 
       <Card>
         <CardContent>
