@@ -24,6 +24,15 @@ export function initials(name: string): string {
     .join("");
 }
 
+/// Month + day only, deliberately never the year (e.g. birthday widgets) —
+/// birth year is personal information that shouldn't be surfaced outside a
+/// profile page that's already gated on viewing full Date of Birth.
+export function formatMonthDay(month: number, day: number): string {
+  // Any non-leap year works here since we only format month/day; 2001 avoids
+  // Feb 29 ever being an invalid date for this purpose.
+  return new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric" }).format(new Date(2001, month - 1, day));
+}
+
 export function calculateAge(dateOfBirth: Date): number {
   const now = new Date();
   let age = now.getFullYear() - dateOfBirth.getFullYear();

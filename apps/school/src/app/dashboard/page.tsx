@@ -1,14 +1,16 @@
 import Link from "next/link";
-import { CalendarClock, TrendingUp, Wallet, Banknote, Library, Bus, BedDouble } from "lucide-react";
+import { CalendarClock, TrendingUp, Wallet, Banknote, Library, Bus, BedDouble, Cake } from "lucide-react";
 import { requireSchoolUser } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getDashboardStats } from "@/lib/services/dashboard";
 import { getTodayAttendanceSummary } from "@/lib/services/attendance";
 import { getFinanceStats } from "@/lib/services/finance-dashboard";
+import { getUpcomingBirthdays, type BirthdayPersonType } from "@/lib/services/birthdays";
 import { prisma } from "@/lib/db";
 import { formatMoney } from "@/lib/money";
 import { StatCard } from "@/components/dashboard/stat-card";
+import { BirthdayList } from "@/components/dashboard/birthday-list";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +24,12 @@ export default async function DashboardPage() {
   const canViewFinance = perms.has(PERMISSIONS.FINANCE_VIEW);
   const canEnroll = perms.has(PERMISSIONS.STUDENTS_CREATE);
   const canUseAssistant = perms.has(PERMISSIONS.ASSISTANT_USE);
+  const canViewStudentBirthdays = perms.has(PERMISSIONS.STUDENTS_VIEW);
+  const canViewStaffBirthdays = perms.has(PERMISSIONS.STAFF_VIEW);
+  const birthdayTypes: BirthdayPersonType[] = [
+    ...(canViewStudentBirthdays ? (["STUDENT"] as const) : []),
+    ...(canViewStaffBirthdays ? (["STAFF"] as const) : []),
+  ];
   const operationsLinks = [
     { href: "/dashboard/payroll", label: "Payroll", icon: Banknote, show: perms.has(PERMISSIONS.PAYROLL_VIEW) },
     { href: "/dashboard/library", label: "Library", icon: Library, show: perms.has(PERMISSIONS.LIBRARY_VIEW) },
@@ -34,6 +42,8 @@ export default async function DashboardPage() {
     prisma.school.findUniqueOrThrow({ where: { id: user.schoolId } }),
   ]);
   const financeStats = canViewFinance ? await getFinanceStats(user.schoolId, stats.currentTerm?.id) : null;
+  const upcomingBirthdays =
+    birthdayTypes.length > 0 ? await getUpcomingBirthdays(user.schoolId, school.timezone, { types: birthdayTypes, limit: 7 }) : [];
 
   return (
     <div className="space-y-8">
@@ -197,6 +207,25 @@ export default async function DashboardPage() {
           </Card>
         </div>
       </div>
+
+      {birthdayTypes.length > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Cake className="h-4 w-4 text-accent" /> Upcoming Birthdays
+              </CardTitle>
+              <CardDescription>The next 7 birthdays among active students and staff.</CardDescription>
+            </div>
+            <Button asChild variant="secondary" size="sm">
+              <Link href="/dashboard/birthdays">View all</Link>
+            </Button>
+          </CardHeader>
+          <CardContent className="p-0">
+            <BirthdayList entries={upcomingBirthdays} />
+          </CardContent>
+        </Card>
+      )}
 
       {operationsLinks.length > 0 && (
         <div className="space-y-3">

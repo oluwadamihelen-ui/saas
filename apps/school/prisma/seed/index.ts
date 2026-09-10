@@ -63,6 +63,18 @@ function randomScore(max: number) {
   return Math.round(max * (0.5 + Math.random() * 0.45));
 }
 
+/// Staff had no Date of Birth on record at all before the Upcoming
+/// Birthdays feature — this gives every seeded staff account a realistic
+/// one (age 26-58) so the feature has real data to demonstrate on a fresh
+/// install, same as students already had.
+function randomStaffDateOfBirth(): Date {
+  const thisYear = new Date().getFullYear();
+  const birthYear = thisYear - (26 + Math.floor(Math.random() * 32));
+  const month = 1 + Math.floor(Math.random() * 12);
+  const day = 1 + Math.floor(Math.random() * 28);
+  return new Date(`${birthYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+}
+
 async function main() {
   console.log("Seeding demo school...");
 
@@ -137,7 +149,7 @@ async function main() {
   const staffUsers = await Promise.all(
     staffSeeds.map((s) =>
       prisma.user.create({
-        data: { schoolId: school.id, roleId: roleByKey.get(s.role)!.id, email: s.email, name: s.name, passwordHash },
+        data: { schoolId: school.id, roleId: roleByKey.get(s.role)!.id, email: s.email, name: s.name, passwordHash, dateOfBirth: randomStaffDateOfBirth() },
       })
     )
   );

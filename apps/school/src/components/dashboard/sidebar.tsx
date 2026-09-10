@@ -39,6 +39,7 @@ import {
   UserCheck,
   TrendingUp,
   Upload,
+  Cake,
 } from "lucide-react";
 import { SchoolLogo } from "@/components/brand/school-logo";
 import { PERMISSIONS, type PermissionKey } from "@/lib/permissions";
@@ -65,6 +66,7 @@ interface DashboardNavItem extends NavItem {
 const NAV: DashboardNavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/students", label: "Students", icon: GraduationCap },
+  { href: "/dashboard/birthdays", label: "Birthdays", icon: Cake, requiredAnyPermission: [PERMISSIONS.STUDENTS_VIEW, PERMISSIONS.STAFF_VIEW] },
   {
     label: "Administration",
     icon: IdCard,

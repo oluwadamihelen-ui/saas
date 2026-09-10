@@ -223,6 +223,12 @@ model User {
   avatarUrl    String?
   status       UserStatus @default(ACTIVE)
 
+  /// Staff date of birth, for the Upcoming Birthdays feature — mirrors
+  /// Student.dateOfBirth. Only month/day are used to compute a birthday;
+  /// the full date is kept (like Student's) in case a future feature needs
+  /// it, but the birthday UI never displays the year.
+  dateOfBirth DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
