@@ -5,6 +5,53 @@ import type { Gender, GuardianRelationship, Prisma, StudentStatus } from "@/gene
 
 const PAGE_SIZE = 20;
 
+type Tx = Prisma.TransactionClient;
+
+/// The single write path for StudentClassHistory from a live (not
+/// imported) class assignment — called only from createStudent and
+/// updateStudent, so "a student's class was deliberately set/changed" has
+/// exactly one place that logs it, per the audit's "ensure history is not
+/// duplicated" requirement. Not called on every student save: only when
+/// classArmId is actually being set to a new value.
+///
+/// Resolves the school's current academic session and:
+/// - closes whichever of this student's history rows is still open
+///   (endDate null), if its class differs from the new one — an arm
+///   change (or a promotion) is "the old segment just ended," not an
+///   edit to it;
+/// - does nothing if the open row already matches (e.g. an unrelated
+///   profile edit that happens to re-submit the same classArmId);
+/// - creates a new open row for the new class.
+/// Skips silently if the school has no current session yet (early
+/// onboarding, before Academics is set up) — there's no session to file
+/// the row under, and this must never block saving the student.
+async function recordClassHistory(tx: Tx, schoolId: string, studentId: string, classArmId: string) {
+  const currentSession = await tx.academicSession.findFirst({ where: { schoolId, isCurrent: true } });
+  if (!currentSession) return;
+
+  const openRow = await tx.studentClassHistory.findFirst({
+    where: { schoolId, studentId, endDate: null },
+    orderBy: { startDate: "desc" },
+  });
+  if (openRow?.classArmId === classArmId) return;
+
+  const now = new Date();
+  if (openRow) {
+    await tx.studentClassHistory.update({ where: { id: openRow.id }, data: { endDate: now } });
+  }
+  await tx.studentClassHistory.create({
+    data: {
+      schoolId,
+      studentId,
+      academicSessionId: currentSession.id,
+      classArmId,
+      startDate: now,
+      status: "ACTIVE",
+      source: "ENTERED",
+    },
+  });
+}
+
 export interface StudentListFilters {
   search?: string;
   classArmId?: string;
@@ -157,6 +204,10 @@ export async function createStudent(schoolId: string, input: StudentInput) {
       });
     }
 
+    if (input.classArmId) {
+      await recordClassHistory(tx, schoolId, student.id, input.classArmId);
+    }
+
     return student;
   });
 }
@@ -165,33 +216,64 @@ export async function updateStudent(schoolId: string, id: string, input: Partial
   const existing = await prisma.student.findFirst({ where: { schoolId, id } });
   if (!existing) throw new Error("Student not found");
 
-  return prisma.student.update({
-    where: { id },
-    data: {
-      firstName: input.firstName,
-      lastName: input.lastName,
-      otherNames: input.otherNames,
-      photoUrl: input.photoUrl,
-      dateOfBirth: input.dateOfBirth,
-      gender: input.gender,
-      bloodGroup: input.bloodGroup,
-      nationality: input.nationality,
-      addressLine: input.addressLine,
-      city: input.city,
-      state: input.state,
-      medicalNotes: input.medicalNotes,
-      allergies: input.allergies,
-      emergencyContact: input.emergencyContact,
-      classArmId: input.classArmId,
-      campusId: input.campusId,
-    },
+  /// A class change is anything from a routine profile edit that also
+  /// touches classArmId to a deliberate promotion/transfer — either way,
+  /// Student.classArmId (the current-class source of truth every other
+  /// feature already reads) is unaffected in how it behaves; this only
+  /// decides whether a StudentClassHistory row also gets written.
+  const isClassChange = "classArmId" in input && input.classArmId !== existing.classArmId;
+
+  return prisma.$transaction(async (tx) => {
+    const student = await tx.student.update({
+      where: { id },
+      data: {
+        firstName: input.firstName,
+        lastName: input.lastName,
+        otherNames: input.otherNames,
+        photoUrl: input.photoUrl,
+        dateOfBirth: input.dateOfBirth,
+        gender: input.gender,
+        bloodGroup: input.bloodGroup,
+        nationality: input.nationality,
+        addressLine: input.addressLine,
+        city: input.city,
+        state: input.state,
+        medicalNotes: input.medicalNotes,
+        allergies: input.allergies,
+        emergencyContact: input.emergencyContact,
+        classArmId: input.classArmId,
+        campusId: input.campusId,
+      },
+    });
+
+    if (isClassChange && input.classArmId) {
+      await recordClassHistory(tx, schoolId, id, input.classArmId);
+    } else if (isClassChange && input.classArmId === null) {
+      // Explicitly unassigned from any class — close the open history
+      // segment (the student has no current class), but there's no new
+      // class to log a row for.
+      const openRow = await tx.studentClassHistory.findFirst({ where: { schoolId, studentId: id, endDate: null } });
+      if (openRow) await tx.studentClassHistory.update({ where: { id: openRow.id }, data: { endDate: new Date() } });
+    }
+
+    return student;
   });
 }
 
 export async function withdrawStudent(schoolId: string, id: string) {
   const existing = await prisma.student.findFirst({ where: { schoolId, id } });
   if (!existing) throw new Error("Student not found");
-  return prisma.student.update({ where: { id }, data: { status: "WITHDRAWN" } });
+
+  return prisma.$transaction(async (tx) => {
+    const student = await tx.student.update({ where: { id }, data: { status: "WITHDRAWN" } });
+
+    const openRow = await tx.studentClassHistory.findFirst({ where: { schoolId, studentId: id, endDate: null } });
+    if (openRow) {
+      await tx.studentClassHistory.update({ where: { id: openRow.id }, data: { endDate: new Date(), status: "WITHDRAWN" } });
+    }
+
+    return student;
+  });
 }
 
 export async function addGuardianToStudent(
