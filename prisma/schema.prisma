@@ -123,6 +123,7 @@ model School {
   preschoolReports               PreschoolReport[]
   scores                         Score[]
   reportCards                    ReportCard[]
+  classHistory                   StudentClassHistory[]
   transcripts                    Transcript[]
   feeCategories                  FeeCategory[]
   feeStructures                  FeeStructure[]
@@ -390,6 +391,7 @@ model AcademicSession {
   lectures       Lecture[]
   liveClasses    LiveClass[]
   schemesOfWork  SchemeOfWork[]
+  classHistory   StudentClassHistory[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
@@ -496,6 +498,9 @@ model ClassArm {
   calendarEvents     CalendarEvent[]
   lectures           Lecture[]
   liveClasses        LiveClass[]
+  scores             Score[]
+  reportCards        ReportCard[]
+  classHistory       StudentClassHistory[]
 
   @@unique([classGroupId, name])
   @@index([schoolId])
@@ -594,6 +599,7 @@ model Student {
   conversations                 Conversation[]
   preschoolMilestoneAssessments PreschoolMilestoneAssessment[]
   preschoolReports              PreschoolReport[]
+  classHistory                  StudentClassHistory[]
 
   bookLoans            BookLoan[]
   transportAssignments StudentTransportAssignment[]
@@ -855,6 +861,20 @@ model AssessmentComponent {
   @@index([schoolId])
 }
 
+/// The Class/Class Arm a student was actually in when a Score or
+/// ReportCard was recorded — never guessed. ENTERED means the normal app
+/// workflow (score grid, CBT grading) recorded it live, from the actual
+/// class context in use at that moment. IMPORTED means a school stated it
+/// explicitly while importing historical records. There is deliberately
+/// no "inferred/guessed" option: a record with no verified class simply
+/// leaves classArmId null rather than assuming the student's current
+/// class, which would misattribute history for any promoted/transferred
+/// student (see StudentClassHistory's doc comment for the full rationale).
+enum ClassArmSource {
+  ENTERED
+  IMPORTED
+}
+
 model Score {
   id          String              @id @default(cuid())
   schoolId    String
@@ -868,6 +888,19 @@ model Score {
   componentId String
   component   AssessmentComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
 
+  /// The class this score was actually recorded for — set once, at
+  /// creation, from the real class context (the score grid's selected
+  /// class, or an import's explicit column). Never touched again after
+  /// that, including when the score's value is later corrected: editing a
+  /// score changes what was scored, not which class it was scored in.
+  /// Null on any pre-existing row from before this field existed, and
+  /// stays null forever rather than being backfilled from the student's
+  /// current class — seeing "unknown" is safer than seeing a confident,
+  /// possibly wrong, class name.
+  classArmId     String?
+  classArm       ClassArm?       @relation(fields: [classArmId], references: [id], onDelete: SetNull)
+  classArmSource ClassArmSource?
+
   value       Int
   enteredById String
   enteredBy   User   @relation("ScoreEnteredBy", fields: [enteredById], references: [id])
@@ -879,6 +912,7 @@ model Score {
   @@index([schoolId])
   @@index([schoolId, studentId, termId])
   @@index([schoolId, subjectId, termId])
+  @@index([schoolId, classArmId, termId])
 }
 
 enum ReportCardStatus {
@@ -901,6 +935,16 @@ model ReportCard {
   termId    String
   term      Term    @relation(fields: [termId], references: [id], onDelete: Cascade)
 
+  /// The class this report card's totals/averages/position were computed
+  /// against — set once, when the report card row is first created, and
+  /// never replaced afterward even if the student is later promoted. See
+  /// Score.classArmId for the full rationale; the two are set together
+  /// (computeReportCard resolves this from the student's own scores for
+  /// the term, not from Student.classArmId).
+  classArmId     String?
+  classArm       ClassArm?       @relation(fields: [classArmId], references: [id], onDelete: SetNull)
+  classArmSource ClassArmSource?
+
   status           ReportCardStatus @default(DRAFT)
   teacherComment   String?
   principalComment String?
@@ -915,6 +959,60 @@ model ReportCard {
 
   @@unique([studentId, termId])
   @@index([schoolId])
+}
+
+enum StudentClassHistoryStatus {
+  ACTIVE
+  PROMOTED
+  REPEATED
+  TRANSFERRED_OUT
+  WITHDRAWN
+}
+
+/// A student's academic class journey over time — separate from
+/// Student.classArmId (which stays exactly what it is today: the
+/// student's *current* class, read by every existing current-class
+/// feature unchanged) and separate from Score/ReportCard.classArmId
+/// (which each already carry their own record-level class, independent
+/// of this table). This model exists for what neither of those can
+/// answer: "what class was this student in during session X," including
+/// for a session with no scores at all yet.
+///
+/// Deliberately NOT written on every score entry — that would make this
+/// table an accidental side effect of routine gradebook activity instead
+/// of a deliberate record. Rows are only written from a small, specific
+/// set of call sites: createStudent/updateStudent (an explicit class
+/// assignment or change — see recordClassHistory in students.ts) and
+/// historical results import (an explicit, school-stated class for a
+/// past session — see results-import.ts). Both paths dedupe against any
+/// existing open/matching row rather than writing blindly.
+///
+/// No @@unique constraint on (studentId, academicSessionId): a
+/// mid-session class-arm transfer (JSS2A -> JSS2B) is a second, later
+/// row for the same session, not a conflict — startDate/endDate is what
+/// distinguishes the segments, not the session alone.
+model StudentClassHistory {
+  id                String          @id @default(cuid())
+  schoolId          String
+  school            School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId         String
+  student           Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  academicSessionId String
+  academicSession   AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  classArmId        String
+  classArm          ClassArm        @relation(fields: [classArmId], references: [id], onDelete: Restrict)
+
+  startDate DateTime?
+  endDate   DateTime?
+  status    StudentClassHistoryStatus @default(ACTIVE)
+  source    ClassArmSource
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([schoolId, studentId, academicSessionId])
+  @@index([schoolId, academicSessionId, classArmId])
 }
 
 // ---------------------------------------------------------------------------
