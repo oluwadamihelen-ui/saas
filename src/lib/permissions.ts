@@ -84,6 +84,8 @@ export const PERMISSIONS = {
   LIVE_CLASSES_MANAGE: "live_classes.manage",
   LIVE_CLASSES_START: "live_classes.start",
   ONLINE_LEARNING_VIEW_ALL: "online_learning.view_all",
+  DATA_IMPORT: "data.import",
+  DATA_EXPORT: "data.export",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -164,6 +166,8 @@ export const PERMISSION_CATALOG: { key: PermissionKey; module: string; descripti
   { key: PERMISSIONS.LIVE_CLASSES_MANAGE, module: "online_learning", description: "Schedule, edit and cancel live classes for your assigned subjects and classes" },
   { key: PERMISSIONS.LIVE_CLASSES_START, module: "online_learning", description: "Start, control and end a live class session in the virtual classroom" },
   { key: PERMISSIONS.ONLINE_LEARNING_VIEW_ALL, module: "online_learning", description: "Monitor online learning activity across every teacher and class in the school" },
+  { key: PERMISSIONS.DATA_IMPORT, module: "data", description: "Access the Data Management hub's bulk import tools and import history" },
+  { key: PERMISSIONS.DATA_EXPORT, module: "data", description: "Access the Data Management hub's export tools and download templates" },
 ];
 
 /// System roles seeded into every new school (brief section 3's role list).
@@ -263,6 +267,8 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.LECTURES_VIEW,
     PERMISSIONS.LIVE_CLASSES_VIEW,
     PERMISSIONS.ONLINE_LEARNING_VIEW_ALL,
+    PERMISSIONS.DATA_IMPORT,
+    PERMISSIONS.DATA_EXPORT,
   ],
   TEACHER: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -292,6 +298,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.LIVE_CLASSES_MANAGE,
     PERMISSIONS.LIVE_CLASSES_START,
     PERMISSIONS.SUBJECTS_CREATE,
+    PERMISSIONS.DATA_EXPORT,
   ],
   ACCOUNTANT: [
     PERMISSIONS.DASHBOARD_VIEW,
