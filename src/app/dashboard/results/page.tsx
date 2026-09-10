@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
-import { listClassArms, listSubjects, getCurrentTerm } from "@/lib/services/academics";
+import { listClassArms, listSubjects, listTerms, getCurrentTerm } from "@/lib/services/academics";
 import { getScoreEntryGrid } from "@/lib/services/results";
 import { ScoreGridForm } from "./score-grid-form";
 import { ScoreGridReadOnly } from "./score-grid-readonly";
@@ -23,11 +23,13 @@ export default async function ResultsPage({
   const canViewTranscripts = perms.has(PERMISSIONS.TRANSCRIPTS_VIEW);
 
   const params = await searchParams;
-  const [classArms, subjects, currentTerm] = await Promise.all([
+  const [classArms, subjects, terms, currentTerm] = await Promise.all([
     listClassArms(user.schoolId),
     listSubjects(user.schoolId),
+    listTerms(user.schoolId),
     getCurrentTerm(user.schoolId),
   ]);
+  const sessions = Array.from(new Map(terms.map((t) => [t.academicSessionId, t.academicSession])).values());
 
   const classArmId = params.classArmId || classArms[0]?.id;
   const subjectId = params.subjectId || subjects[0]?.id;
@@ -119,6 +121,49 @@ export default async function ResultsPage({
           ) : (
             <ScoreGridReadOnly components={grid.components} rows={grid.rows} />
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Export results</CardTitle>
+          <CardDescription>
+            Leave a filter on &quot;All&quot; to include everything for it. Class filters use each score&apos;s own recorded class, not a
+            student&apos;s current one — a class-specific export won&apos;t include scores with no verified class on record.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form className="flex flex-wrap items-end gap-3" method="get" action="/api/results/export">
+            <div className="w-48 space-y-1.5">
+              <label className="text-sm font-medium text-foreground" htmlFor="export-sessionId">Session</label>
+              <Select id="export-sessionId" name="sessionId" defaultValue="">
+                <option value="">All sessions</option>
+                {sessions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </Select>
+            </div>
+            <div className="w-48 space-y-1.5">
+              <label className="text-sm font-medium text-foreground" htmlFor="export-termId">Term</label>
+              <Select id="export-termId" name="termId" defaultValue="">
+                <option value="">All terms</option>
+                {terms.map((t) => <option key={t.id} value={t.id}>{t.academicSession.name} · {t.name}</option>)}
+              </Select>
+            </div>
+            <div className="w-48 space-y-1.5">
+              <label className="text-sm font-medium text-foreground" htmlFor="export-classArmId">Class</label>
+              <Select id="export-classArmId" name="classArmId" defaultValue="">
+                <option value="">All classes</option>
+                {classArms.map((arm) => <option key={arm.id} value={arm.id}>{arm.classGroup.name} {arm.name}</option>)}
+              </Select>
+            </div>
+            <div className="w-48 space-y-1.5">
+              <label className="text-sm font-medium text-foreground" htmlFor="export-subjectId">Subject</label>
+              <Select id="export-subjectId" name="subjectId" defaultValue="">
+                <option value="">All subjects</option>
+                {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </Select>
+            </div>
+            <Button type="submit" variant="secondary">Export CSV</Button>
+          </form>
         </CardContent>
       </Card>
     </div>
