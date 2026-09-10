@@ -1,5 +1,4 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireAnyPermission } from "@/lib/auth/require";
@@ -9,6 +8,7 @@ import { listClassArms, listSubjects } from "@/lib/services/academics";
 import { TeacherAssignmentForm } from "./assignment-form";
 import { DeleteAssignmentButton } from "./delete-assignment-button";
 import { SubjectForm } from "./subject-form";
+import { SubjectRow } from "./subject-row";
 
 export default async function AcademicsPage() {
   const user = await requireAnyPermission([PERMISSIONS.ACADEMICS_MANAGE, PERMISSIONS.SUBJECTS_CREATE]);
@@ -38,11 +38,14 @@ export default async function AcademicsPage() {
           {subjects.length === 0 ? (
             <EmptyState title="No subjects yet" description="Add a subject above to get started." />
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {subjects.map((s) => (
-                <Badge key={s.id} variant="neutral">{s.name} ({s.code})</Badge>
-              ))}
-            </div>
+            <>
+              <p className="text-xs text-muted">Click a subject to fix a typo in its name or code.</p>
+              <div className="flex flex-wrap gap-2">
+                {subjects.map((s) => (
+                  <SubjectRow key={s.id} subject={s} />
+                ))}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

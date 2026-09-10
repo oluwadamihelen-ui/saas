@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission, requireAnyPermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { createTeacherAssignment, deleteTeacherAssignment } from "@/lib/services/teacher-assignments";
-import { createSubject } from "@/lib/services/academics";
+import { createSubject, updateSubject } from "@/lib/services/academics";
 import { logAudit } from "@/lib/audit";
 
 const schema = z.object({
@@ -101,4 +101,37 @@ export async function createSubjectAction(_prev: SubjectFormState, formData: For
   revalidatePath("/dashboard/academics");
   revalidatePath("/dashboard/online-learning/subjects");
   return { status: "success", message: `"${subject.name}" added.` };
+}
+
+export async function updateSubjectAction(
+  subjectId: string,
+  _prev: SubjectFormState,
+  formData: FormData
+): Promise<SubjectFormState> {
+  const user = await requireAnyPermission([PERMISSIONS.ACADEMICS_MANAGE, PERMISSIONS.SUBJECTS_CREATE]);
+
+  const parsed = subjectSchema.safeParse({ name: formData.get("name"), code: formData.get("code") });
+  if (!parsed.success) {
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check the subject details." };
+  }
+
+  let subject;
+  try {
+    subject = await updateSubject(user.schoolId, subjectId, parsed.data);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Could not update this subject." };
+  }
+
+  await logAudit({
+    schoolId: user.schoolId,
+    userId: user.id,
+    action: "subject.updated",
+    resourceType: "Subject",
+    resourceId: subject.id,
+    newValue: { name: subject.name, code: subject.code },
+  });
+
+  revalidatePath("/dashboard/academics");
+  revalidatePath("/dashboard/online-learning/subjects");
+  return { status: "success", message: `"${subject.name}" updated.` };
 }

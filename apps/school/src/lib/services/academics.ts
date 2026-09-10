@@ -154,3 +154,30 @@ export async function createSubject(schoolId: string, input: { name: string; cod
 
   return prisma.subject.create({ data: { schoolId, name, code } });
 }
+
+/// Same authorization as createSubject — fixes a typo in an existing
+/// subject's name/code without needing to delete and recreate it (which
+/// would orphan any lectures/assignments/results already tied to the old
+/// subject id).
+export async function updateSubject(schoolId: string, subjectId: string, input: { name: string; code: string }) {
+  const name = input.name.trim();
+  const code = input.code.trim().toUpperCase();
+  if (!name) throw new Error("Subject name is required.");
+  if (!code) throw new Error("Subject code is required.");
+
+  const subject = await prisma.subject.findFirst({ where: { id: subjectId, schoolId } });
+  if (!subject) throw new Error("Subject not found.");
+
+  const existing = await prisma.subject.findFirst({
+    where: { schoolId, id: { not: subjectId }, OR: [{ code }, { name: { equals: name, mode: "insensitive" } }] },
+  });
+  if (existing) {
+    throw new Error(
+      existing.code === code
+        ? `A subject with code "${code}" already exists.`
+        : `A subject named "${name}" already exists.`
+    );
+  }
+
+  return prisma.subject.update({ where: { id: subjectId }, data: { name, code } });
+}
