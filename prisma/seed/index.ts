@@ -1,1040 +1,1428 @@
 import "dotenv/config";
+import crypto from "crypto";
 import bcrypt from "bcryptjs";
-import { PrismaClient } from "../../src/generated/prisma/client";
-import { PERMISSION_CATALOG, ROLE_DEFAULT_PERMISSIONS } from "../../src/lib/auth/permissions";
-import { generateQuoteNumber } from "../../src/lib/utils/ids";
+import { PrismaClient, type Prisma } from "../../src/generated/prisma/client";
+import {
+  PERMISSION_CATALOG,
+  ROLE_DEFAULT_PERMISSIONS,
+  SYSTEM_ROLE_KEYS,
+  SYSTEM_ROLE_LABELS,
+  type SystemRoleKey,
+} from "../../src/lib/permissions";
+import { PLAN_CATALOG, PLAN_TIERS, TRIAL_PERIOD_DAYS } from "../../src/lib/billing/plan-catalog";
 
 const prisma = new PrismaClient();
+const DEMO_PASSWORD = "Passw0rd!23";
 
-function slugify(input: string) {
-  return input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
-
-function placeholderImage(seed: string, i: number) {
-  return `https://picsum.photos/seed/${seed}-${i}/900/560`;
-}
-
-async function seedRolesAndPermissions() {
-  const permissionRecords = await Promise.all(
-    PERMISSION_CATALOG.map((p) =>
-      prisma.permission.upsert({
-        where: { key: p.key },
-        update: { description: p.description, category: p.category },
-        create: { key: p.key, description: p.description, category: p.category },
-      })
-    )
-  );
-  const permissionByKey = new Map(permissionRecords.map((p) => [p.key, p]));
-
-  const roleDefs: { key: "SUPER_ADMIN" | "STAFF" | "CUSTOMER" | "DEVELOPER"; name: string; description: string }[] = [
-    { key: "SUPER_ADMIN", name: "Super Admin", description: "Full control over the platform" },
-    { key: "STAFF", name: "Staff / Operations", description: "Limited administrative access" },
-    { key: "CUSTOMER", name: "Customer", description: "Buys and manages applications, deployments and services" },
-    { key: "DEVELOPER", name: "App Developer", description: "Future role: publishes applications to the marketplace" },
-  ];
-
-  const roles = new Map<string, { id: string }>();
-  for (const def of roleDefs) {
-    const role = await prisma.role.upsert({
-      where: { key: def.key },
-      update: { name: def.name, description: def.description },
-      create: { key: def.key, name: def.name, description: def.description },
-    });
-    roles.set(def.key, role);
-
-    const grantKeys = ROLE_DEFAULT_PERMISSIONS[def.key];
-    for (const key of grantKeys) {
-      const permission = permissionByKey.get(key);
-      if (!permission) continue;
-      await prisma.rolePermission.upsert({
-        where: { roleId_permissionId: { roleId: role.id, permissionId: permission.id } },
-        update: {},
-        create: { roleId: role.id, permissionId: permission.id },
-      });
-    }
-  }
-
-  return roles;
-}
-
-async function seedProviders() {
-  const providers: { name: string; type: "PAYMENT" | "DOMAIN" | "DNS" | "HOSTING" | "DEPLOYMENT" | "EMAIL"; adapterKey: string; isDefault: boolean }[] = [
-    { name: "Mock Payments", type: "PAYMENT", adapterKey: "mock", isDefault: true },
-    { name: "Paystack", type: "PAYMENT", adapterKey: "paystack", isDefault: false },
-    { name: "Mock Registrar", type: "DOMAIN", adapterKey: "mock", isDefault: true },
-    { name: "Mock DNS", type: "DNS", adapterKey: "mock", isDefault: true },
-    { name: "Mock Hosting", type: "HOSTING", adapterKey: "mock", isDefault: true },
-    { name: "Mock Deployment", type: "DEPLOYMENT", adapterKey: "mock", isDefault: true },
-    { name: "Mock Email", type: "EMAIL", adapterKey: "mock", isDefault: true },
-  ];
-
-  for (const p of providers) {
-    const existing = await prisma.provider.findFirst({ where: { type: p.type, adapterKey: p.adapterKey } });
-    if (existing) continue;
-    await prisma.provider.create({
-      data: { name: p.name, type: p.type, adapterKey: p.adapterKey, isDefault: p.isDefault, mode: p.adapterKey === "mock" ? "MOCK" : "ERROR" },
-    });
-  }
-}
-
-async function seedSettings() {
-  await prisma.setting.upsert({
-    where: { key: "general" },
-    update: {},
-    create: { key: "general", value: { companyName: "BridgeCodes, Inc.", supportEmail: "support@bridgecodes.example", currency: "USD" } },
-  });
-
-  await prisma.notificationSchedule.upsert({
-    where: { key: "domain.expiry" },
-    update: {},
-    create: { key: "domain.expiry", daysBefore: [30, 14, 7, 3, 1], isActive: true },
-  });
-
-  const legalDocs = [
-    { slug: "terms", title: "Terms of Service", body: "These Terms of Service govern your use of BridgeCodes's marketplace and managed deployment services. By purchasing or deploying an application through the platform, you agree to these terms.\n\nBridgeCodes acts as an orchestration layer connecting you to third-party domain, hosting, and payment providers. Specific provider terms may apply in addition to these terms." },
-    { slug: "privacy", title: "Privacy Policy", body: "BridgeCodes collects the information necessary to provide our marketplace, deployment, and hosting services, including account details, billing information, and deployment configuration.\n\nWe do not sell your personal data. Information is shared with third-party providers (domain registrars, hosting providers, payment processors) only as required to fulfill your order." },
-    { slug: "refunds", title: "Refund Policy", body: "Software licenses may be refunded within 14 days of purchase if no deployment has been completed. Installation and customization services are non-refundable once work has begun. Domain registrations are non-refundable once registered with the registry." },
-    { slug: "acceptable-use", title: "Acceptable Use Policy", body: "You may not use applications or infrastructure obtained through BridgeCodes for unlawful purposes, to distribute malware, or to violate the acceptable use policies of our underlying domain, hosting, or payment providers." },
-  ];
-
-  for (const doc of legalDocs) {
-    await prisma.setting.upsert({
-      where: { key: `legal.${doc.slug}` },
-      update: {},
-      create: { key: `legal.${doc.slug}`, value: { title: doc.title, body: doc.body } },
-    });
-  }
-}
-
-async function seedCategories() {
-  const categories = [
-    { name: "Business Management", description: "CRM, HR, and internal operations tools" },
-    { name: "Hospitality", description: "Restaurant, hotel, and booking platforms" },
-    { name: "Healthcare", description: "Hospital and clinic management systems" },
-    { name: "Real Estate", description: "Property listing and management platforms" },
-    { name: "E-Commerce", description: "Online storefronts and inventory tools" },
-  ];
-
-  const records = [];
-  for (const [i, c] of categories.entries()) {
-    const record = await prisma.category.upsert({
-      where: { slug: slugify(c.name) },
-      update: {},
-      create: { name: c.name, slug: slugify(c.name), description: c.description, sortOrder: i },
-    });
-    records.push(record);
-  }
-  return records;
-}
-
-interface AppSeed {
-  name: string;
-  categoryIndex: number;
-  shortDescription: string;
-  fullDescription: string;
-  technologyStack: string[];
-  licensePrice: number;
-  installationPrice: number;
-  customizationPrice: number;
-  maintenancePrice: number;
-  runtime: string;
-  databaseType: string;
-  featured: boolean;
-}
-
-const APP_SEEDS: AppSeed[] = [
-  {
-    name: "Nimbus CRM",
-    categoryIndex: 0,
-    shortDescription: "A modern CRM to manage leads, deals, and customer relationships.",
-    fullDescription: "Nimbus CRM gives sales teams a single place to track leads, manage pipelines, and close deals faster. Includes contact management, deal tracking, email templates, and reporting dashboards built for small and mid-sized businesses.",
-    technologyStack: ["Next.js", "PostgreSQL", "Tailwind CSS"],
-    licensePrice: 299,
-    installationPrice: 99,
-    customizationPrice: 199,
-    maintenancePrice: 39,
-    runtime: "node20",
-    databaseType: "postgresql",
-    featured: true,
-  },
-  {
-    name: "Brightclass School Manager",
-    categoryIndex: 0,
-    shortDescription: "Complete school management system for admissions, grading, and fees.",
-    fullDescription: "Brightclass helps schools manage student admissions, attendance, grading, timetables, and fee collection in one platform, with parent and teacher portals included.",
-    technologyStack: ["Next.js", "PostgreSQL", "Redis"],
-    licensePrice: 449,
-    installationPrice: 149,
-    customizationPrice: 299,
-    maintenancePrice: 49,
-    runtime: "node20",
-    databaseType: "postgresql",
-    featured: true,
-  },
-  {
-    name: "StockFlow Inventory",
-    categoryIndex: 0,
-    shortDescription: "Inventory and warehouse management with barcode support.",
-    fullDescription: "StockFlow tracks stock levels across multiple warehouses, supports barcode scanning, purchase orders, and low-stock alerts for retail and distribution businesses.",
-    technologyStack: ["Next.js", "PostgreSQL"],
-    licensePrice: 349,
-    installationPrice: 99,
-    customizationPrice: 199,
-    maintenancePrice: 39,
-    runtime: "node20",
-    databaseType: "postgresql",
-    featured: false,
-  },
-  {
-    name: "Plateful Restaurant POS",
-    categoryIndex: 1,
-    shortDescription: "Restaurant ordering, table management, and point-of-sale system.",
-    fullDescription: "Plateful covers dine-in table management, order tracking, kitchen display integration, and point-of-sale checkout designed for restaurants and cafes.",
-    technologyStack: ["Next.js", "PostgreSQL", "Redis"],
-    licensePrice: 399,
-    installationPrice: 129,
-    customizationPrice: 249,
-    maintenancePrice: 45,
-    runtime: "node20",
-    databaseType: "postgresql",
-    featured: true,
-  },
-  {
-    name: "StayEasy Booking Platform",
-    categoryIndex: 1,
-    shortDescription: "Booking and reservation platform for hotels and short-let apartments.",
-    fullDescription: "StayEasy lets hospitality businesses manage room inventory, availability calendars, guest bookings, and payments through a single booking engine.",
-    technologyStack: ["Next.js", "PostgreSQL"],
-    licensePrice: 379,
-    installationPrice: 119,
-    customizationPrice: 229,
-    maintenancePrice: 42,
-    runtime: "node20",
-    databaseType: "postgresql",
-    featured: false,
-  },
-  {
-    name: "Clinicly Hospital Manager",
-    categoryIndex: 2,
-    shortDescription: "Hospital and clinic management for patients, appointments, and billing.",
-    fullDescription: "Clinicly manages patient records, appointment scheduling, doctor rosters, and billing for clinics and small hospitals, with role-based access for staff.",
-    technologyStack: ["Next.js", "PostgreSQL", "Redis"],
-    licensePrice: 599,
-    installationPrice: 199,
-    customizationPrice: 349,
-    maintenancePrice: 59,
-    runtime: "node20",
-    databaseType: "postgresql",
-    featured: true,
-  },
-  {
-    name: "PharmaTrack",
-    categoryIndex: 2,
-    shortDescription: "Pharmacy inventory and prescription tracking system.",
-    fullDescription: "PharmaTrack helps pharmacies manage drug inventory, expiry tracking, and prescription records with automated low-stock and expiry alerts.",
-    technologyStack: ["Next.js", "PostgreSQL"],
-    licensePrice: 329,
-    installationPrice: 99,
-    customizationPrice: 199,
-    maintenancePrice: 39,
-    runtime: "node20",
-    databaseType: "postgresql",
-    featured: false,
-  },
-  {
-    name: "Northgate Realty Platform",
-    categoryIndex: 3,
-    shortDescription: "Property listing and management platform for real estate agencies.",
-    fullDescription: "Northgate lets real estate agencies list properties, manage inquiries, track viewings, and manage landlord/tenant relationships from a single dashboard.",
-    technologyStack: ["Next.js", "PostgreSQL"],
-    licensePrice: 499,
-    installationPrice: 149,
-    customizationPrice: 299,
-    maintenancePrice: 49,
-    runtime: "node20",
-    databaseType: "postgresql",
-    featured: true,
-  },
-  {
-    name: "PeopleOps HR Suite",
-    categoryIndex: 0,
-    shortDescription: "HR software for employee records, leave, and payroll basics.",
-    fullDescription: "PeopleOps centralizes employee records, leave requests, and basic payroll calculations, with manager approval workflows and reporting.",
-    technologyStack: ["Next.js", "PostgreSQL"],
-    licensePrice: 429,
-    installationPrice: 129,
-    customizationPrice: 249,
-    maintenancePrice: 45,
-    runtime: "node20",
-    databaseType: "postgresql",
-    featured: false,
-  },
-  {
-    name: "ShopFront E-Commerce",
-    categoryIndex: 4,
-    shortDescription: "Full-featured online store with catalog, cart, and checkout.",
-    fullDescription: "ShopFront is a ready-to-launch e-commerce storefront with product catalog management, cart, checkout, order tracking, and admin dashboard.",
-    technologyStack: ["Next.js", "PostgreSQL", "Redis"],
-    licensePrice: 549,
-    installationPrice: 179,
-    customizationPrice: 329,
-    maintenancePrice: 55,
-    runtime: "node20",
-    databaseType: "postgresql",
-    featured: true,
-  },
+const FIRST_NAMES_M = [
+  "Chinedu", "Emeka", "Tunde", "Ayodeji", "Ibrahim", "Segun", "Uche", "Kelechi",
+  "Femi", "Chukwuemeka", "Musa", "Obinna", "Damilare", "Adewale", "Yusuf",
+  "Chibuike", "Olumide", "Kayode", "Ikenna", "Suleiman",
+];
+const FIRST_NAMES_F = [
+  "Ngozi", "Amaka", "Funmilayo", "Aisha", "Chiamaka", "Bisi", "Halima", "Adaeze",
+  "Yetunde", "Ifeoma", "Zainab", "Temitope", "Blessing", "Oluwaseun", "Grace",
+  "Chidinma", "Folasade", "Rukayat", "Nkechi", "Omolara",
+];
+const LAST_NAMES = [
+  "Okafor", "Adeyemi", "Balogun", "Eze", "Mohammed", "Okonkwo", "Adebayo",
+  "Nwosu", "Bello", "Afolabi", "Chukwu", "Yusuf", "Uzoma", "Ogunleye",
+  "Abubakar", "Nnamdi", "Ojo", "Ibrahim", "Okeke", "Lawal",
 ];
 
-async function seedApplications(categories: { id: string }[], adminId: string) {
-  const apps = [];
-  for (const seed of APP_SEEDS) {
-    const slug = slugify(seed.name);
-    const category = categories[seed.categoryIndex];
-
-    const app = await prisma.application.upsert({
-      where: { slug },
-      update: {},
-      create: {
-        name: seed.name,
-        slug,
-        categoryId: category.id,
-        shortDescription: seed.shortDescription,
-        fullDescription: seed.fullDescription,
-        technologyStack: seed.technologyStack,
-        currentVersion: "1.0.0",
-        status: "PUBLISHED",
-        featured: seed.featured,
-        demoUrl: `https://demo.bridgecodes.example/${slug}`,
-        demoUsername: "demo",
-        demoPassword: "demo1234",
-        whatsIncluded: ["Full source deployment", "Admin dashboard", "Email notifications"],
-        whatsNotIncluded: ["Custom branding beyond logo swap", "Third-party integrations not listed"],
-        requirements: ["A domain (or use our hosting)", "SMTP or email provider for notifications"],
-        seoTitle: `${seed.name} — Ready-to-Deploy Application`,
-        seoDescription: seed.shortDescription,
-        createdById: adminId,
-        images: { create: [1, 2, 3].map((i) => ({ url: placeholderImage(slug, i), sortOrder: i })) },
-        features: {
-          create: [
-            { title: "Role-based access", description: "Separate permissions for admins, staff, and end users.", sortOrder: 0 },
-            { title: "Responsive dashboard", description: "Works on desktop, tablet, and mobile.", sortOrder: 1 },
-            { title: "Email notifications", description: "Automated notifications for key events.", sortOrder: 2 },
-          ],
-        },
-        pricing: {
-          create: [
-            { type: "LICENSE", name: "Software License", amount: seed.licensePrice, billingCycle: "ONE_TIME", sortOrder: 0 },
-            { type: "INSTALLATION", name: "Installation", amount: seed.installationPrice, billingCycle: "ONE_TIME", sortOrder: 1 },
-            { type: "CUSTOMIZATION", name: "Customization", amount: seed.customizationPrice, billingCycle: "ONE_TIME", isStartingFrom: true, sortOrder: 2 },
-            { type: "MAINTENANCE", name: "Maintenance Plan", amount: seed.maintenancePrice, billingCycle: "MONTHLY", sortOrder: 3 },
-          ],
-        },
-        reviews: {
-          create: [
-            { customerName: "Tunde A.", rating: 5, comment: "Deployed in a day, works great." },
-            { customerName: "Maria S.", rating: 4, comment: "Solid product, support was responsive." },
-          ],
-        },
-      },
-    });
-
-    // Idempotent: on a re-seed of an app that already exists, ensure it
-    // still has a published, isLatest version with a deployment
-    // specification instead of silently leaving it without one.
-    const hasLatestVersion = await prisma.applicationVersion.findFirst({ where: { applicationId: app.id, isLatest: true } });
-    if (!hasLatestVersion) {
-      const existingV1 = await prisma.applicationVersion.findFirst({ where: { applicationId: app.id, version: "1.0.0" } });
-      const specData = {
-        runtime: seed.runtime,
-        databaseType: seed.databaseType,
-        buildCommand: "npm run build",
-        startCommand: "npm start",
-        healthCheckPath: "/api/health",
-        requiredServices: [seed.databaseType, "redis"].filter(Boolean),
-        environmentVariables: [
-          { key: "DATABASE_URL", description: "PostgreSQL connection string", required: true, secret: true },
-          { key: "JWT_SECRET", description: "Secret used to sign auth tokens", required: true, secret: true },
-          { key: "NEXT_PUBLIC_APP_URL", description: "Public URL of the deployed application", required: true, secret: false, defaultValue: `https://demo.bridgecodes.example/${slug}` },
-        ],
-      };
-
-      if (existingV1) {
-        await prisma.applicationVersion.update({
-          where: { id: existingV1.id },
-          data: {
-            status: "STABLE",
-            isLatest: true,
-            isStable: true,
-            deploymentSpecification: existingV1.deploymentSpecificationId
-              ? { update: specData }
-              : { create: specData },
-            artifact: {
-              upsert: {
-                create: { type: "GIT_REPOSITORY", reference: `https://github.com/bridgecodes-apps/${slug}` },
-                update: {},
-              },
-            },
-          },
-        });
-      } else {
-        await prisma.applicationVersion.create({
-          data: {
-            application: { connect: { id: app.id } },
-            version: "1.0.0",
-            releaseName: "Initial release",
-            status: "STABLE",
-            isLatest: true,
-            isStable: true,
-            deploymentSpecification: { create: specData },
-            artifact: { create: { type: "GIT_REPOSITORY", reference: `https://github.com/bridgecodes-apps/${slug}` } },
-          },
-        });
-      }
-    }
-
-    apps.push(app);
-  }
-  return apps;
+function pick<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
 }
 
-async function seedHostingPlans() {
-  const plans = [
-    { name: "Starter", slug: "starter", description: "For a single application getting started.", websitesLimit: 1, storageGB: 10, bandwidthGB: 100, databasesLimit: 1, priceMonthly: 12, priceYearly: 120, sortOrder: 0 },
-    { name: "Business", slug: "business", description: "For growing businesses running multiple sites.", websitesLimit: 5, storageGB: 50, bandwidthGB: 500, databasesLimit: 5, priceMonthly: 35, priceYearly: 350, sortOrder: 1 },
-    { name: "Enterprise", slug: "enterprise", description: "Custom infrastructure for high-traffic deployments.", websitesLimit: 999, storageGB: 500, bandwidthGB: 5000, databasesLimit: 999, priceMonthly: 0, isCustom: true, sortOrder: 2 },
-  ];
-
-  const records = [];
-  for (const plan of plans) {
-    const record = await prisma.hostingPlan.upsert({ where: { slug: plan.slug }, update: {}, create: plan });
-    records.push(record);
+function shuffleArray<T>(arr: T[]): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
   }
-  return records;
+  return copy;
 }
 
-async function seedUsers(roles: Map<string, { id: string }>) {
-  const passwordHash = await bcrypt.hash("Passw0rd!", 12);
-
-  const admin = await prisma.user.upsert({
-    where: { email: "admin@bridgecodes.example" },
-    update: {},
-    create: { name: "Ada Admin", email: "admin@bridgecodes.example", passwordHash, roleId: roles.get("SUPER_ADMIN")!.id, status: "ACTIVE" },
-  });
-
-  const staff = await prisma.user.upsert({
-    where: { email: "ops@bridgecodes.example" },
-    update: {},
-    create: { name: "Ops Ola", email: "ops@bridgecodes.example", passwordHash, roleId: roles.get("STAFF")!.id, status: "ACTIVE" },
-  });
-
-  const customerDefs = [
-    { name: "Sarah Bright", email: "sarah@brightretail.com", company: "Bright Retail Ltd." },
-    { name: "David Chen", email: "david@northgaterealty.com", company: "Northgate Realty" },
-    { name: "Grace Adeyemi", email: "grace@clinicly.example", company: "Clinicly Health Group" },
-  ];
-
-  const customers = [];
-  for (const c of customerDefs) {
-    const customer = await prisma.user.upsert({
-      where: { email: c.email },
-      update: {},
-      create: { name: c.name, email: c.email, company: c.company, passwordHash, roleId: roles.get("CUSTOMER")!.id, status: "ACTIVE", country: "Nigeria" },
-    });
-    customers.push(customer);
-  }
-
-  return { admin, staff, customers };
+function slugify(name: string) {
+  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
 
-function orderNumber(i: number) {
-  return `ORD-2601-${String(100 + i).padStart(6, "0")}`;
+function lastWeekdays(count: number): Date[] {
+  const dates: Date[] = [];
+  const cursor = new Date();
+  cursor.setUTCHours(0, 0, 0, 0);
+  while (dates.length < count) {
+    const day = cursor.getUTCDay();
+    if (day !== 0 && day !== 6) dates.push(new Date(cursor));
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  return dates;
 }
 
-// Seed data is meant to be re-runnable during development. Rather than
-// upserting every deep relation individually, clear out the previous
-// seed-generated demo scenario (identified by its deterministic prefixes)
-// before recreating it -- catalog data (apps, categories, plans) stays
-// untouched via upsert elsewhere in this script.
-async function clearSeededOrderScenarios() {
-  const staleOrders = await prisma.order.findMany({ where: { orderNumber: { startsWith: "ORD-2601-" } }, select: { id: true } });
-  const staleOrderIds = staleOrders.map((o) => o.id);
-  if (staleOrderIds.length === 0) return;
-
-  const staleDeployments = await prisma.deployment.findMany({ where: { orderId: { in: staleOrderIds } }, select: { id: true, deploymentTargetId: true } });
-  const staleDeploymentIds = staleDeployments.map((d) => d.id);
-  const staleTargetIds = staleDeployments.map((d) => d.deploymentTargetId).filter((id): id is string => Boolean(id));
-
-  await prisma.deploymentLog.deleteMany({ where: { deploymentId: { in: staleDeploymentIds } } });
-  await prisma.deploymentJob.deleteMany({ where: { deploymentId: { in: staleDeploymentIds } } });
-  await prisma.deployment.deleteMany({ where: { id: { in: staleDeploymentIds } } });
-  await prisma.deploymentCredential.deleteMany({ where: { deploymentTargetId: { in: staleTargetIds } } });
-  await prisma.deploymentTarget.deleteMany({ where: { id: { in: staleTargetIds } } });
-  await prisma.applicationLicense.deleteMany({ where: { orderId: { in: staleOrderIds } } });
-  await prisma.invoiceItem.deleteMany({ where: { invoice: { orderId: { in: staleOrderIds } } } });
-  await prisma.invoice.deleteMany({ where: { orderId: { in: staleOrderIds } } });
-  await prisma.payment.deleteMany({ where: { orderId: { in: staleOrderIds } } });
-  const staleHostingAccounts = await prisma.hostingAccount.findMany({ where: { providerAccountId: { startsWith: "mock_hosting_seed_" } }, select: { id: true } });
-  await prisma.subscription.deleteMany({ where: { referenceId: { in: staleHostingAccounts.map((h) => h.id) } } });
-  await prisma.hostingAccount.deleteMany({ where: { id: { in: staleHostingAccounts.map((h) => h.id) } } });
-  await prisma.domain.deleteMany({ where: { providerRef: { startsWith: "mock_domain_seed_" } } });
-  await prisma.orderItem.deleteMany({ where: { orderId: { in: staleOrderIds } } });
-  await prisma.order.deleteMany({ where: { id: { in: staleOrderIds } } });
-}
-
-async function seedOrdersAndDeployments(
-  customers: { id: string; name: string; email: string }[],
-  apps: { id: string; name: string; slug: string }[],
-  hostingPlans: { id: string; name: string; priceMonthly: unknown }[]
-) {
-  await clearSeededOrderScenarios();
-
-  const scenarios: {
-    customerIndex: number;
-    appIndex: number;
-    deploymentStatus: "COMPLETED" | "INSTALLING" | "FAILED" | "QUEUED";
-    deploymentType: "MANAGED" | "PLATFORM_HOSTING" | "CUSTOMER_SERVER";
-    withHosting: boolean;
-    withDomain: boolean;
-  }[] = [
-    { customerIndex: 0, appIndex: 3, deploymentStatus: "COMPLETED", deploymentType: "PLATFORM_HOSTING", withHosting: true, withDomain: true },
-    { customerIndex: 0, appIndex: 0, deploymentStatus: "INSTALLING", deploymentType: "MANAGED", withHosting: false, withDomain: false },
-    { customerIndex: 1, appIndex: 7, deploymentStatus: "COMPLETED", deploymentType: "PLATFORM_HOSTING", withHosting: true, withDomain: true },
-    { customerIndex: 2, appIndex: 5, deploymentStatus: "FAILED", deploymentType: "CUSTOMER_SERVER", withHosting: false, withDomain: false },
-    { customerIndex: 2, appIndex: 9, deploymentStatus: "QUEUED", deploymentType: "PLATFORM_HOSTING", withHosting: true, withDomain: false },
-  ];
-
-  let i = 0;
-  for (const scenario of scenarios) {
-    i += 1;
-    const customer = customers[scenario.customerIndex];
-    const app = apps[scenario.appIndex];
-    const appPricing = await prisma.applicationPricing.findFirst({ where: { applicationId: app.id, type: "LICENSE" } });
-    const version = await prisma.applicationVersion.findFirstOrThrow({ where: { applicationId: app.id, isLatest: true } });
-    const licenseAmount = Number(appPricing?.amount ?? 299);
-    const hostingPlan = scenario.withHosting ? hostingPlans[0] : null;
-    const hostingAmount = hostingPlan ? Number(hostingPlan.priceMonthly) : 0;
-    const subtotal = licenseAmount + hostingAmount;
-
-    const order = await prisma.order.create({
-      data: {
-        orderNumber: orderNumber(i),
-        customerId: customer.id,
-        status: scenario.deploymentStatus === "COMPLETED" ? "COMPLETED" : scenario.deploymentStatus === "FAILED" ? "AWAITING_CUSTOMER" : "IN_PROGRESS",
-        paymentStatus: "PAID",
-        paymentProvider: "mock",
-        transactionRef: `mock_seed_${i}`,
-        subtotal,
-        discount: 0,
-        tax: 0,
-        total: subtotal,
-        billingName: customer.name,
-        billingEmail: customer.email,
-        items: {
-          create: [
-            { type: "APPLICATION_LICENSE", applicationId: app.id, applicationPricingId: appPricing?.id, description: `${app.name} — Software License`, quantity: 1, unitPrice: licenseAmount, total: licenseAmount },
-            ...(hostingPlan
-              ? [{ type: "HOSTING_PLAN" as const, hostingPlanId: hostingPlan.id, description: `${hostingPlan.name} Hosting`, billingCycle: "MONTHLY" as const, quantity: 1, unitPrice: hostingAmount, total: hostingAmount }]
-              : []),
-          ],
-        },
-      },
-      include: { items: true },
-    });
-
-    await prisma.payment.create({
-      data: { orderId: order.id, provider: "mock", providerRef: order.transactionRef!, amount: subtotal, currency: "USD", status: "PAID" },
-    });
-
-    await prisma.invoice.create({
-      data: {
-        invoiceNumber: `INV-2026-${String(1000 + i)}`,
-        orderId: order.id,
-        customerId: customer.id,
-        status: "PAID",
-        subtotal,
-        discount: 0,
-        tax: 0,
-        total: subtotal,
-        paidAt: new Date(),
-        items: { create: order.items.map((item) => ({ description: item.description, quantity: item.quantity, unitPrice: item.unitPrice, total: item.total })) },
-      },
-    });
-
-    await prisma.applicationLicense.create({
-      data: { licenseKey: `SEED-${i}-${app.slug.toUpperCase().slice(0, 6)}`, customerId: customer.id, applicationId: app.id, orderId: order.id, status: "ACTIVE" },
-    });
-
-    let hostingAccountId: string | undefined;
-    if (hostingPlan) {
-      const account = await prisma.hostingAccount.create({
-        data: {
-          customerId: customer.id,
-          hostingPlanId: hostingPlan.id,
-          provider: "mock",
-          providerAccountId: `mock_hosting_seed_${i}`,
-          status: "ACTIVE",
-          primaryDomain: scenario.withDomain ? `${app.slug}-${i}.example.com` : null,
-          usage: { storageUsedGB: 2.4, bandwidthUsedGB: 8.1, websitesUsed: 1 },
-        },
-      });
-      hostingAccountId = account.id;
-    }
-
-    let domainId: string | undefined;
-    if (scenario.withDomain) {
-      const domain = await prisma.domain.create({
-        data: {
-          name: `${app.slug}-${i}.example.com`,
-          tld: "com",
-          customerId: customer.id,
-          registrarProvider: "mock",
-          providerRef: `mock_domain_seed_${i}`,
-          status: "ACTIVE",
-          registeredAt: new Date(),
-          expiresAt: new Date(Date.now() + (i === 1 ? 25 : 300) * 24 * 60 * 60 * 1000),
-          nameservers: ["ns1.mockdns.com", "ns2.mockdns.com"],
-        },
-      });
-      domainId = domain.id;
-    }
-
-    const deploymentTarget = await prisma.deploymentTarget.create({
-      data: {
-        customerId: customer.id,
-        type: scenario.deploymentType,
-        provider: scenario.deploymentType === "CUSTOMER_SERVER" ? "ssh" : "cloud",
-        label: scenario.deploymentType === "CUSTOMER_SERVER" ? "Customer server" : scenario.deploymentType === "PLATFORM_HOSTING" ? "Platform-managed hosting" : "Managed deployment",
-        hostname: scenario.deploymentType === "CUSTOMER_SERVER" ? `198.51.100.${10 + i}` : undefined,
-        port: scenario.deploymentType === "CUSTOMER_SERVER" ? 22 : undefined,
-        operatingSystem: scenario.deploymentType === "CUSTOMER_SERVER" ? "Ubuntu 22.04" : undefined,
-        hostingAccountId,
-        domainId,
-        status: "ACTIVE",
-      },
-    });
-
-    const deployment = await prisma.deployment.create({
-      data: {
-        customerId: customer.id,
-        orderId: order.id,
-        applicationId: app.id,
-        applicationVersionId: version.id,
-        type: scenario.deploymentType,
-        status: scenario.deploymentStatus,
-        domainId,
-        hostingAccountId,
-        deploymentTargetId: deploymentTarget.id,
-        previewUrl: domainId ? null : `https://${app.slug}-${i}.preview.bridgecodes.app`,
-        healthStatus: scenario.deploymentStatus === "COMPLETED" ? "HEALTHY" : "UNKNOWN",
-      },
-    });
-
-    const logMessages: { message: string; level: "INFO" | "ERROR" }[] =
-      scenario.deploymentStatus === "FAILED"
-        ? [
-            { message: "Order received. Deployment queued.", level: "INFO" },
-            { message: "Preparing application package.", level: "INFO" },
-            { message: "Connecting to target via cloud adapter.", level: "INFO" },
-            { message: "Deployment failed: could not provision hosting resources.", level: "ERROR" },
-          ]
-        : scenario.deploymentStatus === "COMPLETED"
-          ? [
-              { message: "Order received. Deployment queued.", level: "INFO" },
-              { message: "Preparing application package.", level: "INFO" },
-              { message: "Connecting to target via cloud adapter.", level: "INFO" },
-              { message: "Installing application.", level: "INFO" },
-              { message: "Configured DNS for domain.", level: "INFO" },
-              { message: "Issued SSL certificate.", level: "INFO" },
-              { message: "Deployment completed successfully.", level: "INFO" },
-            ]
-          : [
-              { message: "Order received. Deployment queued.", level: "INFO" },
-              { message: "Preparing application package.", level: "INFO" },
-            ];
-
-    await prisma.deploymentLog.createMany({
-      data: logMessages.map((log) => ({ deploymentId: deployment.id, level: log.level, message: log.message, isCustomerVisible: true })),
-    });
-
-    await prisma.deploymentJob.create({
-      data: {
-        deploymentId: deployment.id,
-        jobType: "run_pipeline",
-        status: scenario.deploymentStatus === "COMPLETED" ? "SUCCEEDED" : scenario.deploymentStatus === "FAILED" ? "FAILED" : "RUNNING",
-        attempts: scenario.deploymentStatus === "FAILED" ? 3 : 1,
-        startedAt: new Date(),
-        finishedAt: scenario.deploymentStatus === "COMPLETED" || scenario.deploymentStatus === "FAILED" ? new Date() : null,
-        error: scenario.deploymentStatus === "FAILED" ? "Could not provision hosting resources" : null,
-      },
-    });
-
-    if (hostingPlan) {
-      await prisma.subscription.create({
-        data: {
-          customerId: customer.id,
-          type: "HOSTING",
-          referenceId: hostingAccountId,
-          status: "ACTIVE",
-          amount: hostingAmount,
-          billingCycle: "MONTHLY",
-          nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-        },
-      });
-    }
-  }
-}
-
-async function seedSupportTickets(customers: { id: string; name: string }[], staffId: string) {
-  const staleTickets = await prisma.supportTicket.findMany({ where: { ticketNumber: { startsWith: "TCK-SEED-" } }, select: { id: true } });
-  await prisma.supportMessage.deleteMany({ where: { ticketId: { in: staleTickets.map((t) => t.id) } } });
-  await prisma.supportTicket.deleteMany({ where: { id: { in: staleTickets.map((t) => t.id) } } });
-
-  const ticketDefs = [
-    { customerIndex: 0, subject: "Unable to access admin dashboard", category: "Technical", priority: "HIGH" as const, status: "IN_PROGRESS" as const },
-    { customerIndex: 1, subject: "Question about renewing my domain", category: "Domain", priority: "MEDIUM" as const, status: "OPEN" as const },
-    { customerIndex: 2, subject: "Requesting invoice for accounting", category: "Billing", priority: "LOW" as const, status: "RESOLVED" as const },
-  ];
-
-  for (const [i, def] of ticketDefs.entries()) {
-    const customer = customers[def.customerIndex];
-    const ticket = await prisma.supportTicket.create({
-      data: {
-        ticketNumber: `TCK-SEED-${1000 + i}`,
-        customerId: customer.id,
-        subject: def.subject,
-        category: def.category,
-        priority: def.priority,
-        status: def.status,
-        messages: { create: { authorId: customer.id, authorType: "CUSTOMER", message: `Hi team, ${def.subject.toLowerCase()}. Could you help?` } },
-      },
-    });
-
-    if (def.status !== "OPEN") {
-      await prisma.supportMessage.create({
-        data: { ticketId: ticket.id, authorId: staffId, authorType: "STAFF", message: "Thanks for reaching out — we're looking into this now." },
-      });
-    }
-  }
-}
-
-/**
- * Two domains specifically shaped to demonstrate the renewal scheduler
- * (runDomainRenewalSweep) the moment the worker runs, without waiting for
- * real time to pass: one due soon with auto-renew off (a reminder fires),
- * one due imminently with auto-renew on (it gets auto-renewed). expiresAt
- * is recomputed relative to "now" on every seed run so the demo stays
- * meaningful no matter when the database is (re)seeded.
- */
-async function seedDomainRenewalDemoScenarios(customer: { id: string }) {
-  const daysFromNow = (days: number) => new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-
-  const reminderDomain = await prisma.domain.upsert({
-    where: { name: "sunrise-consulting.com" },
-    update: { expiresAt: daysFromNow(7), status: "ACTIVE", autoRenew: false },
-    create: {
-      name: "sunrise-consulting.com",
-      tld: "com",
-      customerId: customer.id,
-      registrarProvider: "mock",
-      providerRef: "mock_domain_seed_reminder",
-      status: "ACTIVE",
-      registeredAt: daysFromNow(-358),
-      expiresAt: daysFromNow(7),
-      autoRenew: false,
-      nameservers: ["ns1.mockdns.com", "ns2.mockdns.com"],
-    },
-  });
-
-  const autoRenewDomain = await prisma.domain.upsert({
-    where: { name: "brightretail-shop.com" },
-    update: { expiresAt: daysFromNow(2), status: "ACTIVE", autoRenew: true },
-    create: {
-      name: "brightretail-shop.com",
-      tld: "com",
-      customerId: customer.id,
-      registrarProvider: "mock",
-      providerRef: "mock_domain_seed_autorenew",
-      status: "ACTIVE",
-      registeredAt: daysFromNow(-363),
-      expiresAt: daysFromNow(2),
-      autoRenew: true,
-      nameservers: ["ns1.mockdns.com", "ns2.mockdns.com"],
-    },
-  });
-
-  const existingRecords = await prisma.dNSRecord.count({ where: { domainId: reminderDomain.id } });
-  if (existingRecords === 0) {
-    await prisma.dNSRecord.createMany({
-      data: [
-        { domainId: reminderDomain.id, type: "A", name: "@", value: "203.0.113.10", ttl: 3600 },
-        { domainId: reminderDomain.id, type: "CNAME", name: "www", value: "sunrise-consulting.com.", ttl: 3600 },
-        { domainId: reminderDomain.id, type: "TXT", name: "@", value: "v=spf1 include:_spf.mockmail.example ~all", ttl: 3600 },
-      ],
-    });
-  }
-
-  return { reminderDomain, autoRenewDomain };
-}
-
-/**
- * Two HostingAccount/Subscription pairs shaped to demonstrate
- * runHostingRenewalSweep immediately on the next sweep, mirroring
- * seedDomainRenewalDemoScenarios: one due right now with an ACTIVE
- * subscription (sweep bills it and rolls the period forward), one long
- * overdue with a PAST_DUE subscription (sweep suspends the account instead
- * of retrying forever). Billing dates are recomputed relative to "now" on
- * every seed run, and the overdue account's status is reset to ACTIVE so
- * re-seeding after a sweep has already suspended it demonstrates the
- * escalation path again.
- */
-async function seedHostingRenewalDemoScenarios(customer: { id: string }, starterPlan: { id: string; priceMonthly: unknown }) {
-  let dueAccount = await prisma.hostingAccount.findFirst({ where: { providerAccountId: "mock_hosting_seed_due" } });
-  if (!dueAccount) {
-    dueAccount = await prisma.hostingAccount.create({
-      data: {
-        customerId: customer.id,
-        hostingPlanId: starterPlan.id,
-        provider: "mock",
-        providerAccountId: "mock_hosting_seed_due",
-        status: "ACTIVE",
-        primaryDomain: "due-renewal-demo.example.com",
-        usage: { storageUsedGB: 3.2, bandwidthUsedGB: 12.5, websitesUsed: 1 },
-      },
-    });
-  } else if (dueAccount.status !== "ACTIVE") {
-    dueAccount = await prisma.hostingAccount.update({ where: { id: dueAccount.id }, data: { status: "ACTIVE" } });
-  }
-
-  const duePeriodStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const dueNextBilling = new Date(Date.now() - 60 * 60 * 1000); // 1 hour ago
-  const dueSubscriptionData = {
-    status: "ACTIVE" as const,
-    amount: starterPlan.priceMonthly as never,
-    billingCycle: "MONTHLY" as const,
-    currentPeriodStart: duePeriodStart,
-    currentPeriodEnd: dueNextBilling,
-    nextBillingDate: dueNextBilling,
-  };
-  const dueSubscription = await prisma.subscription.findFirst({ where: { type: "HOSTING", referenceId: dueAccount.id } });
-  if (dueSubscription) {
-    await prisma.subscription.update({ where: { id: dueSubscription.id }, data: dueSubscriptionData });
-  } else {
-    await prisma.subscription.create({ data: { customerId: customer.id, type: "HOSTING", referenceId: dueAccount.id, ...dueSubscriptionData } });
-  }
-
-  let overdueAccount = await prisma.hostingAccount.findFirst({ where: { providerAccountId: "mock_hosting_seed_overdue" } });
-  if (!overdueAccount) {
-    overdueAccount = await prisma.hostingAccount.create({
-      data: {
-        customerId: customer.id,
-        hostingPlanId: starterPlan.id,
-        provider: "mock",
-        providerAccountId: "mock_hosting_seed_overdue",
-        status: "ACTIVE",
-        primaryDomain: "overdue-demo.example.com",
-        usage: { storageUsedGB: 1.1, bandwidthUsedGB: 4.0, websitesUsed: 1 },
-      },
-    });
-  } else if (overdueAccount.status !== "ACTIVE") {
-    // Reset so re-seeding after a sweep has already suspended it
-    // demonstrates the escalation path again.
-    overdueAccount = await prisma.hostingAccount.update({ where: { id: overdueAccount.id }, data: { status: "ACTIVE" } });
-  }
-
-  const overduePeriodStart = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
-  const overdueNextBilling = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000); // 10 days ago
-  const overdueSubscriptionData = {
-    status: "PAST_DUE" as const,
-    amount: starterPlan.priceMonthly as never,
-    billingCycle: "MONTHLY" as const,
-    currentPeriodStart: overduePeriodStart,
-    currentPeriodEnd: overdueNextBilling,
-    nextBillingDate: overdueNextBilling,
-  };
-  const overdueSubscription = await prisma.subscription.findFirst({ where: { type: "HOSTING", referenceId: overdueAccount.id } });
-  if (overdueSubscription) {
-    await prisma.subscription.update({ where: { id: overdueSubscription.id }, data: overdueSubscriptionData });
-  } else {
-    await prisma.subscription.create({ data: { customerId: customer.id, type: "HOSTING", referenceId: overdueAccount.id, ...overdueSubscriptionData } });
-  }
-
-  return { dueAccount, overdueAccount };
-}
-
-/**
- * Coupons, a bundle, and a handful of customization requests / quotes in
- * every status the UI renders differently, so both the admin and customer
- * Phase 6 screens have something to show without manually clicking through
- * the flow first. Uses explicit ids so re-seeding upserts in place instead
- * of duplicating rows.
- */
-async function seedPhase6DemoData(
-  customers: { id: string; name: string }[],
-  apps: { id: string; name: string }[],
-  hostingPlans: { id: string; slug: string; name: string }[]
-) {
-  await prisma.coupon.upsert({
-    where: { code: "WELCOME10" },
-    update: {},
-    create: { code: "WELCOME10", type: "PERCENT", value: 10, isActive: true },
-  });
-  await prisma.coupon.upsert({
-    where: { code: "SAVE20" },
-    update: {},
-    create: { code: "SAVE20", type: "FIXED", value: 20, maxUses: 50, isActive: true },
-  });
-  await prisma.coupon.upsert({
-    where: { code: "EXPIRED5" },
-    update: {},
-    create: { code: "EXPIRED5", type: "PERCENT", value: 5, isActive: true, expiresAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
-  });
-
-  const bundleApps = apps.slice(0, 2);
-  const starterPlan = hostingPlans.find((p) => p.slug === "starter") ?? hostingPlans[0];
-  const bundle = await prisma.bundle.upsert({
-    where: { slug: "launch-pack" },
-    update: {},
-    create: {
-      name: "Launch Pack",
-      slug: "launch-pack",
-      description: `${bundleApps.map((a) => a.name).join(" + ")} with ${starterPlan.name} hosting included — everything you need to launch, bundled at one price.`,
-      price: 499,
-      isActive: true,
-    },
-  });
-  const existingBundleItems = await prisma.bundleItem.count({ where: { bundleId: bundle.id } });
-  if (existingBundleItems === 0) {
-    await prisma.bundleItem.createMany({
-      data: [
-        ...bundleApps.map((a) => ({ bundleId: bundle.id, type: "APPLICATION" as const, applicationId: a.id, quantity: 1 })),
-        { bundleId: bundle.id, type: "HOSTING_PLAN" as const, hostingPlanId: starterPlan.id, quantity: 1 },
-        { bundleId: bundle.id, type: "SERVICE" as const, serviceLabel: "White-glove onboarding call", quantity: 1 },
-      ],
-    });
-  }
-
-  const customer = customers[1] ?? customers[0];
-  const app = apps[0];
-
-  await prisma.customizationRequest.upsert({
-    where: { id: "00000000-0000-4000-8000-000000000001" },
-    update: {},
-    create: {
-      id: "00000000-0000-4000-8000-000000000001",
-      customerId: customer.id,
-      applicationId: app.id,
-      description: "We'd like to add multi-currency support and a custom checkout flow that matches our brand colors.",
-      budget: 1500,
-      status: "SUBMITTED",
-    },
-  });
-
-  await prisma.customizationRequest.upsert({
-    where: { id: "00000000-0000-4000-8000-000000000002" },
-    update: {},
-    create: {
-      id: "00000000-0000-4000-8000-000000000002",
-      customerId: customer.id,
-      description: "Need a custom reporting dashboard with exportable PDF summaries for our regional managers.",
-      budget: 2200,
-      status: "REVIEWING",
-    },
-  });
-
-  await prisma.customizationRequest.upsert({
-    where: { id: "00000000-0000-4000-8000-000000000003" },
-    update: {},
-    create: {
-      id: "00000000-0000-4000-8000-000000000003",
-      customerId: customer.id,
-      description: "Full white-label rebrand across every screen with a new design system.",
-      status: "DECLINED",
-    },
-  });
-
-  const quote = await prisma.quote.upsert({
-    where: { id: "00000000-0000-4000-8000-0000000000aa" },
-    update: {},
-    create: {
-      id: "00000000-0000-4000-8000-0000000000aa",
-      quoteNumber: generateQuoteNumber(),
-      customerId: customer.id,
-      subtotal: 1800,
-      tax: 0,
-      discount: 0,
-      total: 1800,
-      status: "SENT",
-      expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-      items: {
-        create: [
-          { description: "Custom API integration with third-party CRM", quantity: 1, unitPrice: 1200, total: 1200 },
-          { description: "Additional QA and testing cycle", quantity: 1, unitPrice: 600, total: 600 },
-        ],
-      },
-    },
-  });
-
-  await prisma.customizationRequest.upsert({
-    where: { id: "00000000-0000-4000-8000-000000000004" },
-    update: { status: "QUOTED", quoteId: quote.id },
-    create: {
-      id: "00000000-0000-4000-8000-000000000004",
-      customerId: customer.id,
-      applicationId: app.id,
-      description: "We need a custom CRM integration to sync leads automatically, plus an extra QA pass before go-live.",
-      budget: 2000,
-      status: "QUOTED",
-      quoteId: quote.id,
-    },
-  });
+function randomScore(max: number) {
+  return Math.round(max * (0.5 + Math.random() * 0.45));
 }
 
 async function main() {
-  console.log("Seeding roles and permissions...");
-  const roles = await seedRolesAndPermissions();
+  console.log("Seeding demo school...");
 
-  console.log("Seeding providers...");
-  await seedProviders();
+  await Promise.all(
+    PERMISSION_CATALOG.map((p) =>
+      prisma.permission.upsert({
+        where: { key: p.key },
+        create: { key: p.key, module: p.module, action: p.key.split(".")[1] ?? p.key, description: p.description },
+        update: { module: p.module, description: p.description },
+      })
+    )
+  );
+  const permissions = await prisma.permission.findMany();
+  const permissionByKey = new Map(permissions.map((p) => [p.key, p.id]));
 
-  console.log("Seeding settings...");
-  await seedSettings();
+  const schoolName = "Horizon Academy";
+  const slug = slugify(schoolName);
+  await prisma.school.deleteMany({ where: { slug } });
 
-  console.log("Seeding categories...");
-  const categories = await seedCategories();
+  const school = await prisma.school.create({
+    data: {
+      name: schoolName,
+      slug,
+      status: "ACTIVE",
+      email: "info@horizon.demo",
+      phone: "+234 801 234 5678",
+      website: "https://horizon.demo",
+      city: "Lagos",
+      state: "Lagos",
+      country: "Nigeria",
+      currency: "NGN",
+      timezone: "Africa/Lagos",
+      bankName: "GTBank",
+      bankAccountName: schoolName,
+      bankAccountNumber: "0123456789",
+      schoolInfoCompletedAt: new Date(),
+      academicStructureSetupAt: new Date(),
+      staffInvitedAt: new Date(),
+      onboardingCompletedAt: new Date(),
+    },
+  });
 
-  console.log("Seeding users...");
-  const { admin, staff, customers } = await seedUsers(roles);
+  const roles = await Promise.all(
+    SYSTEM_ROLE_KEYS.map((key) =>
+      prisma.role.create({ data: { schoolId: school.id, key, name: SYSTEM_ROLE_LABELS[key], isSystem: true } })
+    )
+  );
+  const roleByKey = new Map(roles.map((r) => [r.key, r]));
 
-  console.log("Seeding applications...");
-  const apps = await seedApplications(categories, admin.id);
+  await prisma.rolePermission.createMany({
+    data: SYSTEM_ROLE_KEYS.flatMap((key) => {
+      const role = roleByKey.get(key)!;
+      return ROLE_DEFAULT_PERMISSIONS[key]
+        .map((permKey) => permissionByKey.get(permKey))
+        .filter((id): id is string => Boolean(id))
+        .map((permissionId) => ({ roleId: role.id, permissionId }));
+    }),
+  });
 
-  console.log("Seeding hosting plans...");
-  const hostingPlans = await seedHostingPlans();
+  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
+  const staffSeeds: { name: string; email: string; role: SystemRoleKey }[] = [
+    { name: "Adaeze Nwankwo", email: "owner@horizon.demo", role: "SCHOOL_OWNER" },
+    { name: "Emeka Obi", email: "admin@horizon.demo", role: "SCHOOL_ADMIN" },
+    { name: "Funmilayo Adekunle", email: "principal@horizon.demo", role: "PRINCIPAL" },
+    { name: "Tunde Bakare", email: "teacher1@horizon.demo", role: "TEACHER" },
+    { name: "Amaka Chukwu", email: "teacher2@horizon.demo", role: "TEACHER" },
+    { name: "Ibrahim Sule", email: "accountant@horizon.demo", role: "ACCOUNTANT" },
+    { name: "Blessing Eze", email: "hr@horizon.demo", role: "HR_STAFF" },
+    { name: "Chidinma Okoro", email: "librarian@horizon.demo", role: "LIBRARIAN" },
+    { name: "Segun Afolabi", email: "transport@horizon.demo", role: "TRANSPORT_MANAGER" },
+  ];
+  const staffUsers = await Promise.all(
+    staffSeeds.map((s) =>
+      prisma.user.create({
+        data: { schoolId: school.id, roleId: roleByKey.get(s.role)!.id, email: s.email, name: s.name, passwordHash },
+      })
+    )
+  );
+  const userByEmail = new Map(staffUsers.map((u) => [u.email, u]));
+  const teacher1 = userByEmail.get("teacher1@horizon.demo")!;
+  const teacher2 = userByEmail.get("teacher2@horizon.demo")!;
+  const accountant = userByEmail.get("accountant@horizon.demo")!;
+  const owner = userByEmail.get("owner@horizon.demo")!;
 
-  console.log("Seeding orders, deployments, domains, hosting accounts...");
-  await seedOrdersAndDeployments(customers, apps, hostingPlans);
+  const thisYear = new Date().getFullYear();
+  const session = await prisma.academicSession.create({
+    data: {
+      schoolId: school.id,
+      name: `${thisYear}/${thisYear + 1}`,
+      startDate: new Date(`${thisYear}-09-01`),
+      endDate: new Date(`${thisYear + 1}-07-15`),
+      isCurrent: true,
+    },
+  });
+  const termSpans: [string, string, string, boolean][] = [
+    ["First Term", `${thisYear}-09-01`, `${thisYear}-12-13`, true],
+    ["Second Term", `${thisYear + 1}-01-05`, `${thisYear + 1}-04-03`, false],
+    ["Third Term", `${thisYear + 1}-04-20`, `${thisYear + 1}-07-15`, false],
+  ];
+  await prisma.term.createMany({
+    data: termSpans.map(([name, start, end, isCurrent]) => ({
+      schoolId: school.id,
+      academicSessionId: session.id,
+      name,
+      startDate: new Date(start),
+      endDate: new Date(end),
+      isCurrent,
+    })),
+  });
+  const currentTerm = await prisma.term.findFirstOrThrow({ where: { schoolId: school.id, isCurrent: true } });
 
-  console.log("Seeding support tickets...");
-  await seedSupportTickets(customers, staff.id);
+  await prisma.gradeBand.createMany({
+    data: [
+      { schoolId: school.id, grade: "A", minScore: 70, maxScore: 100, remark: "Excellent", order: 0 },
+      { schoolId: school.id, grade: "B", minScore: 60, maxScore: 69, remark: "Very Good", order: 1 },
+      { schoolId: school.id, grade: "C", minScore: 50, maxScore: 59, remark: "Good", order: 2 },
+      { schoolId: school.id, grade: "D", minScore: 45, maxScore: 49, remark: "Pass", order: 3 },
+      { schoolId: school.id, grade: "E", minScore: 40, maxScore: 44, remark: "Weak Pass", order: 4 },
+      { schoolId: school.id, grade: "F", minScore: 0, maxScore: 39, remark: "Fail", order: 5 },
+    ],
+  });
+  const assessmentComponents = await prisma.assessmentComponent.createManyAndReturn({
+    data: [
+      { schoolId: school.id, name: "1st CA", maxScore: 20, order: 0 },
+      { schoolId: school.id, name: "2nd CA", maxScore: 20, order: 1 },
+      { schoolId: school.id, name: "Exam", maxScore: 60, order: 2 },
+    ],
+  });
 
-  console.log("Seeding domain renewal demo scenarios...");
-  await seedDomainRenewalDemoScenarios(customers[0]);
+  // Horizon Academy is a Creche, Nursery & Primary school — not secondary classes.
+  const classPlan: { name: string; arms: string[]; typicalAge: number }[] = [
+    { name: "Creche", arms: ["A"], typicalAge: 2 },
+    { name: "Pre-Nursery", arms: ["A"], typicalAge: 3 },
+    { name: "Nursery 1", arms: ["A"], typicalAge: 4 },
+    { name: "Nursery 2", arms: ["A", "B"], typicalAge: 5 },
+    { name: "Primary 1", arms: ["A", "B"], typicalAge: 6 },
+    { name: "Primary 2", arms: ["A", "B"], typicalAge: 7 },
+    { name: "Primary 3", arms: ["A", "B"], typicalAge: 8 },
+    { name: "Primary 4", arms: ["A"], typicalAge: 9 },
+    { name: "Primary 5", arms: ["A"], typicalAge: 10 },
+    { name: "Primary 6", arms: ["A"], typicalAge: 11 },
+  ];
+  const classArms: { id: string; classGroupId: string; typicalAge: number }[] = [];
+  const classGroups: { id: string; order: number }[] = [];
+  const classGroupByName = new Map<string, { id: string; order: number }>();
+  for (const [index, group] of classPlan.entries()) {
+    const classGroup = await prisma.classGroup.create({ data: { schoolId: school.id, name: group.name, order: index } });
+    classGroups.push({ id: classGroup.id, order: index });
+    classGroupByName.set(group.name, { id: classGroup.id, order: index });
+    for (const armName of group.arms) {
+      const arm = await prisma.classArm.create({ data: { schoolId: school.id, classGroupId: classGroup.id, name: armName } });
+      classArms.push({ id: arm.id, classGroupId: classGroup.id, typicalAge: group.typicalAge });
+    }
+  }
 
-  console.log("Seeding hosting renewal demo scenarios...");
-  await seedHostingRenewalDemoScenarios(customers[0], hostingPlans[0]);
+  const subjects = [
+    "Numeracy", "Literacy", "English Language", "Phonics", "Basic Science and Technology", "Social Studies",
+    "Civic Education", "Christian Religious Studies", "Cultural and Creative Arts",
+    "Computer Studies", "French", "Verbal Reasoning", "Quantitative Reasoning",
+    "Physical and Health Education", "Handwriting",
+  ];
+  const subjectRows = await prisma.subject.createManyAndReturn({
+    data: subjects.map((name, i) => ({ schoolId: school.id, name, code: `SUB${String(i + 1).padStart(3, "0")}` })),
+  });
+  const numeracy = subjectRows.find((s) => s.name === "Numeracy")!;
+  const literacy = subjectRows.find((s) => s.name === "Literacy")!;
+  const englishLanguage = subjectRows.find((s) => s.name === "English Language")!;
 
-  console.log("Seeding coupons, bundles, customization requests, and quotes...");
-  await seedPhase6DemoData(customers, apps, hostingPlans);
+  console.log("Enrolling demo students...");
+  const enrolledStudents: { id: string; classArmId: string }[] = [];
+  let admissionSeq = 1;
+  let demoStudentId: string | null = null;
+  let demoGuardianId: string | null = null;
+  let demoClassArmId: string | null = null;
+  for (let i = 0; i < 110; i++) {
+    const isMale = Math.random() > 0.5;
+    const firstName = pick(isMale ? FIRST_NAMES_M : FIRST_NAMES_F);
+    const lastName = pick(LAST_NAMES);
+    const arm = pick(classArms);
+    const classArmId = arm.id;
+    const admissionNumber = `${thisYear}-${String(admissionSeq++).padStart(4, "0")}`;
+    const birthYear = thisYear - arm.typicalAge - Math.floor(Math.random() * 2);
 
-  console.log("Seed complete.");
+    const student = await prisma.student.create({
+      data: {
+        schoolId: school.id,
+        admissionNumber,
+        firstName,
+        lastName,
+        gender: isMale ? "MALE" : "FEMALE",
+        dateOfBirth: new Date(`${birthYear}-${String(1 + Math.floor(Math.random() * 12)).padStart(2, "0")}-15`),
+        nationality: "Nigeria",
+        city: "Lagos",
+        state: "Lagos",
+        classArmId,
+        status: "ACTIVE",
+      },
+    });
+    enrolledStudents.push({ id: student.id, classArmId });
+
+    // The very first enrolled student always gets a guardian, so there's a
+    // guaranteed family to attach the demo portal accounts (below) to —
+    // everyone else keeps the random 80% chance.
+    if (i === 0 || Math.random() > 0.2) {
+      const guardianFirst = pick(isMale ? FIRST_NAMES_F : FIRST_NAMES_M);
+      const guardian = await prisma.guardian.create({
+        data: {
+          schoolId: school.id,
+          firstName: guardianFirst,
+          lastName,
+          phone: `+234 8${Math.floor(10000000 + Math.random() * 89999999)}`,
+          email: `${guardianFirst.toLowerCase()}.${lastName.toLowerCase()}${i}@example.com`,
+        },
+      });
+      await prisma.studentGuardian.create({
+        data: { studentId: student.id, guardianId: guardian.id, relationship: isMale ? "MOTHER" : "FATHER", isPrimary: true },
+      });
+      if (i === 0) {
+        demoStudentId = student.id;
+        demoGuardianId = guardian.id;
+        demoClassArmId = classArmId;
+      }
+    }
+  }
+
+  console.log("Assigning teachers, timetable, attendance, assignments and scores...");
+
+  await prisma.teacherAssignment.createMany({
+    data: classArms.flatMap((arm) => [
+      { schoolId: school.id, teacherId: teacher1.id, subjectId: numeracy.id, classArmId: arm.id },
+      { schoolId: school.id, teacherId: teacher2.id, subjectId: literacy.id, classArmId: arm.id },
+    ]),
+  });
+
+  await prisma.timetableSlot.createMany({
+    data: (["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"] as const).flatMap((day) =>
+      classArms.flatMap((arm) => [
+        { schoolId: school.id, classArmId: arm.id, subjectId: numeracy.id, teacherId: teacher1.id, dayOfWeek: day, startTime: "08:00", endTime: "08:40" },
+        { schoolId: school.id, classArmId: arm.id, subjectId: literacy.id, teacherId: teacher2.id, dayOfWeek: day, startTime: "08:40", endTime: "09:20" },
+      ])
+    ),
+  });
+
+  await prisma.attendanceRecord.createMany({
+    data: lastWeekdays(10).flatMap((date) =>
+      enrolledStudents.map((s) => ({
+        schoolId: school.id,
+        studentId: s.id,
+        classArmId: s.classArmId,
+        termId: currentTerm.id,
+        date,
+        status: Math.random() > 0.12 ? ("PRESENT" as const) : Math.random() > 0.5 ? ("ABSENT" as const) : ("LATE" as const),
+        markedById: teacher1.id,
+      }))
+    ),
+  });
+
+  const studentsByArm = new Map<string, string[]>();
+  for (const s of enrolledStudents) {
+    if (!studentsByArm.has(s.classArmId)) studentsByArm.set(s.classArmId, []);
+    studentsByArm.get(s.classArmId)!.push(s.id);
+  }
+
+  const dueDate = new Date();
+  dueDate.setUTCDate(dueDate.getUTCDate() + 7);
+  for (const arm of classArms) {
+    const armStudents = studentsByArm.get(arm.id) ?? [];
+    if (armStudents.length === 0) continue;
+    const assignment = await prisma.assignment.create({
+      data: {
+        schoolId: school.id,
+        classArmId: arm.id,
+        subjectId: numeracy.id,
+        teacherId: teacher1.id,
+        termId: currentTerm.id,
+        title: "Counting and number recognition",
+        description: "Practice counting objects from 1 to 20 and writing the matching numeral.",
+        dueDate,
+      },
+    });
+    await prisma.assignmentSubmission.createMany({
+      data: armStudents.map((studentId) => {
+        const graded = Math.random() > 0.4;
+        return {
+          assignmentId: assignment.id,
+          studentId,
+          status: graded ? ("GRADED" as const) : ("PENDING" as const),
+          score: graded ? randomScore(10) : null,
+          gradedAt: graded ? new Date() : null,
+          gradedById: graded ? teacher1.id : null,
+        };
+      }),
+    });
+  }
+
+  await prisma.score.createMany({
+    data: enrolledStudents.flatMap((s) =>
+      [numeracy, literacy].flatMap((subject) =>
+        assessmentComponents.map((component) => ({
+          schoolId: school.id,
+          studentId: s.id,
+          subjectId: subject.id,
+          termId: currentTerm.id,
+          componentId: component.id,
+          value: randomScore(component.maxScore),
+          enteredById: subject.id === numeracy.id ? teacher1.id : teacher2.id,
+        }))
+      )
+    ),
+  });
+
+  console.log("Setting up Pre-School Milestone Results demo data...");
+
+  // Brief-specified demo: Nursery 1 assessed by milestones (not scores), an
+  // English Language Scheme of Work with 3 weeks/4 milestones, and a
+  // student "Abayo" with the example assessments — so a fresh install has
+  // something to click through immediately.
+  const nursery1 = classGroupByName.get("Nursery 1")!;
+  const nursery1Arm = classArms.find((a) => a.classGroupId === nursery1.id)!;
+  await prisma.classGroup.update({ where: { id: nursery1.id }, data: { assessmentMode: "MILESTONE" } });
+
+  const abayoAdmissionNumber = `${thisYear}-${String(admissionSeq++).padStart(4, "0")}`;
+  const abayo = await prisma.student.create({
+    data: {
+      schoolId: school.id,
+      admissionNumber: abayoAdmissionNumber,
+      firstName: "Abayo",
+      lastName: "Adewale",
+      gender: "MALE",
+      dateOfBirth: new Date(`${thisYear - 4}-03-10`),
+      nationality: "Nigeria",
+      city: "Lagos",
+      state: "Lagos",
+      classArmId: nursery1Arm.id,
+      status: "ACTIVE",
+    },
+  });
+
+  const englishScheme = await prisma.schemeOfWork.create({
+    data: {
+      schoolId: school.id,
+      academicSessionId: session.id,
+      termId: currentTerm.id,
+      classGroupId: nursery1.id,
+      subjectId: englishLanguage.id,
+      createdById: teacher2.id,
+    },
+  });
+
+  const weekPlan: { weekNumber: number; title: string; milestones: string[] }[] = [
+    { weekNumber: 1, title: "Pronouns", milestones: ["Identify pronouns", "Underline pronouns mixed with other parts of speech"] },
+    { weekNumber: 2, title: "Adjectives", milestones: ["Make sentences using adjectives"] },
+    { weekNumber: 3, title: "Adverbs", milestones: ["Identify common adverbs"] },
+  ];
+  const milestoneByTitle = new Map<string, { id: string }>();
+  for (const [index, week] of weekPlan.entries()) {
+    const topic = await prisma.schemeOfWorkTopic.create({
+      data: { schoolId: school.id, schemeOfWorkId: englishScheme.id, weekNumber: week.weekNumber, title: week.title, order: index },
+    });
+    for (const [mIndex, title] of week.milestones.entries()) {
+      const milestone = await prisma.preschoolMilestone.create({
+        data: { schoolId: school.id, topicId: topic.id, title, order: mIndex, createdById: teacher2.id },
+      });
+      milestoneByTitle.set(title, { id: milestone.id });
+    }
+  }
+
+  const continuousAssessment = await prisma.preschoolAssessmentPeriod.create({
+    data: { schoolId: school.id, termId: currentTerm.id, name: "Continuous Assessment", type: "CONTINUOUS_ASSESSMENT" },
+  });
+
+  const abayoAssessments: { title: string; level: "EXCEEDED" | "ACHIEVED" | "PROGRESSING" | "DEVELOPING" | "NEEDS_SUPPORT" }[] = [
+    { title: "Identify pronouns", level: "ACHIEVED" },
+    { title: "Underline pronouns mixed with other parts of speech", level: "DEVELOPING" },
+    { title: "Make sentences using adjectives", level: "ACHIEVED" },
+    { title: "Identify common adverbs", level: "NEEDS_SUPPORT" },
+  ];
+  await prisma.preschoolMilestoneAssessment.createMany({
+    data: abayoAssessments.map((a) => ({
+      schoolId: school.id,
+      studentId: abayo.id,
+      milestoneId: milestoneByTitle.get(a.title)!.id,
+      subjectId: englishLanguage.id,
+      termId: currentTerm.id,
+      assessmentPeriodId: continuousAssessment.id,
+      level: a.level,
+      assessedById: teacher2.id,
+    })),
+  });
+
+  console.log("Setting up fees, invoices, payments and expenses...");
+
+  const feeCategoryRows = await prisma.feeCategory.createManyAndReturn({
+    data: ["Tuition", "Boarding", "Transport", "Meals", "Uniform", "Books", "Other"].map((name) => ({ schoolId: school.id, name })),
+  });
+  const tuitionCategory = feeCategoryRows.find((c) => c.name === "Tuition")!;
+  const booksCategory = feeCategoryRows.find((c) => c.name === "Books")!;
+
+  const expenseCategoryRows = await prisma.expenseCategory.createManyAndReturn({
+    data: ["Salaries", "Utilities", "Maintenance", "Supplies", "Transport", "Other"].map((name) => ({ schoolId: school.id, name })),
+  });
+
+  const vendor = await prisma.vendor.create({
+    data: { schoolId: school.id, name: "Lagos Facilities Services", contactInfo: "+234 802 555 0100" },
+  });
+
+  // Tuition scales with class level; a flat book levy applies to everyone.
+  const feeStructuresByGroup = new Map<string, { id: string; amountMinor: number }[]>();
+  for (const group of classGroups) {
+    const tuition = await prisma.feeStructure.create({
+      data: {
+        schoolId: school.id,
+        categoryId: tuitionCategory.id,
+        classGroupId: group.id,
+        termId: currentTerm.id,
+        name: "Tuition - " + currentTerm.name,
+        amountMinor: 8_000_000 + group.order * 500_000, // NGN 80,000 rising with class level
+      },
+    });
+    feeStructuresByGroup.set(group.id, [{ id: tuition.id, amountMinor: tuition.amountMinor }]);
+  }
+  const books = await prisma.feeStructure.create({
+    data: {
+      schoolId: school.id,
+      categoryId: booksCategory.id,
+      classGroupId: null,
+      termId: currentTerm.id,
+      name: "Books & Learning Materials",
+      amountMinor: 2_000_000, // NGN 20,000
+    },
+  });
+
+  let invoiceSeq = 1;
+  const invoiceDueDate = new Date(currentTerm.startDate);
+  invoiceDueDate.setDate(invoiceDueDate.getDate() + 14);
+
+  for (const arm of classArms) {
+    const groupStructures = feeStructuresByGroup.get(arm.classGroupId) ?? [];
+    const lineItems = [...groupStructures, { id: books.id, amountMinor: books.amountMinor }];
+    const subtotalMinor = lineItems.reduce((sum, item) => sum + item.amountMinor, 0);
+    const armStudentIds = studentsByArm.get(arm.id) ?? [];
+
+    for (const studentId of armStudentIds) {
+      const invoice = await prisma.invoice.create({
+        data: {
+          schoolId: school.id,
+          studentId,
+          termId: currentTerm.id,
+          invoiceNumber: `INV-${thisYear}-${String(invoiceSeq++).padStart(5, "0")}`,
+          subtotalMinor,
+          totalMinor: subtotalMinor,
+          dueDate: invoiceDueDate,
+          payToken: crypto.randomBytes(20).toString("hex"),
+          items: {
+            create: lineItems.map((item) => ({
+              feeStructureId: item.id,
+              description: item.id === books.id ? "Books & Learning Materials" : `Tuition - ${currentTerm.name}`,
+              amountMinor: item.amountMinor,
+            })),
+          },
+        },
+      });
+
+      // Realistic payment mix: most parents have paid in full, some paid
+      // half, a few haven't paid yet, and one has a transfer awaiting
+      // confirmation — so the finance dashboard has something to show.
+      const roll = Math.random();
+      if (roll < 0.6) {
+        await prisma.payment.create({
+          data: {
+            schoolId: school.id, invoiceId: invoice.id, amountMinor: subtotalMinor,
+            method: "MANUAL", status: "CONFIRMED", reference: crypto.randomBytes(12).toString("hex"),
+            paidAt: new Date(), recordedById: accountant.id,
+          },
+        });
+        await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "PAID" } });
+      } else if (roll < 0.85) {
+        const partial = Math.round(subtotalMinor * 0.5);
+        await prisma.payment.create({
+          data: {
+            schoolId: school.id, invoiceId: invoice.id, amountMinor: partial,
+            method: "BANK_TRANSFER", status: "CONFIRMED", reference: crypto.randomBytes(12).toString("hex"),
+            paidAt: new Date(), recordedById: accountant.id,
+          },
+        });
+        await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "PARTIALLY_PAID" } });
+      } else if (roll < 0.92) {
+        await prisma.payment.create({
+          data: {
+            schoolId: school.id, invoiceId: invoice.id, amountMinor: subtotalMinor,
+            method: "BANK_TRANSFER", status: "PENDING", reference: crypto.randomBytes(12).toString("hex"),
+          },
+        });
+      }
+      // else: left ISSUED with no payment at all.
+    }
+  }
+
+  const expenseSeeds: { category: string; description: string; amountMinor: number; daysAgo: number }[] = [
+    { category: "Salaries", description: "Teaching staff salaries - " + currentTerm.name, amountMinor: 120_000_000, daysAgo: 20 },
+    { category: "Utilities", description: "Electricity bill", amountMinor: 1_800_000, daysAgo: 12 },
+    { category: "Maintenance", description: "Playground equipment repair", amountMinor: 3_500_000, daysAgo: 8 },
+    { category: "Supplies", description: "Classroom stationery restock", amountMinor: 900_000, daysAgo: 5 },
+    { category: "Transport", description: "School bus fuel", amountMinor: 1_200_000, daysAgo: 3 },
+  ];
+  for (const e of expenseSeeds) {
+    const category = expenseCategoryRows.find((c) => c.name === e.category)!;
+    const needsApproval = e.amountMinor >= school.expenseApprovalThresholdMinor;
+    const incurredAt = new Date();
+    incurredAt.setDate(incurredAt.getDate() - e.daysAgo);
+    await prisma.expense.create({
+      data: {
+        schoolId: school.id,
+        categoryId: category.id,
+        vendorId: vendor.id,
+        description: e.description,
+        amountMinor: e.amountMinor,
+        incurredAt,
+        createdById: accountant.id,
+        status: needsApproval ? "PENDING" : "APPROVED",
+        approvedById: needsApproval ? null : owner.id,
+        approvedAt: needsApproval ? null : new Date(),
+      },
+    });
+  }
+
+  console.log("Setting up payroll, library, transport and hostel...");
+
+  const admin = userByEmail.get("admin@horizon.demo")!;
+  const principal = userByEmail.get("principal@horizon.demo")!;
+  const librarian = userByEmail.get("librarian@horizon.demo")!;
+
+  // Payroll — Owner, Librarian and Transport Manager are deliberately left
+  // without a salary structure, so the payroll page's "not configured yet"
+  // state has something real to show.
+  const salaryComponentSeeds: { name: string; type: "EARNING" | "DEDUCTION" }[] = [
+    { name: "Basic Salary", type: "EARNING" },
+    { name: "Housing Allowance", type: "EARNING" },
+    { name: "Transport Allowance", type: "EARNING" },
+    { name: "PAYE Tax", type: "DEDUCTION" },
+    { name: "Pension", type: "DEDUCTION" },
+  ];
+  const salaryComponents = await prisma.salaryComponent.createManyAndReturn({
+    data: salaryComponentSeeds.map((c) => ({ schoolId: school.id, name: c.name, type: c.type })),
+  });
+  const componentByName = new Map(salaryComponents.map((c) => [c.name, c]));
+
+  const salaryStructureSeeds: { user: { id: string }; basic: number; housing: number; transportAllowance: number; tax: number; pension: number }[] = [
+    { user: admin, basic: 25_000_00, housing: 5_000_00, transportAllowance: 3_000_00, tax: 2_000_00, pension: 1_500_00 },
+    { user: principal, basic: 30_000_00, housing: 6_000_00, transportAllowance: 3_500_00, tax: 2_500_00, pension: 1_800_00 },
+    { user: teacher1, basic: 15_000_00, housing: 3_000_00, transportAllowance: 2_000_00, tax: 1_000_00, pension: 900_00 },
+    { user: teacher2, basic: 15_000_00, housing: 3_000_00, transportAllowance: 2_000_00, tax: 1_000_00, pension: 900_00 },
+    { user: accountant, basic: 18_000_00, housing: 3_500_00, transportAllowance: 2_500_00, tax: 1_200_00, pension: 1_080_00 },
+    { user: userByEmail.get("hr@horizon.demo")!, basic: 14_000_00, housing: 2_800_00, transportAllowance: 1_800_00, tax: 900_00, pension: 840_00 },
+  ];
+
+  for (const s of salaryStructureSeeds) {
+    const structure = await prisma.staffSalaryStructure.create({ data: { schoolId: school.id, userId: s.user.id } });
+    await prisma.staffSalaryItem.createMany({
+      data: [
+        { structureId: structure.id, componentId: componentByName.get("Basic Salary")!.id, amountMinor: s.basic },
+        { structureId: structure.id, componentId: componentByName.get("Housing Allowance")!.id, amountMinor: s.housing },
+        { structureId: structure.id, componentId: componentByName.get("Transport Allowance")!.id, amountMinor: s.transportAllowance },
+        { structureId: structure.id, componentId: componentByName.get("PAYE Tax")!.id, amountMinor: s.tax },
+        { structureId: structure.id, componentId: componentByName.get("Pension")!.id, amountMinor: s.pension },
+      ],
+    });
+  }
+
+  /// Mirrors generatePayrollRun in src/lib/services/payroll.ts — duplicated
+  /// here rather than imported because that file is "server-only" and this
+  /// script runs outside Next's server bundle (see backfill-permissions.ts
+  /// for the same constraint).
+  async function seedPayrollRun(month: number, year: number, status: "DRAFT" | "APPROVED" | "PAID") {
+    const run = await prisma.payrollRun.create({
+      data: {
+        schoolId: school.id,
+        month,
+        year,
+        status,
+        createdById: admin.id,
+        approvedById: status !== "DRAFT" ? owner.id : null,
+        approvedAt: status !== "DRAFT" ? new Date() : null,
+        paidAt: status === "PAID" ? new Date() : null,
+      },
+    });
+    const structures = await prisma.staffSalaryStructure.findMany({
+      where: { schoolId: school.id },
+      include: { items: { include: { component: true } } },
+    });
+    await prisma.payslip.createMany({
+      data: structures.map((s) => {
+        const gross = s.items.filter((i) => i.component.type === "EARNING").reduce((sum, i) => sum + i.amountMinor, 0);
+        const deductions = s.items.filter((i) => i.component.type === "DEDUCTION").reduce((sum, i) => sum + i.amountMinor, 0);
+        return {
+          schoolId: school.id,
+          payrollRunId: run.id,
+          userId: s.userId,
+          items: s.items.map((i) => ({ componentName: i.component.name, type: i.component.type, amountMinor: i.amountMinor })) as unknown as Prisma.InputJsonValue,
+          grossMinor: gross,
+          totalDeductionsMinor: deductions,
+          netMinor: gross - deductions,
+        };
+      }),
+    });
+  }
+
+  const lastMonthDate = new Date();
+  lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+  await seedPayrollRun(lastMonthDate.getMonth() + 1, lastMonthDate.getFullYear(), "PAID");
+  const thisMonthDate = new Date();
+  await seedPayrollRun(thisMonthDate.getMonth() + 1, thisMonthDate.getFullYear(), "DRAFT");
+
+  // Library
+  const bookSeeds: { title: string; author: string; category: string; totalCopies: number }[] = [
+    { title: "Things Fall Apart", author: "Chinua Achebe", category: "Fiction", totalCopies: 5 },
+    { title: "Half of a Yellow Sun", author: "Chimamanda Ngozi Adichie", category: "Fiction", totalCopies: 4 },
+    { title: "Concise Oxford English Dictionary", author: "Oxford University Press", category: "Reference", totalCopies: 10 },
+    { title: "Introduction to Mathematics", author: "Ministry of Education", category: "Textbook", totalCopies: 20 },
+    { title: "Basic Science for Primary Schools", author: "Ministry of Education", category: "Textbook", totalCopies: 20 },
+    { title: "Nigerian History for Young Readers", author: "Tunde Fagbenle", category: "History", totalCopies: 6 },
+  ];
+  const seededBooks = await prisma.book.createManyAndReturn({ data: bookSeeds.map((b) => ({ schoolId: school.id, ...b })) });
+
+  for (const [i, student] of enrolledStudents.slice(0, 6).entries()) {
+    const book = seededBooks[i % seededBooks.length];
+    const issuedAt = new Date();
+    issuedAt.setDate(issuedAt.getDate() - (5 + i));
+    const dueAt = new Date(issuedAt);
+    dueAt.setDate(dueAt.getDate() + 14);
+    const alreadyReturned = i % 3 === 0;
+    await prisma.bookLoan.create({
+      data: {
+        schoolId: school.id,
+        bookId: book.id,
+        borrowerStudentId: student.id,
+        issuedById: librarian.id,
+        issuedAt,
+        dueAt,
+        status: alreadyReturned ? "RETURNED" : "ISSUED",
+        returnedAt: alreadyReturned ? new Date() : null,
+      },
+    });
+  }
+  await prisma.bookLoan.create({
+    data: {
+      schoolId: school.id,
+      bookId: seededBooks[0].id,
+      borrowerUserId: teacher1.id,
+      issuedById: librarian.id,
+      dueAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+      status: "ISSUED",
+    },
+  });
+
+  // Transport
+  const vehicle1 = await prisma.vehicle.create({
+    data: { schoolId: school.id, name: "Bus 1", plateNumber: "LND-234-XY", capacity: 30, driverName: "Musa Garba", driverPhone: "+234 802 111 2222" },
+  });
+  const vehicle2 = await prisma.vehicle.create({
+    data: { schoolId: school.id, name: "Bus 2", plateNumber: "LND-567-AB", capacity: 25, driverName: "Peter Okoro", driverPhone: "+234 803 333 4444" },
+  });
+
+  const route1 = await prisma.transportRoute.create({ data: { schoolId: school.id, name: "Route A - Ikeja", vehicleId: vehicle1.id } });
+  const route1Stops = await prisma.routeStop.createManyAndReturn({
+    data: [
+      { schoolId: school.id, routeId: route1.id, name: "Allen Avenue Junction", order: 0, pickupTime: "06:45", dropoffTime: "15:15" },
+      { schoolId: school.id, routeId: route1.id, name: "Opebi Road", order: 1, pickupTime: "06:55", dropoffTime: "15:05" },
+    ],
+  });
+  const route2 = await prisma.transportRoute.create({ data: { schoolId: school.id, name: "Route B - Lekki", vehicleId: vehicle2.id } });
+  const route2Stops = await prisma.routeStop.createManyAndReturn({
+    data: [{ schoolId: school.id, routeId: route2.id, name: "Lekki Phase 1 Gate", order: 0, pickupTime: "06:30", dropoffTime: "15:30" }],
+  });
+
+  for (const [i, student] of enrolledStudents.slice(6, 16).entries()) {
+    const onRouteOne = i % 2 === 0;
+    await prisma.studentTransportAssignment.create({
+      data: {
+        schoolId: school.id,
+        studentId: student.id,
+        routeId: onRouteOne ? route1.id : route2.id,
+        stopId: onRouteOne ? pick(route1Stops).id : pick(route2Stops).id,
+      },
+    });
+  }
+
+  // Hostel
+  const hostel1 = await prisma.hostel.create({
+    data: { schoolId: school.id, name: "Unity Hostel", type: "MALE", wardenName: "Mr. Bassey", wardenPhone: "+234 804 555 6666" },
+  });
+  const hostel2 = await prisma.hostel.create({
+    data: { schoolId: school.id, name: "Grace Hostel", type: "FEMALE", wardenName: "Mrs. Adeyemi", wardenPhone: "+234 805 777 8888" },
+  });
+  const rooms1 = await prisma.hostelRoom.createManyAndReturn({
+    data: [
+      { schoolId: school.id, hostelId: hostel1.id, roomNumber: "A1", capacity: 4 },
+      { schoolId: school.id, hostelId: hostel1.id, roomNumber: "A2", capacity: 4 },
+    ],
+  });
+  const rooms2 = await prisma.hostelRoom.createManyAndReturn({
+    data: [
+      { schoolId: school.id, hostelId: hostel2.id, roomNumber: "B1", capacity: 4 },
+      { schoolId: school.id, hostelId: hostel2.id, roomNumber: "B2", capacity: 4 },
+    ],
+  });
+
+  for (const [i, student] of enrolledStudents.slice(16, 24).entries()) {
+    const rooms = i % 2 === 0 ? rooms1 : rooms2;
+    await prisma.hostelBedAssignment.create({
+      data: { schoolId: school.id, studentId: student.id, roomId: rooms[i % rooms.length].id },
+    });
+  }
+
+  console.log("Setting up portal accounts, announcements and messages...");
+
+  const PORTAL_PASSWORD_HASH = passwordHash;
+
+  const parentUser = await prisma.user.create({
+    data: {
+      schoolId: school.id,
+      roleId: roleByKey.get("PARENT")!.id,
+      email: "parent@horizon.demo",
+      name: "Demo Parent",
+      passwordHash: PORTAL_PASSWORD_HASH,
+    },
+  });
+  await prisma.guardian.update({ where: { id: demoGuardianId! }, data: { userId: parentUser.id } });
+
+  const studentUser = await prisma.user.create({
+    data: {
+      schoolId: school.id,
+      roleId: roleByKey.get("STUDENT")!.id,
+      email: "student@horizon.demo",
+      name: "Demo Student",
+      passwordHash: PORTAL_PASSWORD_HASH,
+    },
+  });
+  await prisma.student.update({ where: { id: demoStudentId! }, data: { userId: studentUser.id } });
+
+  const announcementSeeds: {
+    title: string;
+    body: string;
+    audience: "SCHOOL_WIDE" | "STAFF_ONLY" | "PARENTS_ONLY" | "CLASS";
+    classArmId?: string;
+    createdById: string;
+  }[] = [
+    {
+      title: "Mid-term break notice",
+      body: "The school will be closed for mid-term break from Friday to the following Monday. Classes resume as usual on Tuesday.",
+      audience: "SCHOOL_WIDE",
+      createdById: owner.id,
+    },
+    {
+      title: "Staff meeting - Friday",
+      body: "All staff are to attend the end-of-term review meeting in the staff room at 3:30pm on Friday.",
+      audience: "STAFF_ONLY",
+      createdById: principal.id,
+    },
+    {
+      title: "PTA meeting reminder",
+      body: "The termly PTA meeting holds this Saturday at 10am in the school hall. All parents are encouraged to attend.",
+      audience: "PARENTS_ONLY",
+      createdById: owner.id,
+    },
+    {
+      title: "Excursion permission slips due",
+      body: "Please return signed excursion permission slips to the class teacher by Wednesday.",
+      audience: "CLASS",
+      classArmId: demoClassArmId!,
+      createdById: teacher1.id,
+    },
+  ];
+  for (const a of announcementSeeds) {
+    await prisma.announcement.create({
+      data: {
+        schoolId: school.id,
+        title: a.title,
+        body: a.body,
+        audience: a.audience,
+        classArmId: a.classArmId ?? null,
+        createdById: a.createdById,
+        publishedAt: new Date(),
+      },
+    });
+  }
+
+  const conversation = await prisma.conversation.create({
+    data: {
+      schoolId: school.id,
+      initiatedById: parentUser.id,
+      subject: "Question about the school bus route",
+      studentId: demoStudentId!,
+      messages: {
+        create: { schoolId: school.id, senderId: parentUser.id, body: "Hi, does the school bus cover the Lekki Phase 1 area this term?" },
+      },
+    },
+  });
+  await prisma.message.create({
+    data: {
+      schoolId: school.id,
+      conversationId: conversation.id,
+      senderId: accountant.id,
+      body: "Yes, the Lekki route runs every school day. Please share your address and we'll confirm the pickup point.",
+    },
+  });
+
+  console.log("Setting up administration (calendar, feedback, admission)...");
+
+  await prisma.school.update({ where: { id: school.id }, data: { admissionFeeMinor: 1_500_00 } });
+
+  const calendarEventSeeds: {
+    title: string;
+    description: string;
+    daysFromNow: number;
+    durationHours: number;
+    classArmId?: string;
+    termId?: string;
+    notifyAudience?: "PARENTS" | "STAFF" | "BOTH";
+  }[] = [
+    { title: "Mid-term break", description: "School closed for mid-term break.", daysFromNow: 10, durationHours: 96, notifyAudience: "BOTH" },
+    { title: "PTA meeting", description: "Termly PTA meeting in the school hall.", daysFromNow: 5, durationHours: 2, notifyAudience: "PARENTS" },
+    { title: "Staff development day", description: "In-service training for teaching staff.", daysFromNow: 14, durationHours: 6, notifyAudience: "STAFF" },
+    { title: "Inter-house sports", description: "Annual inter-house sports competition.", daysFromNow: 21, durationHours: 5, notifyAudience: "BOTH" },
+    { title: "Resumption for next term", description: "Students resume for the new term.", daysFromNow: -30, durationHours: 8, notifyAudience: "BOTH" },
+    { title: "First term examinations", description: "End-of-term examinations begin.", daysFromNow: -14, durationHours: 40, termId: currentTerm.id, notifyAudience: "PARENTS" },
+  ];
+  for (const e of calendarEventSeeds) {
+    const startAt = new Date();
+    startAt.setDate(startAt.getDate() + e.daysFromNow);
+    const endAt = new Date(startAt);
+    endAt.setHours(endAt.getHours() + e.durationHours);
+    await prisma.calendarEvent.create({
+      data: {
+        schoolId: school.id,
+        title: e.title,
+        description: e.description,
+        startAt,
+        endAt,
+        classArmId: e.classArmId ?? null,
+        termId: e.termId ?? currentTerm.id,
+        sessionId: session.id,
+        notifyAudience: e.notifyAudience ?? null,
+        createdById: admin.id,
+      },
+    });
+  }
+
+  const feedbackSeeds: { user: { id: string }; message: string; reviewed: boolean }[] = [
+    { user: parentUser, message: "Could the school consider extending the aftercare programme to 6pm? Pickup at 5pm is tight for working parents.", reviewed: true },
+    { user: studentUser, message: "The library could use more storybooks for younger pupils.", reviewed: false },
+    { user: teacher1, message: "Suggestion: a shared supply cupboard for Nursery and Primary 1 classrooms would save time between lessons.", reviewed: false },
+    { user: parentUser, message: "Thank you to the staff for organising the excursion — the children really enjoyed it!", reviewed: true },
+  ];
+  for (const f of feedbackSeeds) {
+    await prisma.feedback.create({
+      data: {
+        schoolId: school.id,
+        submittedById: f.user.id,
+        message: f.message,
+        status: f.reviewed ? "REVIEWED" : "NEW",
+        reviewedById: f.reviewed ? admin.id : null,
+        reviewedAt: f.reviewed ? new Date() : null,
+      },
+    });
+  }
+
+  // Admission pipeline — applicants at every stage, so the "Applicants"
+  // list has something real to filter and the ENROLLED example shows the
+  // Full Admission Process having already run for one of them.
+  const applicantSeeds: {
+    childFirstName: string; childLastName: string; parentName: string; parentEmail: string; parentPhone: string;
+    status: "APPLIED" | "UNDER_REVIEW" | "OFFERED" | "ACCEPTED" | "REJECTED" | "ENROLLED";
+    feeStatus: "UNPAID" | "PENDING_CONFIRMATION" | "PAID";
+    desiredClassGroupId: string;
+  }[] = [
+    { childFirstName: "Chidera", childLastName: "Nnamdi", parentName: "Kene Nnamdi", parentEmail: "kene.nnamdi@example.com", parentPhone: "+234 803 111 2200", status: "APPLIED", feeStatus: "UNPAID", desiredClassGroupId: classGroups[0].id },
+    { childFirstName: "Sarah", childLastName: "Bello", parentName: "Musa Bello", parentEmail: "musa.bello@example.com", parentPhone: "+234 805 222 3300", status: "UNDER_REVIEW", feeStatus: "PENDING_CONFIRMATION", desiredClassGroupId: classGroups[1].id },
+    { childFirstName: "David", childLastName: "Okafor", parentName: "Ijeoma Okafor", parentEmail: "ijeoma.okafor@example.com", parentPhone: "+234 806 333 4400", status: "OFFERED", feeStatus: "PAID", desiredClassGroupId: classGroups[2].id },
+    { childFirstName: "Zara", childLastName: "Aliyu", parentName: "Fatima Aliyu", parentEmail: "fatima.aliyu@example.com", parentPhone: "+234 807 444 5500", status: "ACCEPTED", feeStatus: "PAID", desiredClassGroupId: classGroups[3].id },
+    { childFirstName: "Michael", childLastName: "Eze", parentName: "Grace Eze", parentEmail: "grace.eze@example.com", parentPhone: "+234 808 555 6600", status: "REJECTED", feeStatus: "PAID", desiredClassGroupId: classGroups[4].id },
+  ];
+  for (const a of applicantSeeds) {
+    await prisma.applicant.create({
+      data: {
+        schoolId: school.id,
+        childFirstName: a.childFirstName,
+        childLastName: a.childLastName,
+        gender: Math.random() > 0.5 ? "MALE" : "FEMALE",
+        desiredClassGroupId: a.desiredClassGroupId,
+        parentName: a.parentName,
+        parentEmail: a.parentEmail,
+        parentPhone: a.parentPhone,
+        status: a.status,
+        admissionFeeMinor: 1_500_00,
+        feeStatus: a.feeStatus,
+        feePaidAt: a.feeStatus === "PAID" ? new Date() : null,
+        reviewedById: a.status === "APPLIED" ? null : admin.id,
+      },
+    });
+  }
+  // One already-completed application, linked to a real seeded student, so
+  // the "Enrolled" filter and the applicant detail page's admitted-state
+  // both have a genuine example to show.
+  const admittedStudent = enrolledStudents[enrolledStudents.length - 1];
+  await prisma.applicant.create({
+    data: {
+      schoolId: school.id,
+      childFirstName: "Precious",
+      childLastName: "Adeyemi",
+      gender: "FEMALE",
+      desiredClassGroupId: classGroups[0].id,
+      parentName: "Tolu Adeyemi",
+      parentEmail: "tolu.adeyemi@example.com",
+      parentPhone: "+234 809 666 7700",
+      status: "ENROLLED",
+      admissionFeeMinor: 1_500_00,
+      feeStatus: "PAID",
+      feePaidAt: new Date(),
+      reviewedById: admin.id,
+      enrolledStudentId: admittedStudent.id,
+    },
+  });
+
+  console.log("Setting up branding and a sample connected payment gateway...");
+
+  // A visibly different color than globals.css's default Schoolum accent color,
+  // so the branding feature is obviously live rather than a no-op.
+  await prisma.school.update({ where: { id: school.id }, data: { brandColor: "#0f766e" } });
+
+  // Mirrors encryptSecret() in src/lib/crypto.ts — duplicated here for the
+  // same import "server-only" reason as everything else in this script
+  // (confirmed: that import throws under tsx, not just under webpack).
+  function seedEncryptSecret(plainText: string): string {
+    const secret = process.env.PAYMENT_KEYS_SECRET || process.env.AUTH_SECRET || "insecure-dev-only-seed-key";
+    const key = crypto.createHash("sha256").update(secret).digest();
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+    const encrypted = Buffer.concat([cipher.update(plainText, "utf8"), cipher.final()]);
+    const authTag = cipher.getAuthTag();
+    return [iv.toString("hex"), authTag.toString("hex"), encrypted.toString("hex")].join(":");
+  }
+
+  // A connected-but-not-active example, so Settings has something real to
+  // show — School.activePaymentProvider is deliberately left null, so
+  // "Pay online" keeps using the safe simulated gateway rather than
+  // trying (and failing) to call Paystack with a fake demo key.
+  await prisma.paymentGatewayCredential.create({
+    data: {
+      schoolId: school.id,
+      provider: "PAYSTACK",
+      publicKey: "pk_test_demo_00000000000000000000000000",
+      secretKeyEnc: seedEncryptSecret("sk_test_demo_00000000000000000000000000"),
+      isEnabled: true,
+    },
+  });
+
+  console.log("Setting up platform billing (Super Admin, plans, subscriptions)...");
+
+  // Mirrors ensureDefaultPlans() in src/lib/platform-provisioning.ts —
+  // upserted directly here (rather than imported) for the same import
+  // "server-only" reason as everything else in this script; PLAN_CATALOG
+  // itself carries no server-only dependency, so it's imported as-is
+  // rather than re-typed, keeping this the single source of truth.
+  const plans = await Promise.all(
+    PLAN_TIERS.map((tier) => {
+      const entry = PLAN_CATALOG[tier];
+      return prisma.subscriptionPlan.upsert({
+        where: { slug: entry.slug },
+        create: {
+          slug: entry.slug,
+          name: entry.name,
+          tagline: entry.tagline,
+          priceMonthlyMinor: entry.priceMonthlyMinor,
+          priceAnnualMinor: entry.priceAnnualMinor,
+          currency: entry.currency,
+          isCustomPricing: entry.isCustomPricing,
+          studentLimit: entry.studentLimit,
+          cbtActiveExamLimit: entry.cbtActiveExamLimit,
+          cbtQuestionBankLimit: entry.cbtQuestionBankLimit,
+          cbtAiQuestionsPerMonthLimit: entry.cbtAiQuestionsPerMonthLimit,
+          cbtCandidateLimit: entry.cbtCandidateLimit,
+          isMostPopular: entry.isMostPopular,
+          sortOrder: entry.sortOrder,
+          features: entry.features as Prisma.InputJsonValue,
+        },
+        update: {},
+      });
+    })
+  );
+  const professionalPlan = plans.find((p) => p.slug === "PROFESSIONAL")!;
+  const starterPlan = plans.find((p) => p.slug === "STARTER")!;
+
+  const currentPeriodStart = new Date();
+  currentPeriodStart.setDate(1);
+  const currentPeriodEnd = new Date(currentPeriodStart);
+  currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
+
+  // The main demo school: an established, paying customer on Professional.
+  const subscription = await prisma.subscription.create({
+    data: {
+      schoolId: school.id,
+      planId: professionalPlan.id,
+      status: "ACTIVE",
+      billingInterval: "MONTHLY",
+      currentPeriodStart,
+      currentPeriodEnd,
+    },
+  });
+
+  // Two prior months, paid; the current month still pending.
+  for (let monthsAgo = 2; monthsAgo >= 0; monthsAgo--) {
+    const periodStart = new Date(currentPeriodStart);
+    periodStart.setMonth(periodStart.getMonth() - monthsAgo);
+    const periodEnd = new Date(periodStart);
+    periodEnd.setMonth(periodEnd.getMonth() + 1);
+    const isPast = monthsAgo > 0;
+
+    await prisma.platformInvoice.create({
+      data: {
+        schoolId: school.id,
+        subscriptionId: subscription.id,
+        periodStart,
+        periodEnd,
+        amountMinor: professionalPlan.priceMonthlyMinor!,
+        currency: professionalPlan.currency,
+        billingInterval: "MONTHLY",
+        dueDate: periodEnd,
+        status: isPast ? "PAID" : "PENDING",
+        paidAt: isPast ? periodEnd : null,
+      },
+    });
+  }
+
+  // A ready-to-take CBT practice exam for the demo student (CBT Phase 10) —
+  // built with raw Prisma calls, not the cbt-exams.ts/cbt-questions.ts
+  // service functions, since those import "server-only" and this script
+  // runs standalone under tsx. isPractice: true means a retake never
+  // touches the gradebook (finalizeAttemptScore's own early return), so a
+  // curious demo student can attempt it more than once with no side
+  // effects on their real assessment record.
+  console.log("Seeding a CBT practice exam...");
+  const cbtExamType = await prisma.cBTExamTypeOption.upsert({
+    where: { schoolId_key: { schoolId: school.id, key: "QUIZ" } },
+    create: { schoolId: school.id, key: "QUIZ", label: "Quiz", isSystem: true },
+    update: {},
+  });
+
+  function randomInt(min: number, max: number) {
+    return min + Math.floor(Math.random() * (max - min + 1));
+  }
+
+  const practiceQuestionIds: string[] = [];
+  for (let i = 0; i < 14; i++) {
+    const a = randomInt(2, 50);
+    const b = randomInt(2, 50);
+    const op = pick(["+", "-", "×"] as const);
+    const correct = op === "+" ? a + b : op === "-" ? a - b : a * b;
+    const distractors = new Set<number>([correct + randomInt(1, 5), Math.max(0, correct - randomInt(1, 5)), correct + randomInt(6, 12)]);
+    distractors.delete(correct);
+    const options = shuffleArray([
+      { text: String(correct), isCorrect: true },
+      ...[...distractors].slice(0, 3).map((n) => ({ text: String(n), isCorrect: false })),
+    ]);
+    const question = await prisma.cBTQuestion.create({
+      data: {
+        schoolId: school.id,
+        subjectId: numeracy.id,
+        type: "MULTIPLE_CHOICE",
+        status: "APPROVED",
+        source: "MANUAL",
+        difficulty: "EASY",
+        topic: op === "+" ? "Addition" : op === "-" ? "Subtraction" : "Multiplication",
+        prompt: `What is ${a} ${op} ${b}?`,
+        marks: 1,
+        explanation: `${a} ${op} ${b} = ${correct}.`,
+        createdById: teacher1.id,
+        approvedById: teacher1.id,
+        approvedAt: new Date(),
+        options: { create: options.map((o, idx) => ({ text: o.text, isCorrect: o.isCorrect, order: idx })) },
+      },
+    });
+    practiceQuestionIds.push(question.id);
+  }
+
+  const trueFalseFacts: { statement: string; isTrue: boolean; topic: string }[] = [
+    { statement: "An even number is always divisible by 2.", isTrue: true, topic: "Number properties" },
+    { statement: "Zero is a positive number.", isTrue: false, topic: "Number properties" },
+    { statement: "A triangle has four sides.", isTrue: false, topic: "Shapes" },
+  ];
+  for (const fact of trueFalseFacts) {
+    const question = await prisma.cBTQuestion.create({
+      data: {
+        schoolId: school.id,
+        subjectId: numeracy.id,
+        type: "TRUE_FALSE",
+        status: "APPROVED",
+        source: "MANUAL",
+        difficulty: "EASY",
+        topic: fact.topic,
+        prompt: fact.statement,
+        marks: 1,
+        createdById: teacher1.id,
+        approvedById: teacher1.id,
+        approvedAt: new Date(),
+        options: {
+          create: [
+            { text: "True", isCorrect: fact.isTrue, order: 0 },
+            { text: "False", isCorrect: !fact.isTrue, order: 1 },
+          ],
+        },
+      },
+    });
+    practiceQuestionIds.push(question.id);
+  }
+
+  const shortAnswers: { prompt: string; answers: string[]; topic: string }[] = [
+    { prompt: "How many days are there in a week?", answers: ["7", "seven"], topic: "General knowledge" },
+    { prompt: "What is the next number after 99?", answers: ["100", "one hundred"], topic: "Counting" },
+    { prompt: "How many sides does a square have?", answers: ["4", "four"], topic: "Shapes" },
+  ];
+  for (const sa of shortAnswers) {
+    const question = await prisma.cBTQuestion.create({
+      data: {
+        schoolId: school.id,
+        subjectId: numeracy.id,
+        type: "SHORT_ANSWER",
+        status: "APPROVED",
+        source: "MANUAL",
+        difficulty: "EASY",
+        topic: sa.topic,
+        prompt: sa.prompt,
+        marks: 1,
+        acceptedAnswers: sa.answers,
+        createdById: teacher1.id,
+        approvedById: teacher1.id,
+        approvedAt: new Date(),
+      },
+    });
+    practiceQuestionIds.push(question.id);
+  }
+
+  const practiceStartAt = new Date();
+  practiceStartAt.setDate(practiceStartAt.getDate() - 1); // already open
+  const practiceEndAt = new Date();
+  practiceEndAt.setDate(practiceEndAt.getDate() + 90); // generous window for a demo
+
+  const practiceExam = await prisma.cBTExam.create({
+    data: {
+      schoolId: school.id,
+      title: "Numeracy Practice Test",
+      examTypeId: cbtExamType.id,
+      subjectId: numeracy.id,
+      termId: currentTerm.id,
+      instructions: "A short, ungraded practice test — retake it as many times as you like. Your score never affects your official results.",
+      isPractice: true,
+      status: "PUBLISHED",
+      publishedAt: new Date(),
+      publishedById: teacher1.id,
+      questionSelectionMode: "MANUAL",
+      totalMarks: practiceQuestionIds.length,
+      startAt: practiceStartAt,
+      endAt: practiceEndAt,
+      durationMinutes: 30,
+      requireFullscreen: false,
+      detectTabSwitch: true,
+      restrictCopyPaste: false,
+      restrictRightClick: false,
+      maxAttempts: 3,
+      autoSubmitOnExpiry: true,
+      desktopOnly: false,
+      resultVisibility: "IMMEDIATE",
+      showCorrectAnswers: true,
+      showExplanations: true,
+      showRanking: false,
+      createdById: teacher1.id,
+      examQuestions: { create: practiceQuestionIds.map((questionId, order) => ({ questionId, order })) },
+    },
+  });
+
+  const practiceCandidates = await prisma.student.findMany({
+    where: { schoolId: school.id, classArmId: demoClassArmId!, status: "ACTIVE" },
+    select: { id: true },
+  });
+  await prisma.cBTExamCandidate.createMany({
+    data: practiceCandidates.map((s) => ({ examId: practiceExam.id, studentId: s.id, schoolId: school.id })),
+    skipDuplicates: true,
+  });
+
+  // Online Learning demo content — teacher1 already teaches Numeracy in
+  // every class arm (see the teacherAssignment seeding above), so a
+  // lecture/live class targeting the demo student's own class arm is
+  // guaranteed to satisfy assertTeacherAssignment the same way a real
+  // teacher's would.
+  console.log("Seeding online learning demo lecture and live class...");
+  const demoLecture = await prisma.lecture.create({
+    data: {
+      schoolId: school.id,
+      teacherId: teacher1.id,
+      subjectId: numeracy.id,
+      classArmId: demoClassArmId!,
+      academicSessionId: session.id,
+      termId: currentTerm.id,
+      title: "Introduction to Counting and Numbers",
+      topic: "Numbers 1-20",
+      description: "A gentle introduction to counting, recognizing and writing numbers from 1 to 20.",
+      learningObjectives: "By the end of this lesson, pupils should be able to count to 20 and recognize written numerals.",
+      instructions: "Read through the lesson, then try the practice questions attached below.",
+      status: "PUBLISHED",
+      publishedAt: new Date(),
+    },
+  });
+  await prisma.lectureResource.createMany({
+    data: [
+      {
+        lectureId: demoLecture.id,
+        type: "WRITTEN",
+        title: "Counting from 1 to 20",
+        order: 0,
+        writtenContent:
+          "Numbers help us count things around us. Let's practice counting from 1 to 20.\n\n1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20.\n\nTry counting your fingers, your toys, or the chairs in your classroom!",
+      },
+      {
+        lectureId: demoLecture.id,
+        type: "EXTERNAL_LINK",
+        title: "Extra practice: Counting song (external resource)",
+        order: 1,
+        externalUrl: "https://www.khanacademy.org/kids",
+      },
+    ],
+  });
+
+  const liveClassStart = new Date();
+  liveClassStart.setDate(liveClassStart.getDate() + 2);
+  liveClassStart.setHours(10, 0, 0, 0);
+  const demoLiveClass = await prisma.liveClass.create({
+    data: {
+      schoolId: school.id,
+      teacherId: teacher1.id,
+      subjectId: numeracy.id,
+      classArmId: demoClassArmId!,
+      academicSessionId: session.id,
+      termId: currentTerm.id,
+      title: "Numbers Live Revision",
+      topic: "Counting and number recognition",
+      description: "A live revision class going over counting from 1 to 20 with real-time Q&A.",
+      scheduledStart: liveClassStart,
+      durationMinutes: 40,
+      joinWindowMinutesBefore: 15,
+      status: "SCHEDULED",
+      roomName: `live-${crypto.randomUUID()}`,
+    },
+  });
+  const demoLiveClassRoster = await prisma.student.findMany({
+    where: { schoolId: school.id, classArmId: demoClassArmId!, status: "ACTIVE" },
+    select: { id: true },
+  });
+  await prisma.liveClassAttendance.createMany({
+    data: demoLiveClassRoster.map((s) => ({ schoolId: school.id, liveClassId: demoLiveClass.id, studentId: s.id })),
+    skipDuplicates: true,
+  });
+
+  let superAdminRole = await prisma.role.findFirst({ where: { schoolId: null, key: "SUPER_ADMIN" } });
+  if (!superAdminRole) {
+    superAdminRole = await prisma.role.create({
+      data: { schoolId: null, key: "SUPER_ADMIN", name: "Super Admin", isSystem: true },
+    });
+  }
+  await prisma.user.upsert({
+    where: { email: "superadmin@schoolum.demo" },
+    create: { schoolId: null, roleId: superAdminRole.id, email: "superadmin@schoolum.demo", name: "Schoolum Platform Admin", passwordHash },
+    update: {},
+  });
+
+  // A second, smaller demo school — a brand-new signup still inside its
+  // 14-day trial on Starter, so the platform admin/billing dashboards and
+  // the trial banner both have a real second tenant to show, distinct from
+  // Schoolum's own paid-and-established Professional subscription above.
+  console.log("Seeding second demo school (trial)...");
+  const trialSchoolName = "Bright Path Academy";
+  const trialSlug = slugify(trialSchoolName);
+  await prisma.school.deleteMany({ where: { slug: trialSlug } });
+
+  const trialSchool = await prisma.school.create({
+    data: {
+      name: trialSchoolName,
+      slug: trialSlug,
+      status: "TRIAL",
+      email: "info@brightpath.demo",
+      city: "Abuja",
+      state: "FCT",
+      country: "Nigeria",
+      currency: "NGN",
+      timezone: "Africa/Lagos",
+      schoolInfoCompletedAt: new Date(),
+      onboardingCompletedAt: new Date(),
+    },
+  });
+
+  const trialRoles = await Promise.all(
+    SYSTEM_ROLE_KEYS.map((key) =>
+      prisma.role.create({ data: { schoolId: trialSchool.id, key, name: SYSTEM_ROLE_LABELS[key], isSystem: true } })
+    )
+  );
+  const trialRoleByKey = new Map(trialRoles.map((r) => [r.key, r]));
+  await prisma.rolePermission.createMany({
+    data: SYSTEM_ROLE_KEYS.flatMap((key) => {
+      const role = trialRoleByKey.get(key)!;
+      return ROLE_DEFAULT_PERMISSIONS[key]
+        .map((permKey) => permissionByKey.get(permKey))
+        .filter((id): id is string => Boolean(id))
+        .map((permissionId) => ({ roleId: role.id, permissionId }));
+    }),
+  });
+
+  const trialOwner = await prisma.user.create({
+    data: {
+      schoolId: trialSchool.id,
+      roleId: trialRoleByKey.get("SCHOOL_OWNER")!.id,
+      email: "owner@brightpath.demo",
+      name: "Bright Path Owner",
+      passwordHash,
+    },
+  });
+
+  const trialStart = new Date();
+  trialStart.setDate(trialStart.getDate() - 3);
+  const trialEnd = new Date(trialStart);
+  trialEnd.setDate(trialEnd.getDate() + TRIAL_PERIOD_DAYS);
+
+  await prisma.subscription.create({
+    data: {
+      schoolId: trialSchool.id,
+      planId: starterPlan.id,
+      status: "TRIALING",
+      billingInterval: "MONTHLY",
+      trialStart,
+      trialEnd,
+      currentPeriodStart: trialStart,
+      currentPeriodEnd: trialEnd,
+    },
+  });
+
+  console.log(`\nSeeded "${schoolName}" with ${classArms.length} class arms and 110 students.`);
+  console.log(`All staff accounts use the password: ${DEMO_PASSWORD}\n`);
+  for (const s of staffSeeds) console.log(`  ${s.role.padEnd(16)} ${s.email}`);
+  console.log(`\nPortal demo accounts (same password: ${DEMO_PASSWORD}):`);
+  console.log(`  PARENT           ${parentUser.email}`);
+  console.log(`  STUDENT          ${studentUser.email}`);
+  console.log(`\nA "Numeracy Practice Test" CBT exam is live and ready — log in as the student above and visit /portal/student/cbt.`);
+  console.log(`\nPlatform admin (same password: ${DEMO_PASSWORD}):`);
+  console.log(`  SUPER_ADMIN      superadmin@schoolum.demo`);
+  console.log(`\nSecond demo school "${trialSchoolName}" (Starter plan, 14-day trial, same password: ${DEMO_PASSWORD}):`);
+  console.log(`  SCHOOL_OWNER     ${trialOwner.email}`);
+  console.log(`\nPre-School Results demo: class "Nursery 1" (assessmentMode=MILESTONE), subject "English Language", student "Abayo Adewale" (${abayoAdmissionNumber}) with 4 example milestone assessments. Visit /dashboard/results/preschool.`);
 }
 
 main()
-  .catch((e) => {
-    console.error(e);
+  .catch((error) => {
+    console.error(error);
     process.exit(1);
   })
   .finally(async () => {

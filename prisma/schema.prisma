@@ -1,9 +1,7 @@
-// Prisma schema for the SaaS Application Marketplace & Deployment Platform
-// See /ARCHITECTURE.md for the full system design this schema implements.
-
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider      = "prisma-client"
+  output        = "../src/generated/prisma"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
@@ -11,1400 +9,3296 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// =========================================================================
-// IDENTITY, ROLES & ORGANIZATIONS
-// =========================================================================
+// ---------------------------------------------------------------------------
+// Platform / tenancy
+// ---------------------------------------------------------------------------
 
-enum RoleKey {
-  SUPER_ADMIN
-  STAFF
-  CUSTOMER
-  DEVELOPER
+enum SchoolStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
 }
 
+/// The tenant root. Every tenant-owned table below carries a schoolId and
+/// must be queried through the scoped repository helpers in src/lib/tenant.ts
+/// — never a bare `prisma.<model>.findMany()` for a tenant-owned model.
+model School {
+  id     String       @id @default(cuid())
+  name   String
+  slug   String       @unique
+  status SchoolStatus @default(TRIAL)
+
+  logoUrl String?
+  email   String?
+  phone   String?
+  website String?
+
+  addressLine String?
+  city        String?
+  state       String?
+  country     String  @default("Nigeria")
+
+  currency String @default("NGN")
+  timezone String @default("Africa/Lagos")
+
+  /// Expenses at or above this amount (in the school's currency minor
+  /// units) require SCHOOL_OWNER/SCHOOL_ADMIN approval before being marked
+  /// APPROVED — configurable per school (brief: "Expenses above ₦500,000
+  /// require owner approval").
+  expenseApprovalThresholdMinor Int @default(50000000)
+
+  /// Shown on the public pay page for the bank-transfer option. Null/empty
+  /// simply hides that option rather than showing placeholder text.
+  bankName          String?
+  bankAccountName   String?
+  bankAccountNumber String?
+
+  /// Charged on the public admission application form. Null hides the fee
+  /// step entirely rather than showing a placeholder ₦0 — same "unset means
+  /// not configured, not zero" pattern as the bank fields above.
+  admissionFeeMinor Int?
+
+  /// Portal branding. logoUrl holds a data: URL (uploaded image, no
+  /// external object storage in this app) — null falls back to the
+  /// Schoolum lettermark generated from the school's own name/initial.
+  /// brandColor recolors --accent (and its derived soft/foreground
+  /// tokens) across the dashboard, portals and the public apply/pay
+  /// pages for this school only; null keeps the default Schoolum blue.
+  brandColor String?
+
+  /// Which connected gateway "Pay online" uses for this school. Null (the
+  /// default for every school until an owner connects one) falls back to
+  /// the built-in mock/simulated gateway, so the pay -> receipt flow keeps
+  /// working with zero setup — connecting a real one here is additive,
+  /// never required.
+  activePaymentProvider PaymentGatewayProvider?
+
+  // Onboarding wizard progress (brief section 4). Nullable timestamps double
+  // as both a "is this step done" flag and a record of when it happened.
+  accountCreatedAt         DateTime  @default(now())
+  schoolInfoCompletedAt    DateTime?
+  academicStructureSetupAt DateTime?
+  staffInvitedAt           DateTime?
+  onboardingCompletedAt    DateTime?
+
+  /// Pre-School Milestone Results configuration — same flat-scalar-on-School
+  /// convention as the fields above, not a separate 1:1 settings table.
+  /// Which classes actually use the milestone system is a per-ClassGroup
+  /// choice (see ClassGroup.assessmentMode); these are the school-wide
+  /// toggles layered on top of that.
+  preschoolResultsEnabled           Boolean @default(true)
+  preschoolRequireTeacherComment    Boolean @default(false)
+  preschoolRequireApprovalToPublish Boolean @default(true)
+  preschoolParentsCanView           Boolean @default(true)
+  preschoolStudentsCanView          Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campuses                       Campus[]
+  users                          User[]
+  roles                          Role[]
+  invites                        StaffInvite[]
+  academicSessions               AcademicSession[]
+  terms                          Term[]
+  departments                    Department[]
+  classGroups                    ClassGroup[]
+  classArms                      ClassArm[]
+  subjects                       Subject[]
+  students                       Student[]
+  guardians                      Guardian[]
+  auditLogs                      AuditLog[]
+  teacherAssignments             TeacherAssignment[]
+  attendanceRecords              AttendanceRecord[]
+  timetableSlots                 TimetableSlot[]
+  assignments                    Assignment[]
+  gradeBands                     GradeBand[]
+  assessmentComponents           AssessmentComponent[]
+  schemesOfWork                  SchemeOfWork[]
+  schemeOfWorkTopics             SchemeOfWorkTopic[]
+  preschoolMilestones            PreschoolMilestone[]
+  preschoolAssessmentPeriods     PreschoolAssessmentPeriod[]
+  preschoolAssessmentLevelLabels PreschoolAssessmentLevelLabel[]
+  preschoolMilestoneAssessments  PreschoolMilestoneAssessment[]
+  preschoolReports               PreschoolReport[]
+  scores                         Score[]
+  reportCards                    ReportCard[]
+  transcripts                    Transcript[]
+  feeCategories                  FeeCategory[]
+  feeStructures                  FeeStructure[]
+  invoices                       Invoice[]
+  payments                       Payment[]
+  vendors                        Vendor[]
+  expenseCategories              ExpenseCategory[]
+  expenses                       Expense[]
+  portalInvites                  PortalInvite[]
+  notifications                  Notification[]
+  announcements                  Announcement[]
+  conversations                  Conversation[]
+  messages                       Message[]
+  aiConversations                AiConversation[]
+
+  salaryComponents            SalaryComponent[]
+  staffSalaryStructures       StaffSalaryStructure[]
+  payrollRuns                 PayrollRun[]
+  payslips                    Payslip[]
+  books                       Book[]
+  bookLoans                   BookLoan[]
+  vehicles                    Vehicle[]
+  transportRoutes             TransportRoute[]
+  routeStops                  RouteStop[]
+  studentTransportAssignments StudentTransportAssignment[]
+  hostels                     Hostel[]
+  hostelRooms                 HostelRoom[]
+  hostelBedAssignments        HostelBedAssignment[]
+
+  subscription     Subscription?
+  platformInvoices PlatformInvoice[]
+
+  applicants     Applicant[]
+  calendarEvents CalendarEvent[]
+  feedback       Feedback[]
+
+  paymentGatewayCredentials PaymentGatewayCredential[]
+
+  cbtExamTypes    CBTExamTypeOption[]
+  cbtQuestions    CBTQuestion[]
+  cbtQuestionTags CBTQuestionTag[]
+  cbtExams        CBTExam[]
+  cbtCandidates   CBTExamCandidate[]
+  cbtAttempts     CBTAttempt[]
+
+  lectures               Lecture[]
+  studentLectureProgress StudentLectureProgress[]
+  liveClasses            LiveClass[]
+  liveClassAttendance    LiveClassAttendance[]
+  classroomMessages      ClassroomMessage[]
+  liveClassRecordings    LiveClassRecording[]
+
+  @@index([status])
+}
+
+model Campus {
+  id       String  @id @default(cuid())
+  schoolId String
+  school   School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name     String
+  isMain   Boolean @default(false)
+
+  addressLine String?
+  city        String?
+  state       String?
+
+  createdAt DateTime @default(now())
+
+  students Student[]
+
+  @@index([schoolId])
+}
+
+// ---------------------------------------------------------------------------
+// Identity, roles & permissions
+// ---------------------------------------------------------------------------
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+/// schoolId is null only for platform Super Admins. Every other user belongs
+/// to exactly one school in Phase 1 — a staff member working at two schools
+/// is out of scope until multi-membership is needed.
+model User {
+  id       String  @id @default(cuid())
+  schoolId String?
+  school   School? @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  roleId   String
+  role     Role    @relation(fields: [roleId], references: [id])
+  campusId String?
+
+  email        String     @unique
+  passwordHash String
+  name         String
+  avatarUrl    String?
+  status       UserStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  auditLogs                   AuditLog[]
+  classArmsLed                ClassArm[]                     @relation("ClassArmTeacher")
+  invitesSent                 StaffInvite[]                  @relation("InviteSentBy")
+  teacherAssignments          TeacherAssignment[]            @relation("TeacherAssignments")
+  attendanceMarked            AttendanceRecord[]             @relation("AttendanceMarkedBy")
+  teacherTimetableSlots       TimetableSlot[]                @relation("TeacherTimetableSlots")
+  assignmentsCreated          Assignment[]                   @relation("AssignmentTeacher")
+  submissionsGraded           AssignmentSubmission[]         @relation("SubmissionGradedBy")
+  scoresEntered               Score[]                        @relation("ScoreEnteredBy")
+  reportCardsApproved         ReportCard[]                   @relation("ReportCardApprovedBy")
+  schemesOfWorkCreated        SchemeOfWork[]                 @relation("SchemeOfWorkCreatedBy")
+  preschoolMilestonesCreated  PreschoolMilestone[]           @relation("PreschoolMilestoneCreatedBy")
+  preschoolMilestonesAssessed PreschoolMilestoneAssessment[] @relation("PreschoolMilestoneAssessedBy")
+  preschoolReportsSubmitted   PreschoolReport[]              @relation("PreschoolReportSubmittedBy")
+  preschoolReportsApproved    PreschoolReport[]              @relation("PreschoolReportApprovedBy")
+  transcriptsGenerated        Transcript[]                   @relation("TranscriptGeneratedBy")
+  transcriptsRevoked          Transcript[]                   @relation("TranscriptRevokedBy")
+  paymentsRecorded            Payment[]                      @relation("PaymentRecordedBy")
+  expensesCreated             Expense[]                      @relation("ExpenseCreatedBy")
+  expensesApproved            Expense[]                      @relation("ExpenseApprovedBy")
+
+  /// Set only for users whose role is PARENT or STUDENT — links the login
+  /// account back to the Guardian/Student profile it was created for via
+  /// PortalInvite. A staff user has neither.
+  guardianProfile Guardian? @relation("GuardianUser")
+  studentProfile  Student?  @relation("StudentUser")
+
+  portalInvitesSent      PortalInvite[]   @relation("PortalInviteSentBy")
+  notifications          Notification[]   @relation("UserNotifications")
+  announcementsCreated   Announcement[]   @relation("AnnouncementCreatedBy")
+  conversationsInitiated Conversation[]   @relation("ConversationInitiatedBy")
+  messagesSent           Message[]        @relation("MessageSender")
+  aiConversations        AiConversation[] @relation("AiConversationUser")
+
+  /// Set only for staff — a portal (PARENT/STUDENT) user never has a salary
+  /// structure or payslips of their own.
+  salaryStructure     StaffSalaryStructure? @relation("StaffSalaryStructure")
+  payrollRunsCreated  PayrollRun[]          @relation("PayrollRunCreatedBy")
+  payrollRunsApproved PayrollRun[]          @relation("PayrollRunApprovedBy")
+  payslips            Payslip[]             @relation("Payslips")
+  bookLoansBorrowed   BookLoan[]            @relation("BookBorrower")
+  bookLoansIssued     BookLoan[]            @relation("BookIssuedBy")
+
+  /// Set only for the platform Super Admin, marking which platform invoices
+  /// they personally confirmed as paid.
+  platformInvoicesMarkedPaid  PlatformInvoice[]   @relation("PlatformInvoiceMarkedPaidBy")
+  enterpriseInquiriesReviewed EnterpriseInquiry[] @relation("EnterpriseInquiryReviewedBy")
+
+  applicantsReviewed    Applicant[]     @relation("ApplicantReviewedBy")
+  calendarEventsCreated CalendarEvent[] @relation("CalendarEventCreatedBy")
+  feedbackSubmitted     Feedback[]      @relation("FeedbackSubmittedBy")
+  feedbackReviewed      Feedback[]      @relation("FeedbackReviewedBy")
+
+  cbtQuestionsCreated  CBTQuestion[]      @relation("CBTQuestionCreatedBy")
+  cbtQuestionsApproved CBTQuestion[]      @relation("CBTQuestionApprovedBy")
+  cbtExamsCreated      CBTExam[]          @relation("CBTExamCreatedBy")
+  cbtExamsPublished    CBTExam[]          @relation("CBTExamPublishedBy")
+  cbtExtensionsGranted CBTExamCandidate[] @relation("CBTExtensionGrantedBy")
+  cbtManualGrades      CBTManualGrade[]   @relation("CBTManualGradedBy")
+
+  lecturesCreated              Lecture[]            @relation("LectureTeacher")
+  liveClassesCreated           LiveClass[]          @relation("LiveClassTeacher")
+  classroomMessagesSent        ClassroomMessage[]   @relation("ClassroomMessageSender")
+  classroomMessagesDeleted     ClassroomMessage[]   @relation("ClassroomMessageDeletedBy")
+  liveClassRecordingsInitiated LiveClassRecording[] @relation("LiveClassRecordingInitiatedBy")
+
+  @@index([schoolId])
+}
+
+/// Roles are tenant-scoped (schoolId set) except the single platform-level
+/// SUPER_ADMIN role (schoolId null), so a school can customize its own
+/// role -> permission matrix without touching any other school's roles.
+/// System roles (isSystem) are seeded for every school and can't be deleted.
 model Role {
-  id          String           @id @default(uuid())
-  key         RoleKey          @unique
-  name        String
-  description String?
-  permissions RolePermission[]
-  users       User[]
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id       String  @id @default(cuid())
+  schoolId String?
+  school   School? @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  key      String
+  name     String
+  isSystem Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  users           User[]
+  rolePermissions RolePermission[]
+  staffInvites    StaffInvite[]
+
+  @@unique([schoolId, key])
+  @@index([schoolId])
 }
 
+/// Global catalog of module.action permission strings (e.g. "students.view").
+/// Not tenant-scoped — the catalog itself is fixed; which roles have which
+/// permission is the tenant-editable part, via RolePermission.
 model Permission {
-  id            String           @id @default(uuid())
-  key           String           @unique // e.g. "applications.manage", "orders.view"
-  description   String?
-  category      String? // grouping for admin UI e.g. "Applications", "Orders"
-  roles         RolePermission[]
-  userOverrides UserPermission[]
-  createdAt     DateTime         @default(now())
+  id          String @id @default(cuid())
+  key         String @unique
+  module      String
+  action      String
+  description String
+
+  rolePermissions RolePermission[]
+
+  @@index([module])
 }
 
 model RolePermission {
   roleId       String
-  permissionId String
   role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permissionId])
 }
 
-// Per-user permission overrides, mainly used to fine-tune STAFF accounts.
-model UserPermission {
-  id           String     @id @default(uuid())
-  userId       String
-  permissionId String
-  granted      Boolean    @default(true)
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
-  createdAt    DateTime   @default(now())
-
-  @@unique([userId, permissionId])
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
 }
 
-enum UserStatus {
+model StaffInvite {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  email       String
+  roleId      String
+  role        Role         @relation(fields: [roleId], references: [id])
+  token       String       @unique
+  status      InviteStatus @default(PENDING)
+  expiresAt   DateTime
+  invitedById String
+  invitedBy   User         @relation("InviteSentBy", fields: [invitedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([schoolId, email, status])
+  @@index([schoolId])
+}
+
+// ---------------------------------------------------------------------------
+// Academic structure
+// ---------------------------------------------------------------------------
+
+model AcademicSession {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  isCurrent Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+
+  terms          Term[]
+  calendarEvents CalendarEvent[]
+  lectures       Lecture[]
+  liveClasses    LiveClass[]
+  schemesOfWork  SchemeOfWork[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+model Term {
+  id                String          @id @default(cuid())
+  schoolId          String
+  school            School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicSessionId String
+  academicSession   AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  isCurrent Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+
+  attendanceRecords             AttendanceRecord[]
+  assignments                   Assignment[]
+  scores                        Score[]
+  reportCards                   ReportCard[]
+  feeStructures                 FeeStructure[]
+  invoices                      Invoice[]
+  calendarEvents                CalendarEvent[]
+  cbtExams                      CBTExam[]
+  lectures                      Lecture[]
+  liveClasses                   LiveClass[]
+  schemesOfWork                 SchemeOfWork[]
+  preschoolAssessmentPeriods    PreschoolAssessmentPeriod[]
+  preschoolMilestoneAssessments PreschoolMilestoneAssessment[]
+  preschoolReports              PreschoolReport[]
+
+  @@unique([academicSessionId, name])
+  @@index([schoolId])
+}
+
+model Department {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name     String
+
+  classGroups ClassGroup[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+/// A grade level, e.g. "JSS1", "SS2" — the brief calls this a "Class".
+model ClassGroup {
+  id           String      @id @default(cuid())
+  schoolId     String
+  school       School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  name  String
+  order Int    @default(0)
+
+  /// NUMERICAL (default): the ordinary Score/ReportCard system. MILESTONE:
+  /// this class group is assessed exclusively through Pre-School Milestone
+  /// Results. BOTH: both systems apply — e.g. a transitional class still
+  /// tracked developmentally but also given light numerical scores.
+  /// Deliberately not hardcoded to a class name like "Nursery" (brief
+  /// section 13) — a school sets this explicitly per class group.
+  assessmentMode ClassAssessmentMode @default(NUMERICAL)
+
+  createdAt DateTime @default(now())
+
+  arms          ClassArm[]
+  feeStructures FeeStructure[]
+  applicants    Applicant[]
+  cbtQuestions  CBTQuestion[]
+  schemesOfWork SchemeOfWork[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+/// A specific stream within a class group, e.g. "JSS1 Blue" — this is what
+/// students are actually enrolled into.
+model ClassArm {
+  id           String     @id @default(cuid())
+  schoolId     String
+  school       School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classGroupId String
+  classGroup   ClassGroup @relation(fields: [classGroupId], references: [id], onDelete: Cascade)
+
+  name           String
+  capacity       Int?
+  classTeacherId String?
+  classTeacher   User?   @relation("ClassArmTeacher", fields: [classTeacherId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  students           Student[]
+  teacherAssignments TeacherAssignment[]
+  attendanceRecords  AttendanceRecord[]
+  timetableSlots     TimetableSlot[]
+  assignments        Assignment[]
+  announcements      Announcement[]
+  calendarEvents     CalendarEvent[]
+  lectures           Lecture[]
+  liveClasses        LiveClass[]
+
+  @@unique([classGroupId, name])
+  @@index([schoolId])
+}
+
+model Subject {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  name String
+  code String
+
+  createdAt DateTime @default(now())
+
+  teacherAssignments            TeacherAssignment[]
+  timetableSlots                TimetableSlot[]
+  assignments                   Assignment[]
+  scores                        Score[]
+  cbtQuestions                  CBTQuestion[]
+  cbtExams                      CBTExam[]
+  lectures                      Lecture[]
+  liveClasses                   LiveClass[]
+  schemesOfWork                 SchemeOfWork[]
+  preschoolMilestoneAssessments PreschoolMilestoneAssessment[]
+
+  @@unique([schoolId, code])
+  @@index([schoolId])
+}
+
+// ---------------------------------------------------------------------------
+// Students & guardians
+// ---------------------------------------------------------------------------
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum StudentStatus {
   ACTIVE
+  GRADUATED
+  WITHDRAWN
   SUSPENDED
-  PENDING_VERIFICATION
 }
 
-model User {
-  id                    String           @id @default(uuid())
-  email                 String           @unique
-  passwordHash          String?
-  name                  String
-  phone                 String?
-  company               String?
-  country               String?
-  image                 String?
-  emailVerifiedAt       DateTime?
-  status                UserStatus       @default(ACTIVE)
-  roleId                String
-  role                  Role             @relation(fields: [roleId], references: [id])
-  primaryOrganizationId String?
-  primaryOrganization   Organization?    @relation("PrimaryOrg", fields: [primaryOrganizationId], references: [id])
-  permissionOverrides   UserPermission[]
+model Student {
+  id       String  @id @default(cuid())
+  schoolId String
+  school   School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  campusId String?
+  campus   Campus? @relation(fields: [campusId], references: [id])
 
-  organizationMembers   OrganizationMember[]
-  orders                Order[]
-  licenses              ApplicationLicense[]
-  deployments           Deployment[]
-  deploymentTargets     DeploymentTarget[]
-  domains               Domain[]
-  hostingAccounts       HostingAccount[]
-  supportTickets        SupportTicket[]
-  supportMessages       SupportMessage[]
-  notifications         Notification[]
-  auditLogs             AuditLog[]
-  customizationRequests CustomizationRequest[]
-  quotes                Quote[]
-  subscriptions         Subscription[]
-  createdApplications   Application[]          @relation("AppCreatedBy")
+  admissionNumber String
+
+  firstName   String
+  lastName    String
+  otherNames  String?
+  photoUrl    String?
+  dateOfBirth DateTime?
+  gender      Gender?
+  bloodGroup  String?
+  nationality String?   @default("Nigeria")
+
+  addressLine String?
+  city        String?
+  state       String?
+
+  medicalNotes     String?
+  allergies        String?
+  emergencyContact String?
+
+  classArmId String?
+  classArm   ClassArm? @relation(fields: [classArmId], references: [id])
+
+  status        StudentStatus @default(ACTIVE)
+  admissionDate DateTime      @default(now())
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([roleId])
-  @@index([primaryOrganizationId])
+  /// Set once the student (or a guardian, for younger children who can't
+  /// manage their own login) accepts a PortalInvite. Null means this
+  /// student has no portal login yet — most students, until invited.
+  userId String? @unique
+  user   User?   @relation("StudentUser", fields: [userId], references: [id])
+
+  guardians                     StudentGuardian[]
+  attendanceRecords             AttendanceRecord[]
+  submissions                   AssignmentSubmission[]
+  scores                        Score[]
+  reportCards                   ReportCard[]
+  transcripts                   Transcript[]
+  invoices                      Invoice[]
+  portalInvites                 PortalInvite[]
+  conversations                 Conversation[]
+  preschoolMilestoneAssessments PreschoolMilestoneAssessment[]
+  preschoolReports              PreschoolReport[]
+
+  bookLoans            BookLoan[]
+  transportAssignments StudentTransportAssignment[]
+  hostelAssignments    HostelBedAssignment[]
+
+  /// Set only for a student admitted through the Applicant pipeline — the
+  /// opposite side of Applicant.enrolledStudentId.
+  admittedFrom Applicant? @relation("ApplicantEnrolledStudent")
+
+  cbtExamCandidates CBTExamCandidate[]
+  cbtAttempts       CBTAttempt[]
+
+  lectureProgress     StudentLectureProgress[]
+  liveClassAttendance LiveClassAttendance[]
+
+  @@unique([schoolId, admissionNumber])
+  @@index([schoolId])
+  @@index([schoolId, classArmId])
+  @@index([schoolId, status])
 }
 
-model Organization {
-  id                String               @id @default(uuid())
-  name              String
-  slug              String               @unique
-  billingEmail      String?
-  members           OrganizationMember[]
-  primaryUsers      User[]               @relation("PrimaryOrg")
-  orders            Order[]
-  domains           Domain[]
-  hostingAccounts   HostingAccount[]
-  deployments       Deployment[]
-  deploymentTargets DeploymentTarget[]
-  supportTickets    SupportTicket[]
-  subscriptions     Subscription[]
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+model Guardian {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  firstName   String
+  lastName    String
+  phone       String
+  email       String?
+  addressLine String?
+  occupation  String?
+
+  /// Set once this guardian accepts a PortalInvite. Null means no portal
+  /// login yet.
+  userId String? @unique
+  user   User?   @relation("GuardianUser", fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  students      StudentGuardian[]
+  portalInvites PortalInvite[]
+
+  @@index([schoolId])
 }
 
-enum OrgMemberRole {
-  OWNER
-  ADMIN
-  MEMBER
+enum GuardianRelationship {
+  FATHER
+  MOTHER
+  GUARDIAN
+  OTHER
 }
 
-model OrganizationMember {
-  id             String        @id @default(uuid())
-  organizationId String
-  userId         String
-  role           OrgMemberRole @default(MEMBER)
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt      DateTime      @default(now())
+model StudentGuardian {
+  studentId    String
+  student      Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  guardianId   String
+  guardian     Guardian             @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+  relationship GuardianRelationship
+  isPrimary    Boolean              @default(false)
 
-  @@unique([organizationId, userId])
+  @@id([studentId, guardianId])
 }
 
-// =========================================================================
-// CATALOG: CATEGORIES & APPLICATIONS
-// =========================================================================
+// ---------------------------------------------------------------------------
+// Academics: teaching assignments, attendance, timetable, assignments,
+// assessments & results (Phase 2)
+// ---------------------------------------------------------------------------
 
-model Category {
-  id           String        @id @default(uuid())
-  name         String
-  slug         String        @unique
-  description  String?
-  icon         String?
-  sortOrder    Int           @default(0)
-  applications Application[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+/// Which teacher teaches which subject to which class arm. Foundation for
+/// scoping attendance/assignment/score-entry actions to "your own class"
+/// later, without another schema change.
+model TeacherAssignment {
+  id         String   @id @default(cuid())
+  schoolId   String
+  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacherId  String
+  teacher    User     @relation("TeacherAssignments", fields: [teacherId], references: [id], onDelete: Cascade)
+  subjectId  String
+  subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  classArmId String
+  classArm   ClassArm @relation(fields: [classArmId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([teacherId, subjectId, classArmId])
+  @@index([schoolId])
+  @@index([schoolId, teacherId])
+  @@index([schoolId, classArmId])
 }
 
-enum ApplicationStatus {
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+/// Extensible on purpose (brief section 8: "start manual, leave room for
+/// QR/biometric"); only MANUAL is actually implemented.
+enum AttendanceMethod {
+  MANUAL
+  QR
+  BIOMETRIC
+}
+
+model AttendanceRecord {
+  id         String   @id @default(cuid())
+  schoolId   String
+  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classArmId String
+  classArm   ClassArm @relation(fields: [classArmId], references: [id], onDelete: Cascade)
+  termId     String
+  term       Term     @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  date       DateTime
+  status     AttendanceStatus
+  method     AttendanceMethod @default(MANUAL)
+  note       String?
+  markedById String
+  markedBy   User             @relation("AttendanceMarkedBy", fields: [markedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, date])
+  @@index([schoolId, date])
+  @@index([schoolId, classArmId, date])
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+}
+
+/// One recurring weekly period. startTime/endTime are "HH:mm" 24h strings —
+/// simpler than DateTime for a slot that repeats every week with no fixed
+/// calendar date, and easy to render/sort/compare as plain strings.
+model TimetableSlot {
+  id         String   @id @default(cuid())
+  schoolId   String
+  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classArmId String
+  classArm   ClassArm @relation(fields: [classArmId], references: [id], onDelete: Cascade)
+  subjectId  String
+  subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  teacherId  String
+  teacher    User     @relation("TeacherTimetableSlots", fields: [teacherId], references: [id], onDelete: Cascade)
+
+  dayOfWeek DayOfWeek
+  startTime String
+  endTime   String
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([schoolId, classArmId, dayOfWeek])
+  @@index([schoolId, teacherId, dayOfWeek])
+}
+
+model Assignment {
+  id         String   @id @default(cuid())
+  schoolId   String
+  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classArmId String
+  classArm   ClassArm @relation(fields: [classArmId], references: [id], onDelete: Cascade)
+  subjectId  String
+  subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  teacherId  String
+  teacher    User     @relation("AssignmentTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+  termId     String
+  term       Term     @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  dueDate     DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  submissions AssignmentSubmission[]
+
+  @@index([schoolId])
+  @@index([schoolId, classArmId])
+}
+
+enum SubmissionStatus {
+  PENDING
+  SUBMITTED
+  GRADED
+}
+
+/// One row per student per assignment, created up front for the whole
+/// class so a teacher gets a gradebook immediately — there's no student
+/// portal yet (Phase 4) for self-service submission, so a teacher records
+/// what was handed in and grades it from here.
+model AssignmentSubmission {
+  id           String     @id @default(cuid())
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  status     SubmissionStatus @default(PENDING)
+  score      Int?
+  feedback   String?
+  gradedAt   DateTime?
+  gradedById String?
+  gradedBy   User?            @relation("SubmissionGradedBy", fields: [gradedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([assignmentId, studentId])
+}
+
+/// Per-school configurable grading scale (brief: "schools must be able to
+/// configure grading systems"), e.g. A=70-100 "Excellent".
+model GradeBand {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  grade    String
+  minScore Int
+  maxScore Int
+  remark   String
+  order    Int    @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@unique([schoolId, grade])
+  @@index([schoolId])
+}
+
+/// Per-school configurable score components for a subject's total, e.g.
+/// "1st CA" (max 20), "2nd CA" (max 20), "Exam" (max 60).
+model AssessmentComponent {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  name     String
+  maxScore Int
+  order    Int    @default(0)
+
+  createdAt DateTime @default(now())
+
+  scores   Score[]
+  cbtExams CBTExam[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+model Score {
+  id          String              @id @default(cuid())
+  schoolId    String
+  school      School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subjectId   String
+  subject     Subject             @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  termId      String
+  term        Term                @relation(fields: [termId], references: [id], onDelete: Cascade)
+  componentId String
+  component   AssessmentComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  value       Int
+  enteredById String
+  enteredBy   User   @relation("ScoreEnteredBy", fields: [enteredById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, subjectId, termId, componentId])
+  @@index([schoolId])
+  @@index([schoolId, studentId, termId])
+  @@index([schoolId, subjectId, termId])
+}
+
+enum ReportCardStatus {
   DRAFT
+  APPROVED
   PUBLISHED
-  UNPUBLISHED
+}
+
+/// A per-student per-term workflow record (brief section 45's RESULTS
+/// workflow: score entry -> validation -> approval -> report card -> parent
+/// notification). Totals/grades/positions are computed from Score at read
+/// time rather than duplicated here — this row only tracks the human
+/// approval/publish gate and optional comments.
+model ReportCard {
+  id        String  @id @default(cuid())
+  schoolId  String
+  school    School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  termId    String
+  term      Term    @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  status           ReportCardStatus @default(DRAFT)
+  teacherComment   String?
+  principalComment String?
+
+  approvedById String?
+  approvedBy   User?     @relation("ReportCardApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  publishedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, termId])
+  @@index([schoolId])
+}
+
+// ---------------------------------------------------------------------------
+// Pre-School Milestone Results — a second, non-numerical assessment track
+// alongside Score/ReportCard above, for classes whose learners aren't
+// primarily evaluated with marks/percentages. A ClassGroup opts in via
+// assessmentMode; everything below is purely additive and never read by
+// computeReportCard/generateReportCardPdfBuffer or any other part of the
+// existing Grader's Results system.
+//
+// Shape mirrors the numeric system on purpose:
+//   Score          -> PreschoolMilestoneAssessment (raw entries)
+//   ReportCard     -> PreschoolReport (DRAFT/SUBMITTED/APPROVED/PUBLISHED
+//                      workflow row; content still recomputed live, never
+//                      cached, exactly like ReportCard)
+//   AssessmentComponent -> PreschoolAssessmentPeriod (which "pass" through
+//                      the milestones a score/assessment belongs to)
+//   GradeBand      -> PreschoolAssessmentLevelLabel (per-school display
+//                      label for a fixed, stable PreschoolAssessmentLevel
+//                      code — the code itself never varies per school, so
+//                      analytics/AI stay meaningful across schools)
+// ---------------------------------------------------------------------------
+
+enum ClassAssessmentMode {
+  NUMERICAL
+  MILESTONE
+  BOTH
+}
+
+/// A term's curriculum plan for one class group + subject — the source
+/// milestones are derived from (brief section 3: "milestones are derived
+/// from the Scheme of Work", not an isolated list). Scoped to ClassGroup
+/// (not ClassArm) since arms of the same class group share one curriculum;
+/// a teacher assessing "Nursery 1 A" pulls up "Nursery 1"'s plan.
+model SchemeOfWork {
+  id                String          @id @default(cuid())
+  schoolId          String
+  school            School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicSessionId String
+  academicSession   AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  termId            String
+  term              Term            @relation(fields: [termId], references: [id], onDelete: Cascade)
+  classGroupId      String
+  classGroup        ClassGroup      @relation(fields: [classGroupId], references: [id], onDelete: Cascade)
+  subjectId         String
+  subject           Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User   @relation("SchemeOfWorkCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  topics SchemeOfWorkTopic[]
+
+  @@unique([schoolId, termId, classGroupId, subjectId])
+  @@index([schoolId])
+  @@index([schoolId, classGroupId, subjectId])
+}
+
+/// One week/topic within a Scheme of Work (brief: "Week 1 — Verbs").
+model SchemeOfWorkTopic {
+  id             String       @id @default(cuid())
+  schoolId       String
+  school         School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  schemeOfWorkId String
+  schemeOfWork   SchemeOfWork @relation(fields: [schemeOfWorkId], references: [id], onDelete: Cascade)
+
+  weekNumber  Int
+  title       String
+  description String?
+  order       Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  milestones PreschoolMilestone[]
+
+  @@unique([schemeOfWorkId, weekNumber])
+  @@index([schoolId])
+}
+
+enum MilestoneStatus {
+  DRAFT
+  ACTIVE
   ARCHIVED
 }
 
-model Application {
-  id               String            @id @default(uuid())
-  name             String
-  slug             String            @unique
-  shortDescription String
-  fullDescription  String
-  categoryId       String
-  category         Category          @relation(fields: [categoryId], references: [id])
-  technologyStack  String[]
-  currentVersion   String            @default("1.0.0")
-  status           ApplicationStatus @default(DRAFT)
-  featured         Boolean           @default(false)
+/// A single learning outcome/milestone statement under a topic (brief:
+/// "Abayo has been able to identify pronouns"). ARCHIVED rather than
+/// deleted when a Scheme of Work is edited later — a milestone already
+/// referenced by PreschoolMilestoneAssessment rows must never disappear
+/// from a student's historical results (brief section 12), and the FK
+/// from assessments to milestones has no onDelete: Cascade path that could
+/// silently drop them either.
+model PreschoolMilestone {
+  id       String            @id @default(cuid())
+  schoolId String
+  school   School            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  topicId  String
+  topic    SchemeOfWorkTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
-  demoUrl      String?
-  demoUsername String?
-  demoPassword String?
+  title       String
+  description String?
+  order       Int             @default(0)
+  status      MilestoneStatus @default(ACTIVE)
 
-  whatsIncluded    String[]
-  whatsNotIncluded String[]
-  requirements     String[]
-
-  seoTitle       String?
-  seoDescription String?
-  ogImageUrl     String?
-
-  createdById String?
-  createdBy   User?   @relation("AppCreatedBy", fields: [createdById], references: [id])
-
-  images                ApplicationImage[]
-  features              ApplicationFeature[]
-  pricing               ApplicationPricing[]
-  versions              ApplicationVersion[]
-  licenses              ApplicationLicense[]
-  orderItems            OrderItem[]
-  deployments           Deployment[]
-  bundleItems           BundleItem[]
-  customizationRequests CustomizationRequest[]
-  supportTickets        SupportTicket[]
-  reviews               ApplicationReview[]
+  createdById String
+  createdBy   User   @relation("PreschoolMilestoneCreatedBy", fields: [createdById], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([categoryId])
-  @@index([status])
-  @@index([featured])
+  assessments PreschoolMilestoneAssessment[]
+
+  @@index([schoolId])
+  @@index([topicId])
 }
 
-model ApplicationImage {
-  id            String      @id @default(uuid())
-  applicationId String
-  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  url           String
-  altText       String?
-  sortOrder     Int         @default(0)
-  createdAt     DateTime    @default(now())
-
-  @@index([applicationId])
+/// Which pass through the milestones an assessment belongs to (brief
+/// section 11: Test vs Examination may cover different milestones from
+/// the same Scheme of Work). A milestone assessed under one period is a
+/// distinct row from the same milestone assessed under another — see the
+/// unique constraint on PreschoolMilestoneAssessment — which is what lets
+/// the UI show "already assessed this term, in Test" without that
+/// blocking a later Examination pass over the same milestone.
+enum PreschoolAssessmentPeriodType {
+  CONTINUOUS_ASSESSMENT
+  TEST
+  EXAMINATION
+  MID_TERM
+  END_OF_TERM
+  OBSERVATION
+  WEEKLY
+  CUSTOM
 }
 
-model ApplicationFeature {
-  id            String      @id @default(uuid())
-  applicationId String
-  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  title         String
-  description   String?
-  sortOrder     Int         @default(0)
+model PreschoolAssessmentPeriod {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  termId   String
+  term     Term   @relation(fields: [termId], references: [id], onDelete: Cascade)
 
-  @@index([applicationId])
+  name String
+  type PreschoolAssessmentPeriodType @default(CUSTOM)
+
+  createdAt DateTime @default(now())
+
+  assessments PreschoolMilestoneAssessment[]
+
+  @@unique([schoolId, termId, name])
+  @@index([schoolId])
 }
 
-model ApplicationReview {
-  id            String      @id @default(uuid())
-  applicationId String
-  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  customerName  String
-  rating        Int
-  comment       String?
-  createdAt     DateTime    @default(now())
-
-  @@index([applicationId])
+/// Fixed, cross-school-stable assessment codes (brief section 5: "the
+/// database should store a stable assessment value/code while allowing
+/// schools to customize the displayed label"). The code is a Prisma enum
+/// on purpose — not a per-school row — so AI analysis and any future
+/// cross-school analytics stay meaningful; PreschoolAssessmentLevelLabel
+/// below is where a school's own wording/colour lives.
+enum PreschoolAssessmentLevel {
+  EXCEEDED
+  ACHIEVED
+  PROGRESSING
+  DEVELOPING
+  NEEDS_SUPPORT
 }
 
-enum ApplicationVersionStatus {
+/// A school's display label/colour override for one PreschoolAssessmentLevel
+/// code. Absence of a row for a given level just means "use the built-in
+/// default wording" (see PRESCHOOL_LEVEL_DEFAULTS in preschool-results.ts) —
+/// schools that never touch this setting need no seed/migration step.
+model PreschoolAssessmentLevelLabel {
+  id       String                   @id @default(cuid())
+  schoolId String
+  school   School                   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  level    PreschoolAssessmentLevel
+
+  label        String
+  colorVariant String @default("neutral")
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, level])
+  @@index([schoolId])
+}
+
+/// One teacher's assessment of one student against one milestone, within
+/// one assessment period — the milestone system's equivalent of Score.
+/// comment is optional per brief section 8 ("do not require teachers to
+/// manually write a comment for every milestone").
+model PreschoolMilestoneAssessment {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  studentId          String
+  student            Student                   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  milestoneId        String
+  milestone          PreschoolMilestone        @relation(fields: [milestoneId], references: [id], onDelete: Restrict)
+  subjectId          String
+  subject            Subject                   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  termId             String
+  term               Term                      @relation(fields: [termId], references: [id], onDelete: Cascade)
+  assessmentPeriodId String
+  assessmentPeriod   PreschoolAssessmentPeriod @relation(fields: [assessmentPeriodId], references: [id], onDelete: Cascade)
+
+  level   PreschoolAssessmentLevel
+  comment String?
+
+  assessedById String
+  assessedBy   User     @relation("PreschoolMilestoneAssessedBy", fields: [assessedById], references: [id])
+  assessedAt   DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([studentId, milestoneId, assessmentPeriodId])
+  @@index([schoolId])
+  @@index([schoolId, studentId, termId])
+  @@index([schoolId, milestoneId])
+  @@index([schoolId, assessmentPeriodId])
+}
+
+enum PreschoolResultStatus {
   DRAFT
-  TESTING
-  STABLE
-  DEPRECATED
-  RETIRED
+  SUBMITTED
+  APPROVED
+  PUBLISHED
 }
 
-// The commercial/release record for one technical release of an
-// application. Deliberately separate from DeploymentSpecification (the "how
-// to install it") and ApplicationArtifact (the "what gets installed") so a
-// version's release metadata doesn't get tangled up with its build config --
-// see ARCHITECTURE.md "Application Versioning & Deployment" for the full
-// Application -> Version -> Spec -> Adapter -> Infrastructure chain.
-model ApplicationVersion {
-  id               String                   @id @default(uuid())
-  applicationId    String
-  application      Application              @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  version          String
-  releaseName      String?
-  description      String?
-  status           ApplicationVersionStatus @default(DRAFT)
-  isLatest         Boolean                  @default(false)
-  isStable         Boolean                  @default(false)
-  packageReference String? // human-readable pointer, e.g. "ghcr.io/bridgecodes/crm:1.4.0"
-  rollbackOf       String? // version string this can roll back to
+/// The milestone system's equivalent of ReportCard: a per-student-per-term
+/// workflow/sign-off row. Content (which milestones, at which level, with
+/// which comment) is always recomputed live from PreschoolMilestoneAssessment
+/// at read time, exactly like ReportCard never caches Score data — this row
+/// only tracks status + comments. Adds SUBMITTED ahead of APPROVED (brief
+/// section 23's "Draft -> Submitted -> Approved -> Published"), a step the
+/// numeric ReportCardStatus doesn't have and isn't getting — that enum is
+/// untouched.
+model PreschoolReport {
+  id        String  @id @default(cuid())
+  schoolId  String
+  school    School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  termId    String
+  term      Term    @relation(fields: [termId], references: [id], onDelete: Cascade)
 
-  deploymentSpecificationId String?                  @unique
-  deploymentSpecification   DeploymentSpecification? @relation(fields: [deploymentSpecificationId], references: [id])
-  artifact                  ApplicationArtifact?
+  status           PreschoolResultStatus @default(DRAFT)
+  overallComment   String?
+  teacherComment   String?
+  principalComment String?
 
-  deployments Deployment[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  submittedById String?
+  submittedBy   User?     @relation("PreschoolReportSubmittedBy", fields: [submittedById], references: [id])
+  submittedAt   DateTime?
+  approvedById  String?
+  approvedBy    User?     @relation("PreschoolReportApprovedBy", fields: [approvedById], references: [id])
+  approvedAt    DateTime?
+  publishedAt   DateTime?
 
-  @@unique([applicationId, version])
-  @@index([applicationId])
-  @@index([status])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, termId])
+  @@index([schoolId])
 }
 
-// Structured, provider-independent description of how a version is built,
-// configured, and run -- generated commands come from these validated
-// fields, never from raw customer input. One spec belongs to one version.
-model DeploymentSpecification {
-  id                   String   @id @default(uuid())
-  runtime              String // e.g. "node20", "php8.2", "python3.11"
-  runtimeVersion       String?
-  framework            String? // e.g. "nextjs", "laravel", "django"
-  frameworkVersion     String?
-  packageManager       String? // e.g. "npm", "composer", "pip"
-  installCommand       String?
-  buildCommand         String?
-  startCommand         String?
-  port                 Int?     @default(3000)
-  healthCheckPath      String?  @default("/api/health")
-  databaseType         String? // e.g. "postgresql", "mysql", "none"
-  databaseVersion      String?
-  requiredServices     String[] // e.g. ["postgresql", "redis"]
-  // [{ key, description, required, secret, defaultValue? }] -- secret vars
-  // are never rendered to the customer and are resolved at deploy time from
-  // DeploymentCredential, never stored here in plaintext.
-  environmentVariables Json
-  migrationCommand     String?
-  seedCommand          String?
-  deploymentMethod     String? // e.g. "ssh", "docker", "cpanel", "cloud"
-
-  version   ApplicationVersion?
-  createdAt DateTime            @default(now())
-  updatedAt DateTime            @updatedAt
-}
-
-enum ArtifactType {
-  DOCKER_IMAGE
-  GIT_REPOSITORY
-  GIT_COMMIT
-  ARCHIVE
-  OTHER
-}
-
-// The deployable artifact a version points to. Storage-mechanism independent
-// -- "reference" means different things per type (an image tag, a repo URL,
-// a commit SHA, an archive URL) and adapters interpret it accordingly.
-model ApplicationArtifact {
-  id                   String             @id @default(uuid())
-  applicationVersionId String             @unique
-  applicationVersion   ApplicationVersion @relation(fields: [applicationVersionId], references: [id], onDelete: Cascade)
-  type                 ArtifactType
-  reference            String
-  metadata             Json?
-  createdAt            DateTime           @default(now())
-}
-
-enum PricingType {
-  LICENSE
-  INSTALLATION
-  CUSTOMIZATION
-  HOSTING
-  MAINTENANCE
-  DOMAIN
-  SUPPORT
-  OTHER
-}
-
-enum BillingCycle {
-  ONE_TIME
-  MONTHLY
-  YEARLY
-}
-
-model ApplicationPricing {
-  id             String       @id @default(uuid())
-  applicationId  String
-  application    Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  type           PricingType
-  name           String
-  billingCycle   BillingCycle @default(ONE_TIME)
-  amount         Decimal      @db.Decimal(12, 2)
-  currency       String       @default("USD")
-  isStartingFrom Boolean      @default(false)
-  isActive       Boolean      @default(true)
-  sortOrder      Int          @default(0)
-  orderItems     OrderItem[]
-
-  @@index([applicationId])
-}
-
-enum LicenseType {
-  STANDARD
-  EXTENDED
-  DEVELOPER
-}
-
-enum LicenseStatus {
+enum TranscriptStatus {
   ACTIVE
-  SUSPENDED
-  EXPIRED
   REVOKED
 }
 
-model ApplicationLicense {
-  id                         String        @id @default(uuid())
-  licenseKey                 String        @unique
-  customerId                 String
-  customer                   User          @relation(fields: [customerId], references: [id])
-  applicationId              String
-  application                Application   @relation(fields: [applicationId], references: [id])
-  orderId                    String?
-  order                      Order?        @relation(fields: [orderId], references: [id])
-  type                       LicenseType   @default(STANDARD)
-  status                     LicenseStatus @default(ACTIVE)
-  allowedDomains             String[]
-  requiresOnlineVerification Boolean       @default(false)
-  issuedAt                   DateTime      @default(now())
-  expiresAt                  DateTime?
-  createdAt                  DateTime      @default(now())
-  updatedAt                  DateTime      @updatedAt
+/// An issued, official academic transcript snapshot event for a student.
+/// Deliberately holds no academic data itself (no scores/grades duplicated
+/// here) — the transcript's content is always recomputed live from Score/
+/// ReportCard/AttendanceRecord at view/download time via
+/// getStudentAcademicHistory, exactly like ReportCard's totals above. This
+/// row exists only to give each issued transcript a permanent, auditable
+/// identity: a unique reference number a third party can verify, and a
+/// status that can move to REVOKED without ever deleting the record.
+model Transcript {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
-  @@index([customerId])
-  @@index([applicationId])
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  /// Public-facing identifier, e.g. "WIN-TR-2026-000123" — what a viewer
+  /// types into /verify-transcript and what the QR code encodes.
+  referenceNumber String @unique
+
+  /// A second, non-guessable token stored alongside the reference number
+  /// for internal record-keeping/tamper-evidence. Not required to look a
+  /// transcript up on the public verification page.
+  verificationCode String
+
+  status TranscriptStatus @default(ACTIVE)
+
+  generatedById String
+  generatedBy   User     @relation("TranscriptGeneratedBy", fields: [generatedById], references: [id])
+  generatedAt   DateTime @default(now())
+
+  revokedById   String?
+  revokedBy     User?     @relation("TranscriptRevokedBy", fields: [revokedById], references: [id])
+  revokedAt     DateTime?
+  revokedReason String?
+
+  @@index([schoolId])
+  @@index([schoolId, studentId])
 }
 
-// =========================================================================
-// BUNDLES & COUPONS
-// =========================================================================
+// ---------------------------------------------------------------------------
+// Finance: fee structures, invoices, payments, expenses (Phase 3)
+// ---------------------------------------------------------------------------
 
-model Bundle {
-  id          String       @id @default(uuid())
+/// All money in this section is stored as an integer in the school's
+/// currency's minor units (e.g. kobo for NGN) — never a float — and
+/// formatted for display with formatMoney() in src/lib/money.ts.
+
+model FeeCategory {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name     String
+
+  createdAt DateTime @default(now())
+
+  feeStructures FeeStructure[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+/// classGroupId null means "applies to every class" (e.g. a school-wide
+/// book levy); set means it only applies to that grade level.
+model FeeStructure {
+  id           String      @id @default(cuid())
+  schoolId     String
+  school       School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  categoryId   String
+  category     FeeCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  classGroupId String?
+  classGroup   ClassGroup? @relation(fields: [classGroupId], references: [id], onDelete: Cascade)
+  termId       String
+  term         Term        @relation(fields: [termId], references: [id], onDelete: Cascade)
+
   name        String
-  slug        String       @unique
-  description String?
-  price       Decimal      @db.Decimal(12, 2)
-  currency    String       @default("USD")
-  isActive    Boolean      @default(true)
-  items       BundleItem[]
-  orderItems  OrderItem[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  amountMinor Int
+
+  createdAt DateTime @default(now())
+
+  invoiceItems InvoiceItem[]
+
+  @@index([schoolId])
+  @@index([schoolId, termId])
 }
 
-enum BundleItemType {
-  APPLICATION
-  DOMAIN
-  HOSTING_PLAN
-  SERVICE
-}
-
-model BundleItem {
-  id            String         @id @default(uuid())
-  bundleId      String
-  bundle        Bundle         @relation(fields: [bundleId], references: [id], onDelete: Cascade)
-  type          BundleItemType
-  applicationId String?
-  application   Application?   @relation(fields: [applicationId], references: [id])
-  hostingPlanId String?
-  hostingPlan   HostingPlan?   @relation(fields: [hostingPlanId], references: [id])
-  serviceLabel  String?
-  quantity      Int            @default(1)
-
-  @@index([bundleId])
-}
-
-enum CouponType {
-  PERCENT
-  FIXED
-}
-
-model Coupon {
-  id        String     @id @default(uuid())
-  code      String     @unique
-  type      CouponType
-  value     Decimal    @db.Decimal(12, 2)
-  maxUses   Int?
-  usedCount Int        @default(0)
-  startsAt  DateTime?
-  expiresAt DateTime?
-  isActive  Boolean    @default(true)
-  orders    Order[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-}
-
-// =========================================================================
-// ORDERS, PAYMENTS, INVOICES
-// =========================================================================
-
-enum OrderStatus {
-  PENDING_PAYMENT
+enum InvoiceStatus {
+  ISSUED
+  PARTIALLY_PAID
   PAID
-  PROCESSING
-  AWAITING_CUSTOMER
-  IN_PROGRESS
-  COMPLETED
   CANCELLED
-  REFUNDED
-  PARTIALLY_REFUNDED
+}
+
+/// One invoice per student per term, generated from the FeeStructure rows
+/// applicable to that student's class (see generateInvoicesForClass in
+/// src/lib/services/finance.ts). status is derived from confirmed Payment
+/// totals against totalMinor, recomputed on every payment rather than
+/// trusted as independently-settable state. payToken lets an unauthenticated
+/// parent open /pay/[token] to view and pay it — there's no parent login
+/// yet (Phase 4), so this is how "online payments" and "bank transfer" are
+/// reachable at all in this phase.
+model Invoice {
+  id        String  @id @default(cuid())
+  schoolId  String
+  school    School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  termId    String
+  term      Term    @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  invoiceNumber  String        @unique
+  status         InvoiceStatus @default(ISSUED)
+  subtotalMinor  Int
+  discountMinor  Int           @default(0)
+  discountReason String?
+  totalMinor     Int
+  dueDate        DateTime
+  payToken       String        @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items    InvoiceItem[]
+  payments Payment[]
+
+  @@unique([studentId, termId])
+  @@index([schoolId])
+  @@index([schoolId, status])
+}
+
+model InvoiceItem {
+  id             String        @id @default(cuid())
+  invoiceId      String
+  invoice        Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  feeStructureId String?
+  feeStructure   FeeStructure? @relation(fields: [feeStructureId], references: [id])
+
+  description String
+  amountMinor Int
+
+  @@index([invoiceId])
+}
+
+enum PaymentMethod {
+  MANUAL
+  BANK_TRANSFER
+  ONLINE
+}
+
+enum PaymentGatewayProvider {
+  PAYSTACK
+  FLUTTERWAVE
+  KORAPAY
+}
+
+/// A school's own gateway credentials, brought and managed by the school
+/// itself — never a platform-wide key. secretKeyEnc is the secret API key
+/// encrypted at rest (src/lib/crypto.ts); publicKey is stored in the
+/// clear since gateways treat it as safe to expose client-side. At most
+/// one row per (school, provider); School.activePaymentProvider names
+/// which configured, enabled row "Pay online" actually uses.
+model PaymentGatewayCredential {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  provider     PaymentGatewayProvider
+  publicKey    String
+  secretKeyEnc String
+  isEnabled    Boolean                @default(true)
+
+  /// Flutterwave-only: the separate "secret hash" a school sets in their
+  /// Flutterwave dashboard's webhook settings (distinct from the secret
+  /// API key) — Flutterwave's verif-hash webhook header is compared
+  /// against this value directly, not derived from the API key the way
+  /// Paystack/Korapay's signatures are. Null for Paystack/Korapay, and
+  /// for a school that hasn't set up webhooks at all (the pay-confirm
+  /// page's own server-side verify() call still works without it).
+  webhookSecretEnc String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, provider])
+  @@index([schoolId])
 }
 
 enum PaymentStatus {
   PENDING
-  PROCESSING
-  PAID
+  CONFIRMED
   FAILED
-  REFUNDED
-  PARTIALLY_REFUNDED
-  CANCELLED
 }
 
-model Order {
-  id             String        @id @default(uuid())
-  orderNumber    String        @unique
-  customerId     String
-  customer       User          @relation(fields: [customerId], references: [id])
-  organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+model Payment {
+  id        String  @id @default(cuid())
+  schoolId  String
+  school    School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
-  status          OrderStatus   @default(PENDING_PAYMENT)
-  paymentStatus   PaymentStatus @default(PENDING)
-  paymentProvider String?
-  transactionRef  String?
+  amountMinor  Int
+  method       PaymentMethod
+  status       PaymentStatus @default(PENDING)
+  reference    String        @unique
+  paidAt       DateTime?
+  recordedById String?
+  recordedBy   User?         @relation("PaymentRecordedBy", fields: [recordedById], references: [id])
 
-  subtotal Decimal @db.Decimal(12, 2)
-  discount Decimal @default(0) @db.Decimal(12, 2)
-  tax      Decimal @default(0) @db.Decimal(12, 2)
-  total    Decimal @db.Decimal(12, 2)
-  currency String  @default("USD")
-
-  couponId String?
-  coupon   Coupon? @relation(fields: [couponId], references: [id])
-
-  billingName    String?
-  billingEmail   String?
-  billingPhone   String?
-  billingCompany String?
-  billingCountry String?
-  billingAddress String?
-
-  notes String?
-
-  // Captures the customer's deployment + domain choices made at checkout
-  // (deployment type, server details, domain name) so the fulfillment step
-  // that runs after payment succeeds knows what to provision.
-  fulfillmentIntent Json?
-
-  items        OrderItem[]
-  payments     Payment[]
-  invoice      Invoice?
-  deployments  Deployment[]
-  domainOrders DomainOrder[]
-  licenses     ApplicationLicense[]
-  quote        Quote?
+  /// Which real gateway processed this — null for a MANUAL/BANK_TRANSFER
+  /// payment, and also null for an ONLINE payment that ran through the
+  /// built-in mock gateway (no school-connected provider yet). Lets the
+  /// confirm page tell a real, already-charged gateway payment (verify
+  /// server-side, no user action needed) apart from the mock's simulated
+  /// "click to confirm" round trip.
+  provider PaymentGatewayProvider?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([customerId])
-  @@index([status])
-  @@index([paymentStatus])
+  @@index([schoolId])
+  @@index([invoiceId])
 }
 
-enum OrderItemType {
-  APPLICATION_LICENSE
-  INSTALLATION
-  CUSTOMIZATION
-  HOSTING_PLAN
-  DOMAIN
-  MAINTENANCE
-  BUNDLE
-}
-
-model OrderItem {
-  id      String        @id @default(uuid())
-  orderId String
-  order   Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  type    OrderItemType
-
-  applicationId        String?
-  application          Application?        @relation(fields: [applicationId], references: [id])
-  applicationPricingId String?
-  applicationPricing   ApplicationPricing? @relation(fields: [applicationPricingId], references: [id])
-  hostingPlanId        String?
-  hostingPlan          HostingPlan?        @relation(fields: [hostingPlanId], references: [id])
-  bundleId             String?
-  bundle               Bundle?             @relation(fields: [bundleId], references: [id])
-
-  description  String
-  billingCycle BillingCycle @default(ONE_TIME)
-  quantity     Int          @default(1)
-  unitPrice    Decimal      @db.Decimal(12, 2)
-  total        Decimal      @db.Decimal(12, 2)
+model Vendor {
+  id          String  @id @default(cuid())
+  schoolId    String
+  school      School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name        String
+  contactInfo String?
 
   createdAt DateTime @default(now())
 
-  @@index([orderId])
+  expenses Expense[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
 }
 
-model Payment {
-  id          String        @id @default(uuid())
-  orderId     String
-  order       Order         @relation(fields: [orderId], references: [id])
-  provider    String
-  providerRef String?
-  amount      Decimal       @db.Decimal(12, 2)
-  currency    String        @default("USD")
-  status      PaymentStatus @default(PENDING)
-  method      String?
-  rawPayload  Json?
-  refunds     Refund[]
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+model ExpenseCategory {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name     String
 
-  @@index([orderId])
-  @@index([providerRef])
+  createdAt DateTime @default(now())
+
+  expenses Expense[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
 }
 
-enum RefundStatus {
+enum ExpenseStatus {
   PENDING
-  PROCESSED
-  FAILED
+  APPROVED
+  REJECTED
 }
 
-model Refund {
-  id            String       @id @default(uuid())
-  paymentId     String
-  payment       Payment      @relation(fields: [paymentId], references: [id])
-  amount        Decimal      @db.Decimal(12, 2)
-  reason        String
-  status        RefundStatus @default(PENDING)
-  processedById String?
-  providerRef   String?
-  createdAt     DateTime     @default(now())
+/// status starts PENDING only when the amount is at/over the school's
+/// expenseApprovalThresholdMinor; smaller expenses are auto-approved at
+/// creation (see recordExpense in src/lib/services/finance.ts) — the
+/// brief's threshold rule, not a rubber stamp on everything.
+model Expense {
+  id         String          @id @default(cuid())
+  schoolId   String
+  school     School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  vendorId   String?
+  vendor     Vendor?         @relation(fields: [vendorId], references: [id])
 
-  @@index([paymentId])
+  description  String
+  amountMinor  Int
+  status       ExpenseStatus @default(PENDING)
+  incurredAt   DateTime
+  createdById  String
+  createdBy    User          @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
+  approvedById String?
+  approvedBy   User?         @relation("ExpenseApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([schoolId, status])
 }
 
-// Idempotency ledger for inbound payment webhooks. A (provider, eventId) pair
-// is processed at most once, so a provider retrying delivery (which every
-// real payment webhook does) never double-applies a payment or refund.
-model PaymentWebhookEvent {
-  id          String   @id @default(uuid())
-  provider    String
-  eventId     String // provider-assigned event/idempotency id
-  eventType   String
-  orderId     String?
-  amount      Decimal? @db.Decimal(12, 2)
-  currency    String?
-  payload     Json
-  processedAt DateTime @default(now())
+// ---------------------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------------------
 
-  @@unique([provider, eventId])
-  @@index([orderId])
+model AuditLog {
+  id       String  @id @default(cuid())
+  schoolId String?
+  school   School? @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId   String?
+  user     User?   @relation(fields: [userId], references: [id])
+
+  action        String
+  resourceType  String
+  resourceId    String?
+  previousValue Json?
+  newValue      Json?
+  ipAddress     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId, createdAt])
+  @@index([resourceType, resourceId])
 }
 
-enum InvoiceStatus {
+// ---------------------------------------------------------------------------
+// Communication & portals (Phase 4)
+// ---------------------------------------------------------------------------
+
+enum PortalUserType {
+  GUARDIAN
+  STUDENT
+}
+
+/// Generalizes StaffInvite's token-link pattern for granting a Guardian or
+/// Student their own login. Exactly one of guardianId/studentId is set,
+/// matching `type`. email is the login email to use — Guardian already has
+/// an optional email of its own, but Student has none (many young pupils
+/// have no email of their own), so the address is captured here at invite
+/// time regardless of type, the same way StaffInvite captures it up front.
+model PortalInvite {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  type       PortalUserType
+  guardianId String?
+  guardian   Guardian?      @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+  studentId  String?
+  student    Student?       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  email       String
+  token       String       @unique
+  status      InviteStatus @default(PENDING)
+  expiresAt   DateTime
+  invitedById String
+  invitedBy   User         @relation("PortalInviteSentBy", fields: [invitedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([schoolId, email, status])
+  @@index([schoolId])
+  @@index([guardianId])
+  @@index([studentId])
+}
+
+/// In-app only — there's no email/SMS/WhatsApp/push provider wired up yet,
+/// so a Notification only ever appears in the topbar bell for the user it
+/// belongs to (src/lib/services/notifications.ts creates these alongside
+/// the real event that caused them: a published report card, an issued
+/// invoice, a confirmed payment, a marked-absent record, a published
+/// announcement). Claiming delivery beyond in-app would be faking a
+/// channel that doesn't exist.
+enum NotificationType {
+  ANNOUNCEMENT
+  REPORT_CARD_PUBLISHED
+  INVOICE_ISSUED
+  PAYMENT_CONFIRMED
+  ATTENDANCE_ABSENT
+  MESSAGE
+  TRIAL_STARTED
+  TRIAL_ENDING_SOON
+  TRIAL_EXPIRED
+  SUBSCRIPTION_PAYMENT_SUCCESS
+  SUBSCRIPTION_PAYMENT_FAILED
+  SUBSCRIPTION_RENEWED
+  SUBSCRIPTION_CANCELLED
+  STUDENT_LIMIT_APPROACHING
+  STUDENT_LIMIT_REACHED
+  PLAN_UPGRADED
+  PLAN_DOWNGRADED
+  CBT_EXAM_SCHEDULED
+  CBT_EXAM_STARTING_SOON
+  CBT_EXAM_AVAILABLE
+  CBT_EXAM_ENDING_SOON
+  CBT_RESULT_AVAILABLE
+  CBT_EXAM_SUBMITTED
+  CBT_MANUAL_GRADING_REQUIRED
+  CBT_RESULT_PUBLISHED
+  LECTURE_PUBLISHED
+  LIVE_CLASS_SCHEDULED
+  LIVE_CLASS_STARTING_SOON
+  LIVE_CLASS_STARTED
+  LIVE_CLASS_CANCELLED
+  LIVE_CLASS_RECORDING_AVAILABLE
+  PRESCHOOL_REPORT_PUBLISHED
+}
+
+model Notification {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  type   NotificationType
+  title  String
+  body   String?
+  link   String?
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+}
+
+/// classArmId is set only when audience is CLASS; ignored otherwise. Only a
+/// published (publishedAt set) announcement is visible outside the staff
+/// dashboard that authored it, and only publishing fires a Notification per
+/// matching recipient — a draft is invisible to its intended audience.
+enum AnnouncementAudience {
+  SCHOOL_WIDE
+  STAFF_ONLY
+  PARENTS_ONLY
+  CLASS
+}
+
+model Announcement {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  title      String
+  body       String
+  audience   AnnouncementAudience
+  classArmId String?
+  classArm   ClassArm?            @relation(fields: [classArmId], references: [id], onDelete: Cascade)
+
+  publishedAt DateTime?
+  createdById String
+  createdBy   User      @relation("AnnouncementCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([schoolId, audience])
+  @@index([schoolId, classArmId])
+}
+
+/// A "contact the school" thread. studentId is optional context (which
+/// child the conversation is about) rather than a hard scope — a guardian
+/// with several children, or a general question, leaves it null.
+/// initiatedById is whoever started the thread — a portal user (PARENT/
+/// STUDENT role) in practice, but not restricted to that at the schema
+/// level, so staff-to-staff use isn't ruled out by a constraint.
+enum ConversationStatus {
+  OPEN
+  CLOSED
+}
+
+model Conversation {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  subject       String
+  status        ConversationStatus @default(OPEN)
+  initiatedById String
+  initiatedBy   User               @relation("ConversationInitiatedBy", fields: [initiatedById], references: [id])
+  studentId     String?
+  student       Student?           @relation(fields: [studentId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages Message[]
+
+  @@index([schoolId])
+  @@index([schoolId, status])
+  @@index([initiatedById])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  schoolId       String
+  school         School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation("MessageSender", fields: [senderId], references: [id])
+
+  body String
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([conversationId])
+}
+
+// ---------------------------------------------------------------------------
+// AI assistant (Phase 5)
+// ---------------------------------------------------------------------------
+
+enum AiMessageRole {
+  USER
+  ASSISTANT
+  TOOL
+}
+
+/// Only meaningful on a TOOL-role message. A read tool (find a student,
+/// summarize attendance, ...) goes straight to EXECUTED in the same turn.
+/// A write tool (e.g. marking attendance) stops at PROPOSED — the model
+/// names the action and its arguments, but src/lib/ai/tools.ts never runs
+/// it until the signed-in user explicitly confirms, which re-checks the
+/// same PermissionKey the equivalent dashboard action requires before
+/// calling the underlying service function. DECLINED means the user
+/// dismissed a proposal without running it.
+enum AiToolCallStatus {
+  PROPOSED
+  EXECUTED
+  DECLINED
+}
+
+model AiConversation {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation("AiConversationUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  title String @default("New conversation")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages AiMessage[]
+
+  @@index([schoolId])
+  @@index([userId])
+}
+
+/// content is the human-readable text for USER/ASSISTANT roles; TOOL rows
+/// carry toolName/toolArgs/toolResult instead (content is null) so the UI
+/// can render a distinct "tool call" card rather than plain chat text.
+model AiMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  role    AiMessageRole
+  content String?
+
+  toolName   String?
+  toolArgs   Json?
+  toolResult Json?
+  toolStatus AiToolCallStatus?
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6: advanced ERP — payroll, library, transport, hostel
+// ---------------------------------------------------------------------------
+
+enum SalaryComponentType {
+  EARNING
+  DEDUCTION
+}
+
+/// Catalog of earning/deduction line items a school can build salary
+/// structures from (e.g. "Basic", "Housing Allowance", "PAYE Tax",
+/// "Pension") — tenant-scoped and editable, same role as FeeCategory on the
+/// finance side.
+model SalaryComponent {
+  id       String              @id @default(cuid())
+  schoolId String
+  school   School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name     String
+  type     SalaryComponentType
+
+  createdAt DateTime @default(now())
+
+  items StaffSalaryItem[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+/// One row per staff member's current pay structure. Editing this only
+/// affects payroll runs generated after the edit — PayrollRun/Payslip
+/// snapshot the amounts at generation time, so an already-generated
+/// payslip never changes retroactively when a structure is edited later.
+model StaffSalaryStructure {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId   String @unique
+  user     User   @relation("StaffSalaryStructure", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items StaffSalaryItem[]
+
+  @@index([schoolId])
+}
+
+model StaffSalaryItem {
+  id          String               @id @default(cuid())
+  structureId String
+  structure   StaffSalaryStructure @relation(fields: [structureId], references: [id], onDelete: Cascade)
+  componentId String
+  component   SalaryComponent      @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  amountMinor Int
+
+  @@unique([structureId, componentId])
+}
+
+enum PayrollRunStatus {
   DRAFT
-  SENT
+  APPROVED
+  PAID
+}
+
+/// One run per calendar month. DRAFT -> generate/regenerate payslips from
+/// current StaffSalaryStructure rows freely; APPROVED locks that in
+/// (payroll.approve); PAID just records that salaries went out, same
+/// two-step shape as Expense's approve/reject but with a third terminal
+/// state since payroll additionally needs a "money has left the building"
+/// marker that expenses don't.
+model PayrollRun {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  month  Int
+  year   Int
+  status PayrollRunStatus @default(DRAFT)
+
+  createdById  String
+  createdBy    User      @relation("PayrollRunCreatedBy", fields: [createdById], references: [id])
+  approvedById String?
+  approvedBy   User?     @relation("PayrollRunApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  paidAt       DateTime?
+
+  createdAt DateTime @default(now())
+
+  payslips Payslip[]
+
+  @@unique([schoolId, month, year])
+  @@index([schoolId])
+}
+
+/// items is a snapshot ([{ componentName, type, amountMinor }]) of the staff
+/// member's StaffSalaryItem rows at the moment this run was generated —
+/// deliberately not a live relation, so later edits to their salary
+/// structure (or the component catalog) never change an already-generated
+/// payslip.
+model Payslip {
+  id           String     @id @default(cuid())
+  schoolId     String
+  school       School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  payrollRunId String
+  payrollRun   PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User       @relation("Payslips", fields: [userId], references: [id])
+
+  items                Json
+  grossMinor           Int
+  totalDeductionsMinor Int
+  netMinor             Int
+
+  createdAt DateTime @default(now())
+
+  @@unique([payrollRunId, userId])
+  @@index([schoolId])
+  @@index([schoolId, userId])
+}
+
+/// totalCopies is the only stock field stored — availableCopies is derived
+/// (totalCopies minus currently-ISSUED loans) rather than duplicated, so it
+/// can't drift out of sync the way a manually-decremented counter could.
+model Book {
+  id          String  @id @default(cuid())
+  schoolId    String
+  school      School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title       String
+  author      String
+  isbn        String?
+  category    String?
+  totalCopies Int     @default(1)
+
+  createdAt DateTime @default(now())
+
+  loans BookLoan[]
+
+  @@index([schoolId])
+}
+
+enum BookLoanStatus {
+  ISSUED
+  RETURNED
+  LOST
+}
+
+/// Exactly one of borrowerStudentId/borrowerUserId is set — enforced at the
+/// service layer (src/lib/services/library.ts), not the DB, the same way
+/// Expense.vendorId being optional is an application-level choice rather
+/// than a DB-level XOR constraint elsewhere in this schema.
+model BookLoan {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  bookId   String
+  book     Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  borrowerStudentId String?
+  borrowerStudent   Student? @relation(fields: [borrowerStudentId], references: [id])
+  borrowerUserId    String?
+  borrowerUser      User?    @relation("BookBorrower", fields: [borrowerUserId], references: [id])
+
+  issuedById String
+  issuedBy   User   @relation("BookIssuedBy", fields: [issuedById], references: [id])
+
+  issuedAt   DateTime       @default(now())
+  dueAt      DateTime
+  returnedAt DateTime?
+  status     BookLoanStatus @default(ISSUED)
+
+  @@index([schoolId])
+  @@index([schoolId, status])
+  @@index([bookId])
+}
+
+model Vehicle {
+  id          String  @id @default(cuid())
+  schoolId    String
+  school      School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name        String
+  plateNumber String
+  capacity    Int
+  driverName  String?
+  driverPhone String?
+
+  createdAt DateTime @default(now())
+
+  routes TransportRoute[]
+
+  @@unique([schoolId, plateNumber])
+  @@index([schoolId])
+}
+
+model TransportRoute {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name      String
+  vehicleId String?
+  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  stops       RouteStop[]
+  assignments StudentTransportAssignment[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+model RouteStop {
+  id          String         @id @default(cuid())
+  schoolId    String
+  school      School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  routeId     String
+  route       TransportRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  name        String
+  order       Int
+  pickupTime  String?
+  dropoffTime String?
+
+  assignments StudentTransportAssignment[]
+
+  @@index([routeId])
+}
+
+/// One active (endedAt null) assignment per student — enforced at the
+/// service layer (end the existing one before creating a new one) rather
+/// than a DB constraint, the same pattern used for HostelBedAssignment.
+model StudentTransportAssignment {
+  id        String         @id @default(cuid())
+  schoolId  String
+  school    School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  routeId   String
+  route     TransportRoute @relation(fields: [routeId], references: [id])
+  stopId    String?
+  stop      RouteStop?     @relation(fields: [stopId], references: [id])
+
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentId])
+  @@index([routeId])
+}
+
+enum HostelType {
+  MALE
+  FEMALE
+  MIXED
+}
+
+model Hostel {
+  id          String     @id @default(cuid())
+  schoolId    String
+  school      School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name        String
+  type        HostelType
+  wardenName  String?
+  wardenPhone String?
+
+  createdAt DateTime @default(now())
+
+  rooms HostelRoom[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+model HostelRoom {
+  id         String @id @default(cuid())
+  schoolId   String
+  school     School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  hostelId   String
+  hostel     Hostel @relation(fields: [hostelId], references: [id], onDelete: Cascade)
+  roomNumber String
+  capacity   Int
+
+  createdAt DateTime @default(now())
+
+  assignments HostelBedAssignment[]
+
+  @@unique([hostelId, roomNumber])
+  @@index([schoolId])
+}
+
+/// One active (endedAt null) assignment per student — enforced at the
+/// service layer, same pattern as StudentTransportAssignment.
+model HostelBedAssignment {
+  id        String     @id @default(cuid())
+  schoolId  String
+  school    School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  roomId    String
+  room      HostelRoom @relation(fields: [roomId], references: [id])
+
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  @@index([schoolId])
+  @@index([schoolId, studentId])
+  @@index([roomId])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7: SaaS billing & platform admin
+//
+// Bills a SCHOOL for using the platform — a completely different thing from
+// Invoice/Payment above, which bill a student's family for school fees.
+// None of these models carry a schoolId FK the way tenant-owned tables do
+// (they're platform-level, owned by the Super Admin, not a tenant), except
+// where they need to reference which school a subscription/invoice is for.
+// ---------------------------------------------------------------------------
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+/// Platform-level catalog, not tenant-scoped — the same handful of plans
+/// apply across every school, the same role Permission plays for
+/// module.action strings. slug is the stable programmatic key (matches a
+/// PlanTier in src/lib/billing/plan-catalog.ts); name is just display text
+/// a Super Admin can freely rename without breaking anything that
+/// references the plan. A plan carries both a monthly AND an annual price
+/// (either may be null — Enterprise has neither, isCustomPricing instead)
+/// rather than one row per interval, since switching interval is a
+/// property of a school's Subscription, not a different plan.
+model SubscriptionPlan {
+  id                String  @id @default(cuid())
+  slug              String  @unique
+  name              String  @unique
+  tagline           String?
+  priceMonthlyMinor Int?
+  priceAnnualMinor  Int?
+  currency          String  @default("NGN")
+  isCustomPricing   Boolean @default(false)
+  studentLimit      Int?
+  isMostPopular     Boolean @default(false)
+  sortOrder         Int     @default(0)
+  isActive          Boolean @default(true)
+
+  /// CBT numeric plan limits (spec section 9, CBT Phase 9) — same null-
+  /// means-unlimited convention as studentLimit above, and enforced the
+  /// same way (a require*Capacity() check in src/lib/billing/
+  /// entitlements.ts, called from the CBT service layer, never trusting a
+  /// hidden UI control alone).
+  cbtActiveExamLimit          Int? // exams concurrently PUBLISHED or LIVE
+  cbtQuestionBankLimit        Int? // total non-archived CBTQuestion rows
+  cbtAiQuestionsPerMonthLimit Int? // AI_GENERATED questions created since the 1st of the current calendar month
+  cbtCandidateLimit           Int? // distinct students assigned as CBT exam candidates within the current term
+
+  /// Record<FeatureKey, boolean> — see src/lib/billing/features.ts for the
+  /// canonical key list. The tenant-editable part of entitlement, the same
+  /// way RolePermission is the tenant-editable part of the fixed
+  /// PERMISSIONS catalog: Super Admin can flip a flag here per plan
+  /// without a code change or deploy.
+  features Json @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscriptions Subscription[]
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+  SUSPENDED
+}
+
+/// One per school. Deliberately separate from School.status
+/// (TRIAL/ACTIVE/SUSPENDED), which is an account-access flag a Super Admin
+/// sets independently — a school can be billing-ACTIVE but access-SUSPENDED
+/// (abuse/ToS issue unrelated to payment) or vice versa.
+///
+/// status is a cache, not the source of truth for "is this school
+/// currently entitled" — getEffectiveSubscription() in
+/// src/lib/billing/entitlements.ts reconciles it lazily against
+/// trialEnd/currentPeriodEnd/graceEndsAt on every read (this app has no
+/// background job runner), so a stale TRIALING row past its trialEnd is
+/// still treated as expired even before anything writes EXPIRED back.
+model Subscription {
+  id       String           @id @default(cuid())
+  schoolId String           @unique
+  school   School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  planId   String
+  plan     SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  status          SubscriptionStatus @default(TRIALING)
+  billingInterval BillingInterval    @default(MONTHLY)
+
+  /// Null once the school is on a real paid period (or was never given a
+  /// trial — a Super Admin can create a subscription directly onto ACTIVE).
+  trialStart DateTime?
+  trialEnd   DateTime?
+
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  canceledAt         DateTime?
+
+  /// Set the moment a renewal charge fails (status becomes PAST_DUE);
+  /// graceEndsAt is pastDueSince + the configurable grace window
+  /// (BILLING_GRACE_PERIOD_DAYS, see src/lib/billing/config.ts). Past
+  /// graceEndsAt with no successful retry, the subscription is treated as
+  /// EXPIRED the same lazy way trial expiry is.
+  pastDueSince DateTime?
+  graceEndsAt  DateTime?
+
+  /// Which platform gateway (if any) is billing this school for its OWN
+  /// subscription — distinct from PaymentGatewayCredential, which is a
+  /// school's own gateway for collecting money FROM its parents.
+  provider               PaymentGatewayProvider?
+  providerCustomerId     String?
+  providerSubscriptionId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoices      PlatformInvoice[]
+  billingEvents BillingEvent[]
+
+  @@index([status])
+}
+
+enum PlatformInvoiceStatus {
+  PENDING
   PAID
   OVERDUE
   VOID
 }
 
-model Invoice {
-  id            String        @id @default(uuid())
-  invoiceNumber String        @unique
-  orderId       String        @unique
-  order         Order         @relation(fields: [orderId], references: [id])
-  customerId    String
-  status        InvoiceStatus @default(SENT)
-  subtotal      Decimal       @db.Decimal(12, 2)
-  discount      Decimal       @default(0) @db.Decimal(12, 2)
-  tax           Decimal       @default(0) @db.Decimal(12, 2)
-  total         Decimal       @db.Decimal(12, 2)
-  currency      String        @default("USD")
-  dueDate       DateTime?
-  issuedAt      DateTime      @default(now())
-  paidAt        DateTime?
-  notes         String?
-  items         InvoiceItem[]
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+model PlatformInvoice {
+  id             String       @id @default(cuid())
+  schoolId       String
+  school         School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
-  @@index([customerId])
-}
+  periodStart     DateTime
+  periodEnd       DateTime
+  amountMinor     Int
+  currency        String                @default("NGN")
+  billingInterval BillingInterval?
+  status          PlatformInvoiceStatus @default(PENDING)
+  dueDate         DateTime
+  paidAt          DateTime?
 
-model InvoiceItem {
-  id          String  @id @default(uuid())
-  invoiceId   String
-  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  description String
-  quantity    Int     @default(1)
-  unitPrice   Decimal @db.Decimal(12, 2)
-  total       Decimal @db.Decimal(12, 2)
+  provider          PaymentGatewayProvider?
+  providerReference String?                 @unique
 
-  @@index([invoiceId])
-}
-
-enum SubscriptionType {
-  HOSTING
-  MAINTENANCE
-  SOFTWARE
-  SUPPORT
-}
-
-enum SubscriptionStatus {
-  TRIAL
-  ACTIVE
-  PAST_DUE
-  CANCELLED
-  EXPIRED
-}
-
-model Subscription {
-  id                     String             @id @default(uuid())
-  customerId             String
-  customer               User               @relation(fields: [customerId], references: [id])
-  organizationId         String?
-  organization           Organization?      @relation(fields: [organizationId], references: [id])
-  type                   SubscriptionType
-  referenceId            String? // e.g. HostingAccount.id
-  status                 SubscriptionStatus @default(ACTIVE)
-  amount                 Decimal            @db.Decimal(12, 2)
-  currency               String             @default("USD")
-  billingCycle           BillingCycle       @default(MONTHLY)
-  currentPeriodStart     DateTime?
-  currentPeriodEnd       DateTime?
-  nextBillingDate        DateTime?
-  startedAt              DateTime           @default(now())
-  cancelledAt            DateTime?
-  providerSubscriptionId String?
-  renewalEvents          RenewalEvent[]
-  createdAt              DateTime           @default(now())
-  updatedAt              DateTime           @updatedAt
-
-  @@index([customerId])
-  @@index([status])
-}
-
-enum RenewalReferenceType {
-  DOMAIN
-  HOSTING
-  SUBSCRIPTION
-}
-
-enum RenewalStatus {
-  UPCOMING
-  SUCCEEDED
-  FAILED
-  CANCELLED
-}
-
-// Generalized renewal event so domain, hosting, and subscription renewals
-// can share one billing/notification pipeline instead of three bespoke ones.
-model RenewalEvent {
-  id               String               @id @default(uuid())
-  referenceType    RenewalReferenceType
-  subscriptionId   String?
-  subscription     Subscription?        @relation(fields: [subscriptionId], references: [id])
-  domainId         String?
-  domain           Domain?              @relation(fields: [domainId], references: [id])
-  hostingAccountId String?
-  hostingAccount   HostingAccount?      @relation(fields: [hostingAccountId], references: [id])
-  status           RenewalStatus        @default(UPCOMING)
-  dueDate          DateTime
-  amount           Decimal              @db.Decimal(12, 2)
-  currency         String               @default("USD")
-  processedAt      DateTime?
-  failureReason    String?
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
-
-  @@index([referenceType])
-  @@index([status])
-  @@index([dueDate])
-}
-
-// =========================================================================
-// DEPLOYMENTS
-// =========================================================================
-
-enum DeploymentType {
-  CUSTOMER_SERVER
-  PLATFORM_HOSTING
-  MANAGED
-}
-
-enum DeploymentStatus {
-  DRAFT
-  QUEUED
-  PREPARING
-  CONNECTING
-  INSTALLING
-  CONFIGURING
-  DATABASE_SETUP
-  MIGRATING
-  DNS_SETUP
-  SSL_SETUP
-  HEALTH_CHECK
-  COMPLETED
-  FAILED
-  ROLLING_BACK
-  ROLLED_BACK
-  NEEDS_CUSTOMER_ACTION
-  CANCELLED
-}
-
-enum HealthStatus {
-  UNKNOWN
-  HEALTHY
-  WARNING
-  OFFLINE
-}
-
-enum DeploymentTargetType {
-  CUSTOMER_SERVER
-  PLATFORM_HOSTING
-  MANAGED
-  MOCK
-}
-
-enum DeploymentTargetStatus {
-  PENDING
-  VALIDATED
-  ACTIVE
-  ERROR
-  ARCHIVED
-}
-
-// WHERE an application gets deployed. Separate from Deployment so a
-// customer's server/hosting account can be reused across multiple
-// deployments (redeploys, upgrades) instead of re-entering it each time.
-model DeploymentTarget {
-  id               String                 @id @default(uuid())
-  customerId       String
-  customer         User                   @relation(fields: [customerId], references: [id])
-  organizationId   String?
-  organization     Organization?          @relation(fields: [organizationId], references: [id])
-  label            String?
-  type             DeploymentTargetType
-  // Adapter key this target is executed through, e.g. "ssh", "cpanel",
-  // "plesk", "docker", "cloud", "mock". Resolved via DeploymentAdapterRegistry.
-  provider         String
-  hostname         String?
-  port             Int?
-  operatingSystem  String?
-  controlPanel     String?
-  region           String?
-  hostingAccountId String?
-  hostingAccount   HostingAccount?        @relation(fields: [hostingAccountId], references: [id])
-  domainId         String?
-  domain           Domain?                @relation(fields: [domainId], references: [id])
-  status           DeploymentTargetStatus @default(PENDING)
-
-  deployments Deployment[]
-  credentials DeploymentCredential[]
+  markedPaidById String?
+  markedPaidBy   User?   @relation("PlatformInvoiceMarkedPaidBy", fields: [markedPaidById], references: [id])
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
-  @@index([customerId])
-  @@index([type])
+  @@index([schoolId])
+  @@index([subscriptionId])
+  @@index([schoolId, status])
 }
 
-model Deployment {
-  id             String        @id @default(uuid())
-  customerId     String
-  customer       User          @relation(fields: [customerId], references: [id])
-  organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  orderId        String?
-  order          Order?        @relation(fields: [orderId], references: [id])
-
-  applicationId        String
-  application          Application        @relation(fields: [applicationId], references: [id])
-  applicationVersionId String
-  applicationVersion   ApplicationVersion @relation(fields: [applicationVersionId], references: [id])
-
-  type   DeploymentType
-  status DeploymentStatus @default(DRAFT)
-
-  domainId           String?
-  domain             Domain?           @relation(fields: [domainId], references: [id])
-  hostingAccountId   String?
-  hostingAccount     HostingAccount?   @relation(fields: [hostingAccountId], references: [id])
-  deploymentTargetId String?
-  deploymentTarget   DeploymentTarget? @relation(fields: [deploymentTargetId], references: [id])
-
-  // Auto-assigned preview URL for deployments without a customer domain yet
-  // (mock/managed deployments). Kept distinct from `domain` -- URL, domain,
-  // DNS, and SSL are related but separate concerns.
-  previewUrl String?
-
-  // Self-relation capturing upgrade/rollback lineage: previousDeployment is
-  // what this deployment replaced (or rolled back to).
-  previousDeploymentId String?
-  previousDeployment   Deployment?  @relation("DeploymentLineage", fields: [previousDeploymentId], references: [id])
-  nextDeployments      Deployment[] @relation("DeploymentLineage")
-
-  healthStatus      HealthStatus @default(UNKNOWN)
-  lastHealthCheckAt DateTime?
-
-  jobs DeploymentJob[]
-  logs DeploymentLog[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([customerId])
-  @@index([status])
-  @@index([deploymentTargetId])
-}
-
-enum CredentialType {
-  SSH_KEY
-  API_TOKEN
-  CPANEL
-  PLESK
-  OAUTH
-  PASSWORD
-}
-
-// Encrypted at rest; value is ciphertext produced by the secrets module.
-// Never selected into logs or API responses. Belongs to the reusable
-// DeploymentTarget (where the credential authenticates), not to any one
-// Deployment run.
-model DeploymentCredential {
-  id                 String           @id @default(uuid())
-  deploymentTargetId String
-  deploymentTarget   DeploymentTarget @relation(fields: [deploymentTargetId], references: [id], onDelete: Cascade)
-  type               CredentialType
-  label              String?
-  encryptedValue     String
-  createdAt          DateTime         @default(now())
-
-  @@index([deploymentTargetId])
-}
-
-enum JobStatus {
-  QUEUED
-  RUNNING
-  SUCCEEDED
-  FAILED
-  RETRYING
-}
-
-model DeploymentJob {
-  id           String          @id @default(uuid())
-  deploymentId String
-  deployment   Deployment      @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
-  jobType      String // e.g. "provision", "install", "configure_dns", "issue_ssl", "health_check"
-  status       JobStatus       @default(QUEUED)
-  attempts     Int             @default(0)
-  maxAttempts  Int             @default(3)
-  payload      Json?
-  result       Json?
-  error        String?
-  logs         DeploymentLog[]
-  startedAt    DateTime?
-  finishedAt   DateTime?
-  createdAt    DateTime        @default(now())
-
-  @@index([deploymentId])
-  @@index([status])
-}
-
-enum LogLevel {
-  DEBUG
-  INFO
-  WARN
-  ERROR
-}
-
-model DeploymentLog {
-  id                String         @id @default(uuid())
-  deploymentId      String
-  deployment        Deployment     @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
-  jobId             String?
-  job               DeploymentJob? @relation(fields: [jobId], references: [id])
-  level             LogLevel       @default(INFO)
-  message           String
-  isCustomerVisible Boolean        @default(true)
-  createdAt         DateTime       @default(now())
-
-  @@index([deploymentId])
-}
-
-// =========================================================================
-// DOMAINS & DNS
-// =========================================================================
-
-enum DomainStatus {
-  PENDING
-  ACTIVE
-  EXPIRED
-  TRANSFERRED
+enum BillingEventStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
   FAILED
 }
 
-model Domain {
-  id                String             @id @default(uuid())
-  name              String             @unique
-  tld               String
-  customerId        String
-  customer          User               @relation(fields: [customerId], references: [id])
-  organizationId    String?
-  organization      Organization?      @relation(fields: [organizationId], references: [id])
-  registrarProvider String
-  providerRef       String?
-  status            DomainStatus       @default(PENDING)
-  registeredAt      DateTime?
-  expiresAt         DateTime?
-  autoRenew         Boolean            @default(true)
-  nameservers       String[]
-  dnsRecords        DNSRecord[]
-  domainOrders      DomainOrder[]
-  deployments       Deployment[]
-  deploymentTargets DeploymentTarget[]
-  renewalEvents     RenewalEvent[]
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+/// Audit + idempotency log for every platform-billing webhook delivery.
+/// The (provider, externalEventId) unique constraint is the idempotency
+/// guarantee — a retried or duplicate delivery from the gateway finds its
+/// own prior row and is a no-op rather than double-applying a payment.
+/// Kept even for events that don't map to a known subscription (schoolId/
+/// subscriptionId nullable) so a bad or unexpected delivery is still on
+/// record instead of silently dropped.
+model BillingEvent {
+  id              String                 @id @default(cuid())
+  provider        PaymentGatewayProvider
+  externalEventId String
+  eventType       String
 
-  @@index([customerId])
-  @@index([expiresAt])
+  schoolId       String?
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  payload      Json
+  status       BillingEventStatus @default(RECEIVED)
+  errorMessage String?
+
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  @@unique([provider, externalEventId])
+  @@index([schoolId])
+  @@index([subscriptionId])
 }
 
-enum DomainAction {
-  REGISTER
-  RENEW
-  TRANSFER
-}
-
-enum DomainOrderStatus {
-  PENDING
-  COMPLETED
-  FAILED
-}
-
-model DomainOrder {
-  id            String            @id @default(uuid())
-  domainId      String?
-  domain        Domain?           @relation(fields: [domainId], references: [id])
-  orderId       String?
-  order         Order?            @relation(fields: [orderId], references: [id])
-  domainName    String
-  action        DomainAction
-  years         Int               @default(1)
-  providerCost  Decimal           @db.Decimal(12, 2)
-  customerPrice Decimal           @db.Decimal(12, 2)
-  status        DomainOrderStatus @default(PENDING)
-  createdAt     DateTime          @default(now())
-
-  @@index([orderId])
-}
-
-enum DNSRecordType {
-  A
-  AAAA
-  CNAME
-  MX
-  TXT
-  NS
-  SRV
-}
-
-model DNSRecord {
-  id               String        @id @default(uuid())
-  domainId         String
-  domain           Domain        @relation(fields: [domainId], references: [id], onDelete: Cascade)
-  type             DNSRecordType
-  name             String
-  value            String
-  ttl              Int           @default(3600)
-  priority         Int?
-  providerRecordId String?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
-
-  @@index([domainId])
-}
-
-// =========================================================================
-// HOSTING
-// =========================================================================
-
-model HostingPlan {
-  id               String           @id @default(uuid())
-  name             String
-  slug             String           @unique
-  description      String?
-  websitesLimit    Int              @default(1)
-  storageGB        Int              @default(10)
-  bandwidthGB      Int              @default(100)
-  databasesLimit   Int              @default(1)
-  priceMonthly     Decimal          @db.Decimal(12, 2)
-  priceYearly      Decimal?         @db.Decimal(12, 2)
-  providerPlanCode String?
-  isCustom         Boolean          @default(false)
-  isActive         Boolean          @default(true)
-  sortOrder        Int              @default(0)
-  hostingAccounts  HostingAccount[]
-  orderItems       OrderItem[]
-  bundleItems      BundleItem[]
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-}
-
-enum HostingAccountStatus {
-  PENDING
-  ACTIVE
-  SUSPENDED
-  TERMINATED
-}
-
-model HostingAccount {
-  id                String               @id @default(uuid())
-  customerId        String
-  customer          User                 @relation(fields: [customerId], references: [id])
-  organizationId    String?
-  organization      Organization?        @relation(fields: [organizationId], references: [id])
-  hostingPlanId     String
-  hostingPlan       HostingPlan          @relation(fields: [hostingPlanId], references: [id])
-  provider          String
-  providerAccountId String?
-  status            HostingAccountStatus @default(PENDING)
-  primaryDomain     String?
-  usage             Json?
-  deployments       Deployment[]
-  deploymentTargets DeploymentTarget[]
-  renewalEvents     RenewalEvent[]
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-
-  @@index([customerId])
-}
-
-// =========================================================================
-// PROVIDERS (third-party integration abstraction)
-// =========================================================================
-
-enum ProviderType {
-  PAYMENT
-  DOMAIN
-  DNS
-  HOSTING
-  DEPLOYMENT
-  EMAIL
-  SMS
-}
-
-enum ProviderMode {
-  MOCK
-  CONFIGURED
-  CONNECTED
-  ERROR
-}
-
-enum ProviderEnvironment {
-  SANDBOX
-  LIVE
-}
-
-model Provider {
-  id             String               @id @default(uuid())
-  name           String
-  type           ProviderType
-  adapterKey     String // maps to the code adapter implementation, e.g. "mock", "paystack", "namecheap"
-  mode           ProviderMode         @default(MOCK)
-  environment    ProviderEnvironment  @default(SANDBOX)
-  isActive       Boolean              @default(true)
-  isDefault      Boolean              @default(false)
-  capabilities   Json? // detected/declared capability flags
-  costConfig     Json? // markup configuration for this provider
-  lastTestedAt   DateTime?
-  lastTestResult String?
-  credentials    ProviderCredential[]
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-
-  @@index([type])
-}
-
-// Individual credential fields, encrypted at rest. Never returned to the browser.
-model ProviderCredential {
-  id             String   @id @default(uuid())
-  providerId     String
-  provider       Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  key            String // e.g. "apiKey", "apiSecret", "webhookSecret"
-  encryptedValue String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@unique([providerId, key])
-}
-
-// =========================================================================
-// SUPPORT
-// =========================================================================
-
-enum TicketPriority {
-  LOW
-  MEDIUM
-  HIGH
-  URGENT
-}
-
-enum TicketStatus {
-  OPEN
-  IN_PROGRESS
-  WAITING_FOR_CUSTOMER
-  RESOLVED
-  CLOSED
-}
-
-model SupportTicket {
-  id             String           @id @default(uuid())
-  ticketNumber   String           @unique
-  customerId     String
-  customer       User             @relation(fields: [customerId], references: [id])
-  organizationId String?
-  organization   Organization?    @relation(fields: [organizationId], references: [id])
-  subject        String
-  category       String
-  priority       TicketPriority   @default(MEDIUM)
-  status         TicketStatus     @default(OPEN)
-  orderId        String?
-  applicationId  String?
-  application    Application?     @relation(fields: [applicationId], references: [id])
-  deploymentId   String?
-  messages       SupportMessage[]
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  closedAt       DateTime?
-
-  @@index([customerId])
-  @@index([status])
-}
-
-enum AuthorType {
-  CUSTOMER
-  STAFF
-}
-
-model SupportMessage {
-  id          String        @id @default(uuid())
-  ticketId    String
-  ticket      SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  authorId    String
-  author      User          @relation(fields: [authorId], references: [id])
-  authorType  AuthorType
-  message     String
-  attachments String[]
-  createdAt   DateTime      @default(now())
-
-  @@index([ticketId])
-}
-
-// =========================================================================
-// CUSTOMIZATION REQUESTS & QUOTES
-// =========================================================================
-
-enum CustomizationRequestStatus {
-  SUBMITTED
-  REVIEWING
-  QUOTED
+enum EnterpriseInquiryStatus {
+  NEW
+  CONTACTED
   CONVERTED
   DECLINED
 }
 
-model CustomizationRequest {
-  id            String                     @id @default(uuid())
-  customerId    String
-  customer      User                       @relation(fields: [customerId], references: [id])
-  applicationId String?
-  application   Application?               @relation(fields: [applicationId], references: [id])
-  description   String
-  attachments   String[]
-  budget        Decimal?                   @db.Decimal(12, 2)
-  deadline      DateTime?
-  status        CustomizationRequestStatus @default(SUBMITTED)
-  quoteId       String?
-  quote         Quote?                     @relation(fields: [quoteId], references: [id])
-  createdAt     DateTime                   @default(now())
-  updatedAt     DateTime                   @updatedAt
+/// "Let's build a plan for your school" — never auto-creates an Enterprise
+/// subscription; a Super Admin reviews and converts manually (see
+/// EnterpriseInquiryStatus.CONVERTED), same "human decides" pattern as
+/// Applicant admission.
+model EnterpriseInquiry {
+  id                String  @id @default(cuid())
+  schoolOrGroupName String
+  contactName       String
+  email             String
+  phone             String
+  studentCount      Int?
+  campusCount       Int?
+  currentSoftware   String?
+  requiredModules   String?
+  message           String?
+
+  status       EnterpriseInquiryStatus @default(NEW)
+  reviewedById String?
+  reviewedBy   User?                   @relation("EnterpriseInquiryReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([status])
 }
 
-enum QuoteStatus {
-  DRAFT
-  SENT
+// ---------------------------------------------------------------------------
+// Administration: admission pipeline, calendar, feedback
+// ---------------------------------------------------------------------------
+
+enum ApplicantStatus {
+  APPLIED
+  UNDER_REVIEW
+  OFFERED
   ACCEPTED
   REJECTED
-  EXPIRED
+  ENROLLED
 }
 
-model Quote {
-  id          String                 @id @default(uuid())
-  quoteNumber String                 @unique
-  customerId  String
-  customer    User                   @relation(fields: [customerId], references: [id])
-  subtotal    Decimal                @default(0) @db.Decimal(12, 2)
-  discount    Decimal                @default(0) @db.Decimal(12, 2)
-  tax         Decimal                @default(0) @db.Decimal(12, 2)
-  total       Decimal                @db.Decimal(12, 2)
-  currency    String                 @default("USD")
-  status      QuoteStatus            @default(DRAFT)
-  expiresAt   DateTime?
-  // Set once the customer accepts and the quote is converted into a real
-  // Order through the standard payment pipeline -- the link back from an
-  // accepted quote to what it actually became.
-  orderId     String?                @unique
-  order       Order?                 @relation(fields: [orderId], references: [id])
-  items       QuoteItem[]
-  requests    CustomizationRequest[]
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @updatedAt
+enum ApplicationFeeStatus {
+  UNPAID
+  PENDING_CONFIRMATION
+  PAID
 }
 
-model QuoteItem {
-  id          String  @id @default(uuid())
-  quoteId     String
-  quote       Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  description String
-  quantity    Int     @default(1)
-  unitPrice   Decimal @db.Decimal(12, 2)
-  total       Decimal @db.Decimal(12, 2)
+/// A prospective student, before they exist as a Student row. Reachable two
+/// ways: a public, unauthenticated application form (mirrors the /pay/[token]
+/// and /portal-invite/[token] pattern — no login required) and staff adding
+/// one manually from a paper form or phone call. admissionFeeMinor is
+/// snapshotted from School.admissionFeeMinor at submission time, so a later
+/// fee change never rewrites an in-flight application. "Full admission" is
+/// the ACCEPTED -> ENROLLED transition, which creates the real Student row
+/// and links back here via enrolledStudentId.
+model Applicant {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
-  @@index([quoteId])
-}
+  childFirstName String
+  childLastName  String
+  dateOfBirth    DateTime?
+  gender         Gender?
 
-// =========================================================================
-// NOTIFICATIONS & EMAIL TEMPLATES
-// =========================================================================
+  desiredClassGroupId String?
+  desiredClassGroup   ClassGroup? @relation(fields: [desiredClassGroupId], references: [id])
 
-enum NotificationChannel {
-  EMAIL
-  IN_APP
-  SMS
-  WHATSAPP
-}
+  parentName  String
+  parentEmail String
+  parentPhone String
+  addressLine String?
 
-model Notification {
-  id        String              @id @default(uuid())
-  userId    String
-  user      User                @relation(fields: [userId], references: [id])
-  type      String // e.g. "order.received", "deployment.completed"
-  channel   NotificationChannel @default(IN_APP)
-  title     String
-  message   String
-  data      Json?
-  isRead    Boolean             @default(false)
-  createdAt DateTime            @default(now())
+  status ApplicantStatus @default(APPLIED)
+  notes  String?
 
-  @@index([userId])
-  @@index([userId, isRead])
-}
+  /// Null when the school has no admission fee configured at submission
+  /// time — the application simply has no fee step, not a ₦0 fee.
+  admissionFeeMinor Int?
+  feeStatus         ApplicationFeeStatus @default(UNPAID)
+  feePaidAt         DateTime?
 
-model EmailTemplate {
-  id        String   @id @default(uuid())
-  key       String   @unique // e.g. "order.received"
-  subject   String
-  body      String // HTML with {{variable}} placeholders
-  variables String[]
-  isActive  Boolean  @default(true)
-  updatedAt DateTime @updatedAt
+  /// Set while an online fee payment is in flight, so the public
+  /// confirmation page can look the applicant back up by reference alone
+  /// (no session, same as the invoice pay flow's Payment.reference).
+  feePaymentReference String?                 @unique
+  feePaymentProvider  PaymentGatewayProvider?
+
+  reviewedById String?
+  reviewedBy   User?   @relation("ApplicantReviewedBy", fields: [reviewedById], references: [id])
+
+  enrolledStudentId String?  @unique
+  enrolledStudent   Student? @relation("ApplicantEnrolledStudent", fields: [enrolledStudentId], references: [id])
+
   createdAt DateTime @default(now())
-}
-
-// Configurable renewal reminder schedule (days-before-expiry -> enabled)
-model NotificationSchedule {
-  id         String   @id @default(uuid())
-  key        String   @unique // e.g. "domain.expiry", "hosting.expiry"
-  daysBefore Int[] // e.g. [30,14,7,3,1]
-  isActive   Boolean  @default(true)
-  updatedAt  DateTime @updatedAt
-}
-
-// =========================================================================
-// AUDIT LOG & SETTINGS
-// =========================================================================
-
-model AuditLog {
-  id           String   @id @default(uuid())
-  actorId      String?
-  actor        User?    @relation(fields: [actorId], references: [id])
-  action       String // e.g. "application.price_changed"
-  resourceType String
-  resourceId   String?
-  oldValue     Json?
-  newValue     Json?
-  ipAddress    String?
-  createdAt    DateTime @default(now())
-
-  @@index([actorId])
-  @@index([resourceType, resourceId])
-  @@index([createdAt])
-}
-
-model Setting {
-  id        String   @id @default(uuid())
-  key       String   @unique
-  value     Json
   updatedAt DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([schoolId, status])
 }
 
-// Lightweight analytics event log (visitors, views, checkout funnel).
-model AnalyticsEvent {
-  id            String   @id @default(uuid())
-  type          String // e.g. "app_view", "demo_click", "checkout_start", "purchase"
-  sessionId     String?
-  userId        String?
-  applicationId String?
-  metadata      Json?
-  createdAt     DateTime @default(now())
+/// startAt/endAt drive both display and the "archive" split — an event
+/// with endAt in the past is archived automatically (View Archive), rather
+/// than needing its own manual flag to fall out of sync with reality.
+model CalendarEvent {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
-  @@index([type])
-  @@index([applicationId])
-  @@index([createdAt])
+  title       String
+  description String?
+  startAt     DateTime
+  endAt       DateTime
+
+  classArmId String?
+  classArm   ClassArm?        @relation(fields: [classArmId], references: [id])
+  termId     String?
+  term       Term?            @relation(fields: [termId], references: [id])
+  sessionId  String?
+  session    AcademicSession? @relation(fields: [sessionId], references: [id])
+
+  /// Schema-level only for now, the same "extensibility without a real
+  /// delivery pipeline yet" precedent as Notification's channel fields —
+  /// nothing sends a reminder off this today.
+  notifyAudience NotifyAudience?
+
+  createdById String
+  createdBy   User   @relation("CalendarEventCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([schoolId, startAt])
+}
+
+enum NotifyAudience {
+  PARENTS
+  STAFF
+  BOTH
+}
+
+enum FeedbackStatus {
+  NEW
+  REVIEWED
+}
+
+/// Any authenticated user — staff or a parent/student portal account — can
+/// submit one. There's no separate "submit feedback" permission because
+/// submitting isn't an administrative action; only the review list is
+/// gated (feedback.view/feedback.manage).
+model Feedback {
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+
+  submittedById String
+  submittedBy   User   @relation("FeedbackSubmittedBy", fields: [submittedById], references: [id])
+
+  message String
+  status  FeedbackStatus @default(NEW)
+
+  reviewedById String?
+  reviewedBy   User?     @relation("FeedbackReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([schoolId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Computer-Based Testing (CBT) / Online Examinations
+//
+// Deliberately reuses rather than duplicates existing infrastructure:
+//   - Notification/NotificationType (above) carries every CBT_* alert —
+//     no separate CBTExamNotification model.
+//   - AuditLog (above) carries every sensitive CBT action (exam published,
+//     answer key changed, attempt reset, grade overridden, ...) — no
+//     separate CBT audit table.
+//   - A graded, official CBTAttempt writes one Score row (below, existing
+//     model) against the AssessmentComponent the exam was configured
+//     against — report-card computation (computeReportCard) already sums
+//     Score by component with no CBT-specific grading formula, per the
+//     "respect the school's existing grading configuration" requirement.
+//     There is deliberately no separate "CBTResult" model: CBTAttempt IS
+//     the result: isOfficialResult flags which attempt (of possibly
+//     several, see maxAttempts) is the one that counted.
+// ---------------------------------------------------------------------------
+
+/// A school's catalog of examination "types" (brief: CBT Test, Class
+/// Test, Continuous Assessment, ...) — seeded with the built-in set
+/// (isSystem, not deletable) plus whatever a school adds of its own,
+/// mirroring the GradeBand/AssessmentComponent "seeded but tenant-
+/// editable list" pattern already used for grading configuration.
+model CBTExamTypeOption {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  key      String
+  label    String
+  isSystem Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  exams CBTExam[]
+
+  @@unique([schoolId, key])
+  @@index([schoolId])
+}
+
+enum CBTQuestionType {
+  MULTIPLE_CHOICE
+  MULTIPLE_SELECT
+  TRUE_FALSE
+  SHORT_ANSWER
+  FILL_IN_BLANK
+  ESSAY
+  MATCHING
+  ORDERING
+}
+
+enum CBTDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+/// DRAFT: teacher is still editing, not usable in an exam yet.
+/// AI_PENDING_REVIEW: AI-generated, not yet reviewed — never selectable
+/// into an exam (brief section 6/7: AI output must never silently become
+/// a published question). APPROVED: usable in exams, whether hand-written
+/// or AI-generated-then-approved. ARCHIVED: retired, kept for history.
+enum CBTQuestionStatus {
+  DRAFT
+  AI_PENDING_REVIEW
+  APPROVED
+  ARCHIVED
+}
+
+enum CBTQuestionSource {
+  MANUAL
+  AI_GENERATED
+  IMPORTED
+}
+
+/// A single question bank entry. `content`-shaped data (options, correct
+/// answer(s), accepted free-text answers) lives in typed columns/the
+/// related CBTQuestionOption rows rather than one opaque JSON blob, so
+/// auto-grading and tenant-scoped queries stay ordinary Prisma queries —
+/// but see src/lib/cbt/question-view.ts (Phase 4) for the hard rule that
+/// answer-bearing fields are never selected into a student-facing payload
+/// before that student has actually submitted (brief section 48).
+model CBTQuestion {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  subjectId    String
+  subject      Subject     @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  classGroupId String?
+  classGroup   ClassGroup? @relation(fields: [classGroupId], references: [id])
+
+  type       CBTQuestionType
+  status     CBTQuestionStatus @default(DRAFT)
+  difficulty CBTDifficulty     @default(MEDIUM)
+  source     CBTQuestionSource @default(MANUAL)
+
+  topic             String?
+  subtopic          String?
+  learningObjective String?
+
+  prompt   String
+  imageUrl String?
+  audioUrl String?
+
+  marks       Int     @default(1)
+  explanation String?
+
+  /// SHORT_ANSWER / FILL_IN_BLANK only — accepted answer strings (matched
+  /// case-insensitively, trimmed), so more than one phrasing can be
+  /// correct. Null for every other question type.
+  acceptedAnswers Json?
+
+  /// ESSAY only — grading guidance shown to the teacher/AI-assist during
+  /// manual grading. Never used to auto-grade.
+  rubric String?
+
+  createdById  String
+  createdBy    User      @relation("CBTQuestionCreatedBy", fields: [createdById], references: [id])
+  approvedById String?
+  approvedBy   User?     @relation("CBTQuestionApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  options     CBTQuestionOption[]
+  tags        CBTQuestionTagAssignment[]
+  examLinks   CBTExamQuestion[]
+  attemptUses CBTAttemptQuestion[]
+  answers     CBTAnswer[]
+
+  @@index([schoolId])
+  @@index([schoolId, subjectId])
+  @@index([schoolId, status])
+  @@index([schoolId, subjectId, topic, difficulty])
+}
+
+/// Choice-shaped data for MULTIPLE_CHOICE/MULTIPLE_SELECT/TRUE_FALSE
+/// (isCorrect flags the answer key), MATCHING (text <-> matchText pairs)
+/// and ORDERING (`order` itself IS the correct sequence; isCorrect
+/// unused). Never populated for SHORT_ANSWER/FILL_IN_BLANK/ESSAY.
+model CBTQuestionOption {
+  id         String      @id @default(cuid())
+  questionId String
+  question   CBTQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  text      String
+  matchText String?
+  isCorrect Boolean @default(false)
+  order     Int     @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([questionId])
+}
+
+model CBTQuestionTag {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name     String
+
+  questions CBTQuestionTagAssignment[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+model CBTQuestionTagAssignment {
+  questionId String
+  question   CBTQuestion    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  tagId      String
+  tag        CBTQuestionTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, tagId])
+}
+
+enum CBTExamStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  LIVE
+  ENDED
+  GRADING
+  COMPLETED
+  ARCHIVED
+}
+
+/// MANUAL: the exam uses exactly the CBTExamQuestion rows a teacher
+/// picked, same order/set for every candidate (order still randomizable
+/// per-student via randomizeQuestionOrder). BLUEPRINT: at attempt-start
+/// time, the engine randomly selects questions per CBTExamBlueprintRule
+/// (topic/difficulty distribution) — see src/lib/cbt/attempt-start.ts.
+enum CBTQuestionSelectionMode {
+  MANUAL
+  BLUEPRINT
+}
+
+/// Controls what a student can see about their own attempt once grading
+/// is done (brief section 25) — a school-wide default lives in
+/// src/lib/cbt/config.ts; this is the per-exam override.
+enum CBTResultVisibility {
+  IMMEDIATE
+  AFTER_GRADING
+  MANUAL_RELEASE
+}
+
+model CBTExam {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  title      String
+  examTypeId String
+  examType   CBTExamTypeOption @relation(fields: [examTypeId], references: [id])
+  subjectId  String
+  subject    Subject           @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  termId     String
+  term       Term              @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  /// The gradebook component this exam's official score is written
+  /// against once graded (a Score row, keyed by this + subject/term/
+  /// student). Null for practice exams, which never touch the gradebook.
+  assessmentComponentId String?
+  assessmentComponent   AssessmentComponent? @relation(fields: [assessmentComponentId], references: [id])
+
+  instructions String?
+  status       CBTExamStatus @default(DRAFT)
+  isPractice   Boolean       @default(false)
+
+  questionSelectionMode CBTQuestionSelectionMode @default(MANUAL)
+  totalMarks            Int                      @default(0)
+
+  randomizeQuestionOrder Boolean @default(false)
+  randomizeOptionOrder   Boolean @default(false)
+
+  negativeMarkingEnabled Boolean @default(false)
+  /// Marks deducted per wrong answer when negative marking is on, e.g.
+  /// 0.25 — a fraction, so CBTAnswer.marksAwarded/CBTAttempt.score are
+  /// Float even though CBTQuestion.marks itself is a whole Int.
+  negativeMarkPerWrong   Float   @default(0)
+
+  startAt         DateTime
+  endAt           DateTime
+  durationMinutes Int
+
+  requireFullscreen  Boolean @default(false)
+  detectTabSwitch    Boolean @default(true)
+  restrictCopyPaste  Boolean @default(false)
+  restrictRightClick Boolean @default(false)
+  maxAttempts        Int     @default(1)
+  autoSubmitOnExpiry Boolean @default(true)
+  desktopOnly        Boolean @default(false)
+
+  resultVisibility   CBTResultVisibility @default(AFTER_GRADING)
+  showCorrectAnswers Boolean             @default(false)
+  showExplanations   Boolean             @default(false)
+  showRanking        Boolean             @default(false)
+  /// Only meaningful when resultVisibility is MANUAL_RELEASE — null until
+  /// a teacher explicitly releases results (see cbt-results.ts), even if
+  /// every attempt is already GRADED.
+  resultsReleasedAt  DateTime?
+
+  createdById   String
+  createdBy     User      @relation("CBTExamCreatedBy", fields: [createdById], references: [id])
+  publishedAt   DateTime?
+  publishedById String?
+  publishedBy   User?     @relation("CBTExamPublishedBy", fields: [publishedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  examQuestions CBTExamQuestion[]
+  blueprint     CBTExamBlueprint?
+  candidates    CBTExamCandidate[]
+  attempts      CBTAttempt[]
+
+  @@index([schoolId])
+  @@index([schoolId, status])
+  @@index([schoolId, subjectId])
+  @@index([schoolId, termId])
+}
+
+model CBTExamQuestion {
+  id         String      @id @default(cuid())
+  examId     String
+  exam       CBTExam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  questionId String
+  question   CBTQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  order         Int  @default(0)
+  marksOverride Int?
+
+  @@unique([examId, questionId])
+  @@index([examId])
+}
+
+model CBTExamBlueprint {
+  id     String  @id @default(cuid())
+  examId String  @unique
+  exam   CBTExam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  totalQuestions Int
+
+  rules CBTExamBlueprintRule[]
+}
+
+/// One row per topic/difficulty bucket a blueprint exam must pull from,
+/// e.g. {topic: "Algebra", difficulty: EASY, count: 10} — the attempt-
+/// start selector pulls `count` random APPROVED questions matching each
+/// rule (brief section 20's worked example) rather than randomly
+/// selecting from the whole pool with no distribution guarantee.
+model CBTExamBlueprintRule {
+  id          String           @id @default(cuid())
+  blueprintId String
+  blueprint   CBTExamBlueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+
+  topic      String?
+  difficulty CBTDifficulty?
+  count      Int
+
+  @@index([blueprintId])
+}
+
+enum CBTCandidateAttendanceStatus {
+  PENDING
+  ATTEMPTED
+  ABSENT
+  EXCUSED
+  MAKEUP_SCHEDULED
+}
+
+/// Which students are sitting a given exam, plus any per-student
+/// accommodation (brief section 41) — explicit, audited (extensionGrantedBy),
+/// server-side only; a student can never grant themselves extra time.
+model CBTExamCandidate {
+  id        String  @id @default(cuid())
+  examId    String
+  exam      CBTExam @relation(fields: [examId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  schoolId  String
+  school    School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  maxAttemptsOverride  Int?
+  extraTimeMinutes     Int     @default(0)
+  extensionReason      String?
+  extensionGrantedById String?
+  extensionGrantedBy   User?   @relation("CBTExtensionGrantedBy", fields: [extensionGrantedById], references: [id])
+
+  attendanceStatus CBTCandidateAttendanceStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+
+  attempts CBTAttempt[]
+
+  @@unique([examId, studentId])
+  @@index([schoolId])
+  @@index([examId])
+  @@index([studentId])
+}
+
+enum CBTAttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  AUTO_SUBMITTED
+  GRADED
+  ABANDONED
+}
+
+/// One row per sitting. `deadlineAt` (computed server-side at start from
+/// exam.durationMinutes + any candidate.extraTimeMinutes) is the ONLY
+/// authority for time remaining and auto-submit (brief section 13) — the
+/// client-side timer is display only and is never trusted for grading or
+/// submission cutoff.
+model CBTAttempt {
+  id          String           @id @default(cuid())
+  schoolId    String
+  school      School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  examId      String
+  exam        CBTExam          @relation(fields: [examId], references: [id], onDelete: Cascade)
+  candidateId String
+  candidate   CBTExamCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  attemptNumber Int              @default(1)
+  status        CBTAttemptStatus @default(IN_PROGRESS)
+  isPractice    Boolean          @default(false)
+
+  /// Marks this as the one attempt (of possibly several) whose score was
+  /// written to the gradebook — see the module-level note above on why
+  /// there is no separate CBTResult model.
+  isOfficialResult Boolean @default(false)
+
+  startedAt   DateTime  @default(now())
+  deadlineAt  DateTime
+  submittedAt DateTime?
+
+  score      Float?
+  percentage Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  questions      CBTAttemptQuestion[]
+  answers        CBTAnswer[]
+  securityEvents CBTSecurityEvent[]
+
+  @@index([schoolId])
+  @@index([examId, studentId])
+  @@index([candidateId])
+  @@index([schoolId, status])
+}
+
+/// The exact, ordered set of questions THIS attempt saw — snapshotted at
+/// attempt-start (whether MANUAL or BLUEPRINT-selected) so a later change
+/// to the exam's question list, or a re-shuffle, never affects an attempt
+/// already in progress or already graded.
+model CBTAttemptQuestion {
+  id         String      @id @default(cuid())
+  attemptId  String
+  attempt    CBTAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId String
+  question   CBTQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  order Int @default(0)
+  marks Int
+
+  /// Snapshotted shuffled option id order, when the exam has
+  /// randomizeOptionOrder on. Null (options render in their natural
+  /// order) otherwise.
+  optionOrder Json?
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+}
+
+enum CBTAnswerGradingStatus {
+  PENDING
+  AUTO_GRADED
+  MANUALLY_GRADED
+  NEEDS_MANUAL_GRADING
+}
+
+/// One row per (attempt, question) — created/updated by the auto-save
+/// path (brief section 14) as the student answers, so it doubles as both
+/// "the current answer" and "the saved answer": there's nothing else to
+/// flush at final submission besides flipping the attempt's own status.
+model CBTAnswer {
+  id         String      @id @default(cuid())
+  attemptId  String
+  attempt    CBTAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId String
+  question   CBTQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  /// Shape depends on the question's type: a selected option id (single-
+  /// choice/true-false), an array of option ids (multi-select/ordering),
+  /// free text (short-answer/fill-blank/essay), or match pairs.
+  response Json?
+
+  isCorrect     Boolean?
+  marksAwarded  Float?
+  gradingStatus CBTAnswerGradingStatus @default(PENDING)
+
+  manualGrade CBTManualGrade?
+
+  answeredAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+}
+
+/// The human decision for one ESSAY/SHORT_ANSWER-needs-review answer
+/// (brief section 31). aiSuggested* is advisory only, shown alongside the
+/// student's answer — the teacher's marksAwarded/feedback here is what
+/// actually counts; nothing writes AI's suggestion in as the final grade.
+model CBTManualGrade {
+  id       String    @id @default(cuid())
+  answerId String    @unique
+  answer   CBTAnswer @relation(fields: [answerId], references: [id], onDelete: Cascade)
+
+  marksAwarded        Float
+  feedback            String?
+  aiSuggestedMarks    Float?
+  aiSuggestedFeedback String?
+
+  gradedById String
+  gradedBy   User     @relation("CBTManualGradedBy", fields: [gradedById], references: [id], onDelete: Cascade)
+  gradedAt   DateTime @default(now())
+
+  @@index([answerId])
+}
+
+/// Logged, never auto-accusatory (brief section 21) — an authorized
+/// exam administrator reviews these; nothing in this app flags a student
+/// as cheating on its own.
+enum CBTSecurityEventType {
+  TAB_SWITCH
+  WINDOW_BLUR
+  FULLSCREEN_EXIT
+  COPY_ATTEMPT
+  PASTE_ATTEMPT
+  RIGHT_CLICK_ATTEMPT
+  CONNECTION_LOST
+  CONNECTION_RESTORED
+  SUSPICIOUS_NAVIGATION
+}
+
+model CBTSecurityEvent {
+  id        String     @id @default(cuid())
+  attemptId String
+  attempt   CBTAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  type       CBTSecurityEventType
+  metadata   Json?
+  occurredAt DateTime             @default(now())
+
+  @@index([attemptId])
+}
+
+// ---------------------------------------------------------------------------
+// Online Learning: self-paced lectures & native live virtual classroom
+// (Phase 8)
+//
+// Reuses rather than duplicates existing infrastructure the same way CBT
+// does above:
+//   - Notification/NotificationType carries every lecture/live-class alert
+//     (LIVE_CLASS_STARTING_SOON is schema-level only for now, same as
+//     CBT_EXAM_STARTING_SOON and CalendarEvent.notifyAudience — this app has
+//     no background job runner, so only alerts triggered by a real user
+//     action — schedule, start, cancel, publish — actually fire).
+//   - AuditLog carries every sensitive action (lecture published/archived,
+//     live class started/ended/cancelled) — no separate audit table.
+//   - TeacherAssignment (above) is the source of truth for which
+//     subject+classArm pairs a teacher may create a Lecture/LiveClass for —
+//     enforced in src/lib/services/lectures.ts and live-classes.ts, never
+//     trusted from the client.
+// A Lecture/LiveClass targets exactly one ClassArm (the unit students are
+// actually enrolled into), matching how Assignment and the CLASS
+// Announcement audience already scope content to a class.
+// ---------------------------------------------------------------------------
+
+enum LectureStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum LectureResourceType {
+  VIDEO
+  AUDIO
+  WRITTEN
+  PDF
+  WORD_DOCUMENT
+  PRESENTATION
+  IMAGE
+  EXTERNAL_LINK
+}
+
+enum LectureProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+/// A self-paced learning unit. Students see this row at all only once it is
+/// PUBLISHED (getLecturesForStudent enforces this server-side) and only if
+/// it targets their own classArmId within their own school — never by
+/// subject/topic alone, and never a different school's row with the same
+/// classArm *name* (JSS 2A at School A is a different classArmId than JSS 2A
+/// at School B).
+model Lecture {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  subjectId         String
+  subject           Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  classArmId        String
+  classArm          ClassArm        @relation(fields: [classArmId], references: [id], onDelete: Cascade)
+  academicSessionId String
+  academicSession   AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  termId            String
+  term              Term            @relation(fields: [termId], references: [id], onDelete: Cascade)
+  teacherId         String
+  teacher           User            @relation("LectureTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+
+  title              String
+  topic              String?
+  description        String?
+  learningObjectives String?
+  instructions       String?
+
+  status      LectureStatus @default(DRAFT)
+  publishedAt DateTime?
+  dueDate     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  resources    LectureResource[]
+  progress     StudentLectureProgress[]
+  recordedFrom LiveClassRecording?
+
+  @@index([schoolId])
+  @@index([schoolId, classArmId, status])
+  @@index([schoolId, subjectId])
+  @@index([schoolId, teacherId])
+}
+
+/// A lecture can carry several of these (brief example: one VIDEO plus two
+/// PDF attachments) — order controls display sequence. fileUrl points at
+/// the configured object storage (Vercel Blob, see src/lib/storage/blob.ts)
+/// for every uploaded type; externalUrl is used only for
+/// EXTERNAL_LINK; writtenContent only for WRITTEN. durationSeconds is
+/// probed client-side from the media element at upload time and is the
+/// denominator StudentLectureProgress.watchPercent is computed against.
+model LectureResource {
+  id        String  @id @default(cuid())
+  lectureId String
+  lecture   Lecture @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+
+  type        LectureResourceType
+  title       String
+  description String?
+
+  fileUrl        String?
+  externalUrl    String?
+  writtenContent String?
+
+  fileSizeBytes   Int?
+  durationSeconds Int?
+  order           Int  @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([lectureId])
+}
+
+/// One row per (lecture, student), created lazily on first open rather than
+/// up front for a whole class — a student who never opens a lecture simply
+/// has no row, which getLectureProgressForTeacher's aggregation treats as
+/// NOT_STARTED. Never flips to COMPLETED just because the row exists (brief:
+/// "do not automatically mark a lecture as completed simply because the
+/// student opened the page") — see markLectureOpened vs
+/// completeLectureFromVideoProgress/markLectureCompleteManually in
+/// src/lib/services/lectures.ts for the two ways completion can actually be
+/// reached.
+model StudentLectureProgress {
+  id        String  @id @default(cuid())
+  schoolId  String
+  school    School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  lectureId String
+  lecture   Lecture @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  status          LectureProgressStatus @default(NOT_STARTED)
+  progressPercent Int                   @default(0)
+
+  lastVideoPositionSeconds Int  @default(0)
+  videoDurationSeconds     Int?
+  watchPercent             Int  @default(0)
+
+  firstOpenedAt  DateTime?
+  lastAccessedAt DateTime?
+  completedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([lectureId, studentId])
+  @@index([schoolId])
+  @@index([schoolId, studentId])
+  @@index([lectureId])
+}
+
+enum LiveClassStatus {
+  SCHEDULED
+  LIVE
+  COMPLETED
+  CANCELLED
+}
+
+/// JOINED: connected at least once but present for too little of the class
+/// to count as attended. ATTENDED: met the school's minimum-presence rule
+/// (see live-classes.ts) at class end. LEFT_EARLY: joined but disconnected
+/// before the class ended and never met the minimum. ABSENT: never
+/// connected at all — the default for every eligible student's row, created
+/// up front when the class is scheduled (unlike lecture progress) so a
+/// no-show is visible without a join ever happening.
+enum LiveClassAttendanceStatus {
+  JOINED
+  ATTENDED
+  LEFT_EARLY
+  ABSENT
+}
+
+enum LiveClassRecordingStatus {
+  RECORDING
+  PROCESSING
+  AVAILABLE
+  FAILED
+}
+
+/// A scheduled/live/completed native video class, taught entirely inside
+/// Schoolum via the LiveKit-backed Virtual Classroom (src/lib/live-classroom).
+/// roomName is the LiveKit room identifier — distinct from `id` so a room
+/// can be recreated without changing the LiveClass's own identity, and
+/// never exposed to a client that hasn't already passed the join-eligibility
+/// check in src/lib/services/live-classes.ts.
+model LiveClass {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  subjectId         String
+  subject           Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  classArmId        String
+  classArm          ClassArm        @relation(fields: [classArmId], references: [id], onDelete: Cascade)
+  academicSessionId String
+  academicSession   AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  termId            String
+  term              Term            @relation(fields: [termId], references: [id], onDelete: Cascade)
+  teacherId         String
+  teacher           User            @relation("LiveClassTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+
+  title       String
+  topic       String?
+  description String?
+
+  scheduledStart          DateTime
+  durationMinutes         Int
+  maxParticipants         Int?
+  /// Minutes before scheduledStart a student may enter the waiting room —
+  /// configurable per class rather than hardcoded.
+  joinWindowMinutesBefore Int      @default(15)
+
+  status   LiveClassStatus @default(SCHEDULED)
+  roomName String          @unique
+
+  startedAt    DateTime?
+  endedAt      DateTime?
+  cancelledAt  DateTime?
+  cancelReason String?
+
+  chatEnabled      Boolean @default(true)
+  recordingEnabled Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  attendance LiveClassAttendance[]
+  messages   ClassroomMessage[]
+  recordings LiveClassRecording[]
+
+  @@index([schoolId])
+  @@index([schoolId, classArmId, status])
+  @@index([schoolId, teacherId])
+  @@index([schoolId, status, scheduledStart])
+}
+
+/// One row per eligible student per live class, created up front when the
+/// class is scheduled (default ABSENT) — mirrors AssignmentSubmission's
+/// "create the whole class's rows immediately" pattern, so a student who
+/// never joins is still visible on the attendance report rather than
+/// silently missing. segments records each connect/disconnect span
+/// (handles the "student disconnects and reconnects" case) —
+/// totalConnectedSeconds is the sum of every segment's duration, and
+/// status is only ever computed (never hand-set) once the class ends,
+/// against the school's minimum-presence rule.
+model LiveClassAttendance {
+  id          String    @id @default(cuid())
+  schoolId    String
+  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  liveClassId String
+  liveClass   LiveClass @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  firstJoinedAt         DateTime?
+  lastLeftAt            DateTime?
+  totalConnectedSeconds Int                       @default(0)
+  status                LiveClassAttendanceStatus @default(ABSENT)
+
+  handRaised Boolean @default(false)
+  micMuted   Boolean @default(true)
+  cameraOn   Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  segments LiveClassAttendanceSegment[]
+
+  @@unique([liveClassId, studentId])
+  @@index([schoolId])
+  @@index([liveClassId])
+}
+
+model LiveClassAttendanceSegment {
+  id           String              @id @default(cuid())
+  attendanceId String
+  attendance   LiveClassAttendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+
+  joinedAt DateTime  @default(now())
+  leftAt   DateTime?
+
+  @@index([attendanceId])
+}
+
+/// Live classroom chat — moderation is a soft delete (deletedAt/deletedBy)
+/// so a teacher's "delete inappropriate message" leaves an auditable trace
+/// instead of destroying the row outright.
+model ClassroomMessage {
+  id          String    @id @default(cuid())
+  schoolId    String
+  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  liveClassId String
+  liveClass   LiveClass @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
+  senderId    String
+  sender      User      @relation("ClassroomMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  body        String
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("ClassroomMessageDeletedBy", fields: [deletedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([liveClassId])
+  @@index([schoolId])
+}
+
+/// Deliberately holds only metadata + a storage reference (brief: "do not
+/// store large video files directly in the database") — the actual file
+/// lives in the configured object storage (Vercel Blob). A recording only
+/// becomes reachable by students once publishedAsLectureId is set, which
+/// creates a real Lecture row so the recording follows the exact same
+/// PUBLISHED-and-same-classArm visibility rule every other lecture does —
+/// there is no separate "watch this recording" access path.
+model LiveClassRecording {
+  id          String    @id @default(cuid())
+  schoolId    String
+  school      School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  liveClassId String
+  liveClass   LiveClass @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
+
+  status          LiveClassRecordingStatus @default(RECORDING)
+  startedAt       DateTime                 @default(now())
+  endedAt         DateTime?
+  durationSeconds Int?
+
+  storageProvider String?
+  storageKey      String?
+  fileUrl         String?
+
+  initiatedById String
+  initiatedBy   User   @relation("LiveClassRecordingInitiatedBy", fields: [initiatedById], references: [id])
+
+  publishedAsLectureId String?  @unique
+  publishedAsLecture   Lecture? @relation(fields: [publishedAsLectureId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([liveClassId])
+  @@index([schoolId])
 }
