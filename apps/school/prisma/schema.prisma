@@ -81,44 +81,62 @@ model School {
   staffInvitedAt           DateTime?
   onboardingCompletedAt    DateTime?
 
+  /// Pre-School Milestone Results configuration — same flat-scalar-on-School
+  /// convention as the fields above, not a separate 1:1 settings table.
+  /// Which classes actually use the milestone system is a per-ClassGroup
+  /// choice (see ClassGroup.assessmentMode); these are the school-wide
+  /// toggles layered on top of that.
+  preschoolResultsEnabled           Boolean @default(true)
+  preschoolRequireTeacherComment    Boolean @default(false)
+  preschoolRequireApprovalToPublish Boolean @default(true)
+  preschoolParentsCanView           Boolean @default(true)
+  preschoolStudentsCanView          Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  campuses             Campus[]
-  users                User[]
-  roles                Role[]
-  invites              StaffInvite[]
-  academicSessions     AcademicSession[]
-  terms                Term[]
-  departments          Department[]
-  classGroups          ClassGroup[]
-  classArms            ClassArm[]
-  subjects             Subject[]
-  students             Student[]
-  guardians            Guardian[]
-  auditLogs            AuditLog[]
-  teacherAssignments   TeacherAssignment[]
-  attendanceRecords    AttendanceRecord[]
-  timetableSlots       TimetableSlot[]
-  assignments          Assignment[]
-  gradeBands           GradeBand[]
-  assessmentComponents AssessmentComponent[]
-  scores               Score[]
-  reportCards          ReportCard[]
-  transcripts          Transcript[]
-  feeCategories        FeeCategory[]
-  feeStructures        FeeStructure[]
-  invoices             Invoice[]
-  payments             Payment[]
-  vendors              Vendor[]
-  expenseCategories    ExpenseCategory[]
-  expenses             Expense[]
-  portalInvites        PortalInvite[]
-  notifications        Notification[]
-  announcements        Announcement[]
-  conversations        Conversation[]
-  messages             Message[]
-  aiConversations      AiConversation[]
+  campuses                       Campus[]
+  users                          User[]
+  roles                          Role[]
+  invites                        StaffInvite[]
+  academicSessions               AcademicSession[]
+  terms                          Term[]
+  departments                    Department[]
+  classGroups                    ClassGroup[]
+  classArms                      ClassArm[]
+  subjects                       Subject[]
+  students                       Student[]
+  guardians                      Guardian[]
+  auditLogs                      AuditLog[]
+  teacherAssignments             TeacherAssignment[]
+  attendanceRecords              AttendanceRecord[]
+  timetableSlots                 TimetableSlot[]
+  assignments                    Assignment[]
+  gradeBands                     GradeBand[]
+  assessmentComponents           AssessmentComponent[]
+  schemesOfWork                  SchemeOfWork[]
+  schemeOfWorkTopics             SchemeOfWorkTopic[]
+  preschoolMilestones            PreschoolMilestone[]
+  preschoolAssessmentPeriods     PreschoolAssessmentPeriod[]
+  preschoolAssessmentLevelLabels PreschoolAssessmentLevelLabel[]
+  preschoolMilestoneAssessments  PreschoolMilestoneAssessment[]
+  preschoolReports               PreschoolReport[]
+  scores                         Score[]
+  reportCards                    ReportCard[]
+  transcripts                    Transcript[]
+  feeCategories                  FeeCategory[]
+  feeStructures                  FeeStructure[]
+  invoices                       Invoice[]
+  payments                       Payment[]
+  vendors                        Vendor[]
+  expenseCategories              ExpenseCategory[]
+  expenses                       Expense[]
+  portalInvites                  PortalInvite[]
+  notifications                  Notification[]
+  announcements                  Announcement[]
+  conversations                  Conversation[]
+  messages                       Message[]
+  aiConversations                AiConversation[]
 
   salaryComponents            SalaryComponent[]
   staffSalaryStructures       StaffSalaryStructure[]
@@ -208,21 +226,26 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  auditLogs             AuditLog[]
-  classArmsLed          ClassArm[]             @relation("ClassArmTeacher")
-  invitesSent           StaffInvite[]          @relation("InviteSentBy")
-  teacherAssignments    TeacherAssignment[]    @relation("TeacherAssignments")
-  attendanceMarked      AttendanceRecord[]     @relation("AttendanceMarkedBy")
-  teacherTimetableSlots TimetableSlot[]        @relation("TeacherTimetableSlots")
-  assignmentsCreated    Assignment[]           @relation("AssignmentTeacher")
-  submissionsGraded     AssignmentSubmission[] @relation("SubmissionGradedBy")
-  scoresEntered         Score[]                @relation("ScoreEnteredBy")
-  reportCardsApproved   ReportCard[]           @relation("ReportCardApprovedBy")
-  transcriptsGenerated  Transcript[]           @relation("TranscriptGeneratedBy")
-  transcriptsRevoked    Transcript[]           @relation("TranscriptRevokedBy")
-  paymentsRecorded      Payment[]              @relation("PaymentRecordedBy")
-  expensesCreated       Expense[]              @relation("ExpenseCreatedBy")
-  expensesApproved      Expense[]              @relation("ExpenseApprovedBy")
+  auditLogs                   AuditLog[]
+  classArmsLed                ClassArm[]                     @relation("ClassArmTeacher")
+  invitesSent                 StaffInvite[]                  @relation("InviteSentBy")
+  teacherAssignments          TeacherAssignment[]            @relation("TeacherAssignments")
+  attendanceMarked            AttendanceRecord[]             @relation("AttendanceMarkedBy")
+  teacherTimetableSlots       TimetableSlot[]                @relation("TeacherTimetableSlots")
+  assignmentsCreated          Assignment[]                   @relation("AssignmentTeacher")
+  submissionsGraded           AssignmentSubmission[]         @relation("SubmissionGradedBy")
+  scoresEntered               Score[]                        @relation("ScoreEnteredBy")
+  reportCardsApproved         ReportCard[]                   @relation("ReportCardApprovedBy")
+  schemesOfWorkCreated        SchemeOfWork[]                 @relation("SchemeOfWorkCreatedBy")
+  preschoolMilestonesCreated  PreschoolMilestone[]           @relation("PreschoolMilestoneCreatedBy")
+  preschoolMilestonesAssessed PreschoolMilestoneAssessment[] @relation("PreschoolMilestoneAssessedBy")
+  preschoolReportsSubmitted   PreschoolReport[]              @relation("PreschoolReportSubmittedBy")
+  preschoolReportsApproved    PreschoolReport[]              @relation("PreschoolReportApprovedBy")
+  transcriptsGenerated        Transcript[]                   @relation("TranscriptGeneratedBy")
+  transcriptsRevoked          Transcript[]                   @relation("TranscriptRevokedBy")
+  paymentsRecorded            Payment[]                      @relation("PaymentRecordedBy")
+  expensesCreated             Expense[]                      @relation("ExpenseCreatedBy")
+  expensesApproved            Expense[]                      @relation("ExpenseApprovedBy")
 
   /// Set only for users whose role is PARENT or STUDENT — links the login
   /// account back to the Guardian/Student profile it was created for via
@@ -366,6 +389,7 @@ model AcademicSession {
   calendarEvents CalendarEvent[]
   lectures       Lecture[]
   liveClasses    LiveClass[]
+  schemesOfWork  SchemeOfWork[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
@@ -385,16 +409,20 @@ model Term {
 
   createdAt DateTime @default(now())
 
-  attendanceRecords AttendanceRecord[]
-  assignments       Assignment[]
-  scores            Score[]
-  reportCards       ReportCard[]
-  feeStructures     FeeStructure[]
-  invoices          Invoice[]
-  calendarEvents    CalendarEvent[]
-  cbtExams          CBTExam[]
-  lectures          Lecture[]
-  liveClasses       LiveClass[]
+  attendanceRecords             AttendanceRecord[]
+  assignments                   Assignment[]
+  scores                        Score[]
+  reportCards                   ReportCard[]
+  feeStructures                 FeeStructure[]
+  invoices                      Invoice[]
+  calendarEvents                CalendarEvent[]
+  cbtExams                      CBTExam[]
+  lectures                      Lecture[]
+  liveClasses                   LiveClass[]
+  schemesOfWork                 SchemeOfWork[]
+  preschoolAssessmentPeriods    PreschoolAssessmentPeriod[]
+  preschoolMilestoneAssessments PreschoolMilestoneAssessment[]
+  preschoolReports              PreschoolReport[]
 
   @@unique([academicSessionId, name])
   @@index([schoolId])
@@ -423,12 +451,21 @@ model ClassGroup {
   name  String
   order Int    @default(0)
 
+  /// NUMERICAL (default): the ordinary Score/ReportCard system. MILESTONE:
+  /// this class group is assessed exclusively through Pre-School Milestone
+  /// Results. BOTH: both systems apply — e.g. a transitional class still
+  /// tracked developmentally but also given light numerical scores.
+  /// Deliberately not hardcoded to a class name like "Nursery" (brief
+  /// section 13) — a school sets this explicitly per class group.
+  assessmentMode ClassAssessmentMode @default(NUMERICAL)
+
   createdAt DateTime @default(now())
 
   arms          ClassArm[]
   feeStructures FeeStructure[]
   applicants    Applicant[]
   cbtQuestions  CBTQuestion[]
+  schemesOfWork SchemeOfWork[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
@@ -474,14 +511,16 @@ model Subject {
 
   createdAt DateTime @default(now())
 
-  teacherAssignments TeacherAssignment[]
-  timetableSlots     TimetableSlot[]
-  assignments        Assignment[]
-  scores             Score[]
-  cbtQuestions       CBTQuestion[]
-  cbtExams           CBTExam[]
-  lectures           Lecture[]
-  liveClasses        LiveClass[]
+  teacherAssignments            TeacherAssignment[]
+  timetableSlots                TimetableSlot[]
+  assignments                   Assignment[]
+  scores                        Score[]
+  cbtQuestions                  CBTQuestion[]
+  cbtExams                      CBTExam[]
+  lectures                      Lecture[]
+  liveClasses                   LiveClass[]
+  schemesOfWork                 SchemeOfWork[]
+  preschoolMilestoneAssessments PreschoolMilestoneAssessment[]
 
   @@unique([schoolId, code])
   @@index([schoolId])
@@ -544,15 +583,17 @@ model Student {
   userId String? @unique
   user   User?   @relation("StudentUser", fields: [userId], references: [id])
 
-  guardians         StudentGuardian[]
-  attendanceRecords AttendanceRecord[]
-  submissions       AssignmentSubmission[]
-  scores            Score[]
-  reportCards       ReportCard[]
-  transcripts       Transcript[]
-  invoices          Invoice[]
-  portalInvites     PortalInvite[]
-  conversations     Conversation[]
+  guardians                     StudentGuardian[]
+  attendanceRecords             AttendanceRecord[]
+  submissions                   AssignmentSubmission[]
+  scores                        Score[]
+  reportCards                   ReportCard[]
+  transcripts                   Transcript[]
+  invoices                      Invoice[]
+  portalInvites                 PortalInvite[]
+  conversations                 Conversation[]
+  preschoolMilestoneAssessments PreschoolMilestoneAssessment[]
+  preschoolReports              PreschoolReport[]
 
   bookLoans            BookLoan[]
   transportAssignments StudentTransportAssignment[]
@@ -868,6 +909,271 @@ model ReportCard {
   approvedBy   User?     @relation("ReportCardApprovedBy", fields: [approvedById], references: [id])
   approvedAt   DateTime?
   publishedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, termId])
+  @@index([schoolId])
+}
+
+// ---------------------------------------------------------------------------
+// Pre-School Milestone Results — a second, non-numerical assessment track
+// alongside Score/ReportCard above, for classes whose learners aren't
+// primarily evaluated with marks/percentages. A ClassGroup opts in via
+// assessmentMode; everything below is purely additive and never read by
+// computeReportCard/generateReportCardPdfBuffer or any other part of the
+// existing Grader's Results system.
+//
+// Shape mirrors the numeric system on purpose:
+//   Score          -> PreschoolMilestoneAssessment (raw entries)
+//   ReportCard     -> PreschoolReport (DRAFT/SUBMITTED/APPROVED/PUBLISHED
+//                      workflow row; content still recomputed live, never
+//                      cached, exactly like ReportCard)
+//   AssessmentComponent -> PreschoolAssessmentPeriod (which "pass" through
+//                      the milestones a score/assessment belongs to)
+//   GradeBand      -> PreschoolAssessmentLevelLabel (per-school display
+//                      label for a fixed, stable PreschoolAssessmentLevel
+//                      code — the code itself never varies per school, so
+//                      analytics/AI stay meaningful across schools)
+// ---------------------------------------------------------------------------
+
+enum ClassAssessmentMode {
+  NUMERICAL
+  MILESTONE
+  BOTH
+}
+
+/// A term's curriculum plan for one class group + subject — the source
+/// milestones are derived from (brief section 3: "milestones are derived
+/// from the Scheme of Work", not an isolated list). Scoped to ClassGroup
+/// (not ClassArm) since arms of the same class group share one curriculum;
+/// a teacher assessing "Nursery 1 A" pulls up "Nursery 1"'s plan.
+model SchemeOfWork {
+  id                String          @id @default(cuid())
+  schoolId          String
+  school            School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicSessionId String
+  academicSession   AcademicSession @relation(fields: [academicSessionId], references: [id], onDelete: Cascade)
+  termId            String
+  term              Term            @relation(fields: [termId], references: [id], onDelete: Cascade)
+  classGroupId      String
+  classGroup        ClassGroup      @relation(fields: [classGroupId], references: [id], onDelete: Cascade)
+  subjectId         String
+  subject           Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User   @relation("SchemeOfWorkCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  topics SchemeOfWorkTopic[]
+
+  @@unique([schoolId, termId, classGroupId, subjectId])
+  @@index([schoolId])
+  @@index([schoolId, classGroupId, subjectId])
+}
+
+/// One week/topic within a Scheme of Work (brief: "Week 1 — Verbs").
+model SchemeOfWorkTopic {
+  id             String       @id @default(cuid())
+  schoolId       String
+  school         School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  schemeOfWorkId String
+  schemeOfWork   SchemeOfWork @relation(fields: [schemeOfWorkId], references: [id], onDelete: Cascade)
+
+  weekNumber  Int
+  title       String
+  description String?
+  order       Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  milestones PreschoolMilestone[]
+
+  @@unique([schemeOfWorkId, weekNumber])
+  @@index([schoolId])
+}
+
+enum MilestoneStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+/// A single learning outcome/milestone statement under a topic (brief:
+/// "Abayo has been able to identify pronouns"). ARCHIVED rather than
+/// deleted when a Scheme of Work is edited later — a milestone already
+/// referenced by PreschoolMilestoneAssessment rows must never disappear
+/// from a student's historical results (brief section 12), and the FK
+/// from assessments to milestones has no onDelete: Cascade path that could
+/// silently drop them either.
+model PreschoolMilestone {
+  id       String            @id @default(cuid())
+  schoolId String
+  school   School            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  topicId  String
+  topic    SchemeOfWorkTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  order       Int             @default(0)
+  status      MilestoneStatus @default(ACTIVE)
+
+  createdById String
+  createdBy   User   @relation("PreschoolMilestoneCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assessments PreschoolMilestoneAssessment[]
+
+  @@index([schoolId])
+  @@index([topicId])
+}
+
+/// Which pass through the milestones an assessment belongs to (brief
+/// section 11: Test vs Examination may cover different milestones from
+/// the same Scheme of Work). A milestone assessed under one period is a
+/// distinct row from the same milestone assessed under another — see the
+/// unique constraint on PreschoolMilestoneAssessment — which is what lets
+/// the UI show "already assessed this term, in Test" without that
+/// blocking a later Examination pass over the same milestone.
+enum PreschoolAssessmentPeriodType {
+  CONTINUOUS_ASSESSMENT
+  TEST
+  EXAMINATION
+  MID_TERM
+  END_OF_TERM
+  OBSERVATION
+  WEEKLY
+  CUSTOM
+}
+
+model PreschoolAssessmentPeriod {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  termId   String
+  term     Term   @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  name String
+  type PreschoolAssessmentPeriodType @default(CUSTOM)
+
+  createdAt DateTime @default(now())
+
+  assessments PreschoolMilestoneAssessment[]
+
+  @@unique([schoolId, termId, name])
+  @@index([schoolId])
+}
+
+/// Fixed, cross-school-stable assessment codes (brief section 5: "the
+/// database should store a stable assessment value/code while allowing
+/// schools to customize the displayed label"). The code is a Prisma enum
+/// on purpose — not a per-school row — so AI analysis and any future
+/// cross-school analytics stay meaningful; PreschoolAssessmentLevelLabel
+/// below is where a school's own wording/colour lives.
+enum PreschoolAssessmentLevel {
+  EXCEEDED
+  ACHIEVED
+  PROGRESSING
+  DEVELOPING
+  NEEDS_SUPPORT
+}
+
+/// A school's display label/colour override for one PreschoolAssessmentLevel
+/// code. Absence of a row for a given level just means "use the built-in
+/// default wording" (see PRESCHOOL_LEVEL_DEFAULTS in preschool-results.ts) —
+/// schools that never touch this setting need no seed/migration step.
+model PreschoolAssessmentLevelLabel {
+  id       String                   @id @default(cuid())
+  schoolId String
+  school   School                   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  level    PreschoolAssessmentLevel
+
+  label        String
+  colorVariant String @default("neutral")
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, level])
+  @@index([schoolId])
+}
+
+/// One teacher's assessment of one student against one milestone, within
+/// one assessment period — the milestone system's equivalent of Score.
+/// comment is optional per brief section 8 ("do not require teachers to
+/// manually write a comment for every milestone").
+model PreschoolMilestoneAssessment {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  studentId          String
+  student            Student                   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  milestoneId        String
+  milestone          PreschoolMilestone        @relation(fields: [milestoneId], references: [id], onDelete: Restrict)
+  subjectId          String
+  subject            Subject                   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  termId             String
+  term               Term                      @relation(fields: [termId], references: [id], onDelete: Cascade)
+  assessmentPeriodId String
+  assessmentPeriod   PreschoolAssessmentPeriod @relation(fields: [assessmentPeriodId], references: [id], onDelete: Cascade)
+
+  level   PreschoolAssessmentLevel
+  comment String?
+
+  assessedById String
+  assessedBy   User     @relation("PreschoolMilestoneAssessedBy", fields: [assessedById], references: [id])
+  assessedAt   DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([studentId, milestoneId, assessmentPeriodId])
+  @@index([schoolId])
+  @@index([schoolId, studentId, termId])
+  @@index([schoolId, milestoneId])
+  @@index([schoolId, assessmentPeriodId])
+}
+
+enum PreschoolResultStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  PUBLISHED
+}
+
+/// The milestone system's equivalent of ReportCard: a per-student-per-term
+/// workflow/sign-off row. Content (which milestones, at which level, with
+/// which comment) is always recomputed live from PreschoolMilestoneAssessment
+/// at read time, exactly like ReportCard never caches Score data — this row
+/// only tracks status + comments. Adds SUBMITTED ahead of APPROVED (brief
+/// section 23's "Draft -> Submitted -> Approved -> Published"), a step the
+/// numeric ReportCardStatus doesn't have and isn't getting — that enum is
+/// untouched.
+model PreschoolReport {
+  id        String  @id @default(cuid())
+  schoolId  String
+  school    School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  termId    String
+  term      Term    @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  status           PreschoolResultStatus @default(DRAFT)
+  overallComment   String?
+  teacherComment   String?
+  principalComment String?
+
+  submittedById String?
+  submittedBy   User?     @relation("PreschoolReportSubmittedBy", fields: [submittedById], references: [id])
+  submittedAt   DateTime?
+  approvedById  String?
+  approvedBy    User?     @relation("PreschoolReportApprovedBy", fields: [approvedById], references: [id])
+  approvedAt    DateTime?
+  publishedAt   DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1273,6 +1579,7 @@ enum NotificationType {
   LIVE_CLASS_STARTED
   LIVE_CLASS_CANCELLED
   LIVE_CLASS_RECORDING_AVAILABLE
+  PRESCHOOL_REPORT_PUBLISHED
 }
 
 model Notification {

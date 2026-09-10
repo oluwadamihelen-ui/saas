@@ -77,6 +77,21 @@ export async function notifyReportCardPublished(schoolId: string, studentId: str
   );
 }
 
+export async function notifyPreschoolReportPublished(schoolId: string, studentId: string, termId: string) {
+  const [term, recipients] = await Promise.all([
+    prisma.term.findFirst({ where: { schoolId, id: termId } }),
+    studentAndGuardianUserIds(schoolId, studentId),
+  ]);
+  await notifyRecipients(
+    schoolId,
+    recipients,
+    "PRESCHOOL_REPORT_PUBLISHED",
+    "Milestone report published",
+    term ? `The developmental milestone report for ${term.name} is now available.` : undefined,
+    "/portal/parent"
+  );
+}
+
 export async function notifyInvoiceIssued(schoolId: string, invoiceId: string) {
   const invoice = await prisma.invoice.findFirst({ where: { schoolId, id: invoiceId } });
   if (!invoice) return;

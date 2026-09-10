@@ -7,6 +7,7 @@ import { getFinanceStats } from "@/lib/services/finance-dashboard";
 import { listStudents, getStudent } from "@/lib/services/students";
 import { getStudentAttendanceHistory, getTodayAttendanceSummary, markAttendance } from "@/lib/services/attendance";
 import { computeReportCard } from "@/lib/services/results";
+import { computePreschoolReport, listAssessmentLevels } from "@/lib/services/preschool-results";
 import { getCurrentTerm } from "@/lib/services/academics";
 import { listInvoicesForStudent, invoiceBalanceMinor } from "@/lib/services/invoices";
 import type { AiToolDefinition } from "@/lib/ai/types";
@@ -170,6 +171,43 @@ export const AI_TOOLS: AiTool[] = [
         position: report.position,
         classSize: report.classSize,
         subjects: report.subjectRows.map((r) => ({ subject: r.subjectName, total: r.total, maxTotal: r.maxTotal, grade: r.grade })),
+      };
+    },
+  },
+  {
+    definition: {
+      name: "get_student_milestone_results",
+      description:
+        "Get a specific pre-school/nursery student's developmental milestone assessments for the current term (or a given term id) — which learning outcomes they've achieved, are progressing on, or need support with, by subject and topic. Use this instead of get_student_results for a class using milestone-based assessment (not numerical scores).",
+      parameters: {
+        type: "object",
+        properties: {
+          studentId: { type: "string" },
+          termId: { type: "string", description: "Optional; defaults to the current term" },
+        },
+        required: ["studentId"],
+      },
+    },
+    permission: PERMISSIONS.RESULTS_VIEW,
+    kind: "read",
+    async execute(schoolId, _userId, args) {
+      const student = await requireStudent(schoolId, args.studentId);
+      const termId = typeof args.termId === "string" && args.termId ? args.termId : (await getCurrentTerm(schoolId))?.id;
+      if (!termId) return { student: `${student.firstName} ${student.lastName}`, message: "No active term configured." };
+
+      const [report, levels] = await Promise.all([computePreschoolReport(schoolId, student.id, termId), listAssessmentLevels(schoolId)]);
+      const labelByLevel = new Map(levels.map((l) => [l.level, l.label]));
+
+      return {
+        student: `${student.firstName} ${student.lastName}`,
+        term: report.term?.name ?? null,
+        totalMilestonesAssessed: report.totalMilestonesAssessed,
+        subjects: report.subjects.map((s) => ({
+          subject: s.subjectName,
+          milestones: s.topics.flatMap((t) =>
+            t.milestones.map((m) => ({ topic: t.topicTitle, milestone: m.title, level: labelByLevel.get(m.level) ?? m.level, comment: m.comment }))
+          ),
+        })),
       };
     },
   },
