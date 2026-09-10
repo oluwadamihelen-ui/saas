@@ -107,6 +107,7 @@ export function StudentImportForm() {
 
           <form action={confirmAction} className="flex items-center gap-3">
             <input type="hidden" name="validRowsJson" value={previewState.validRowsJson ?? "[]"} />
+            <input type="hidden" name="fileName" value={previewState.fileName ?? "students.csv"} />
             <Button type="submit" disabled={isConfirming || validCount === 0}>
               {isConfirming ? "Importing..." : `Enroll ${validCount} student${validCount === 1 ? "" : "s"}`}
             </Button>

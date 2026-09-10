@@ -6,12 +6,14 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { parseStudentImportCsv, commitStudentImport } from "@/lib/services/student-import";
 import type { StudentInput } from "@/lib/services/students";
 import { logAudit } from "@/lib/audit";
+import { recordImportBatch } from "@/lib/services/import-history";
 
 export interface StudentImportPreviewState {
   status: "idle" | "error" | "previewed";
   message?: string;
   rows?: { rowNumber: number; label: string; errors: string[]; valid: boolean }[];
   validRowsJson?: string;
+  fileName?: string;
 }
 
 export async function previewStudentImportAction(
@@ -47,6 +49,7 @@ export async function previewStudentImportAction(
       valid: r.data !== null,
     })),
     validRowsJson: JSON.stringify(validRows),
+    fileName: file.name,
   };
 }
 
@@ -67,6 +70,7 @@ export async function confirmStudentImportAction(
   if (typeof raw !== "string" || !raw) {
     return { status: "error", message: "Nothing to import — run the preview again." };
   }
+  const fileName = String(formData.get("fileName") || "students.csv");
 
   let rows: { rowNumber: number; data: StudentInput }[];
   try {
@@ -91,6 +95,17 @@ export async function confirmStudentImportAction(
     });
   }
 
+  await recordImportBatch(user.schoolId, user.id, {
+    dataType: "STUDENTS",
+    status: outcome.created > 0 ? "COMPLETED" : "FAILED",
+    fileName,
+    totalRows: rows.length,
+    successCount: outcome.created,
+    failedCount: outcome.failed.length,
+    rowErrors: outcome.failed.map((f) => ({ rowNumber: f.rowNumber, error: `${f.name}: ${f.error}` })),
+  });
+
   revalidatePath("/dashboard/students");
+  revalidatePath("/dashboard/data/history");
   return { status: "done", created: outcome.created, failed: outcome.failed };
 }

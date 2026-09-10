@@ -5,12 +5,14 @@ import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { parseResultsImportCsv, commitResultsImport, type ScoreImportEntry } from "@/lib/services/results-import";
 import { logAudit } from "@/lib/audit";
+import { recordImportBatch } from "@/lib/services/import-history";
 
 export interface ResultsImportPreviewState {
   status: "idle" | "error" | "previewed";
   message?: string;
   rows?: { rowNumber: number; summary: string; errors: string[]; warnings: string[]; valid: boolean }[];
   validRowsJson?: string;
+  fileName?: string;
 }
 
 export async function previewResultsImportAction(
@@ -39,6 +41,7 @@ export async function previewResultsImportAction(
     status: "previewed",
     rows: rows.map((r) => ({ rowNumber: r.rowNumber, summary: r.summary, errors: r.errors, warnings: r.warnings, valid: r.data !== null })),
     validRowsJson: JSON.stringify(validRows),
+    fileName: file.name,
   };
 }
 
@@ -58,6 +61,7 @@ export async function confirmResultsImportAction(
   if (typeof raw !== "string" || !raw) {
     return { status: "error", message: "Nothing to import — run the preview again." };
   }
+  const fileName = String(formData.get("fileName") || "results.csv");
 
   let entries: ScoreImportEntry[];
   try {
@@ -85,6 +89,29 @@ export async function confirmResultsImportAction(
     newValue: { imported: outcome.imported },
   });
 
+  // A results file can legitimately mix sessions/terms/classes across
+  // rows, so the batch only records a single term/class context when
+  // every entry actually shares one — never an arbitrary "first row"
+  // guess for a mixed file.
+  const distinctTermIds = new Set(entries.map((e) => e.termId));
+  const distinctClassArmIds = new Set(entries.map((e) => e.classArmId).filter((id): id is string => Boolean(id)));
+  const singleTermId = distinctTermIds.size === 1 ? entries[0].termId : null;
+  const singleSessionId = distinctTermIds.size === 1 ? entries[0].academicSessionId : null;
+  const singleClassArmId = distinctClassArmIds.size === 1 ? entries[0].classArmId : null;
+
+  await recordImportBatch(user.schoolId, user.id, {
+    dataType: "RESULTS",
+    status: "COMPLETED",
+    fileName,
+    totalRows: entries.length,
+    successCount: outcome.imported,
+    failedCount: 0, // only valid rows ever reach commit — invalid rows never leave the preview step
+    academicSessionId: singleSessionId,
+    termId: singleTermId,
+    classArmId: singleClassArmId,
+  });
+
   revalidatePath("/dashboard/results");
+  revalidatePath("/dashboard/data/history");
   return { status: "done", imported: outcome.imported };
 }

@@ -19,6 +19,7 @@ import {
 } from "@/lib/services/cbt-questions";
 import { generateQuestionsWithAI, GENERATABLE_TYPES, type GenerateQuestionsInput } from "@/lib/services/cbt-ai";
 import { logAudit } from "@/lib/audit";
+import { recordImportBatch } from "@/lib/services/import-history";
 import type { CBTQuestionType, CBTDifficulty } from "@/generated/prisma/client";
 
 const questionFieldsSchema = z.object({
@@ -196,6 +197,7 @@ export interface ImportPreviewState {
   message?: string;
   rows?: { rowNumber: number; prompt: string; errors: string[]; valid: boolean }[];
   validRowsJson?: string;
+  fileName?: string;
 }
 
 export async function previewImportAction(
@@ -229,6 +231,7 @@ export async function previewImportAction(
       valid: r.data !== null,
     })),
     validRowsJson: JSON.stringify(validRows),
+    fileName: file.name,
   };
 }
 
@@ -248,6 +251,7 @@ export async function confirmImportAction(
   if (typeof raw !== "string" || !raw) {
     return { status: "error", message: "Nothing to import — run the preview again." };
   }
+  const fileName = String(formData.get("fileName") || "questions.csv");
 
   let rows: QuestionInput[];
   try {
@@ -274,7 +278,17 @@ export async function confirmImportAction(
     newValue: { count: created },
   });
 
+  await recordImportBatch(user.schoolId, user.id, {
+    dataType: "CBT_QUESTIONS",
+    status: "COMPLETED",
+    fileName,
+    totalRows: rows.length,
+    successCount: created,
+    failedCount: 0,
+  });
+
   revalidatePath("/dashboard/cbt/question-bank");
+  revalidatePath("/dashboard/data/history");
   return { status: "done", created };
 }
 

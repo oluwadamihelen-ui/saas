@@ -108,6 +108,7 @@ model School {
   students                       Student[]
   guardians                      Guardian[]
   auditLogs                      AuditLog[]
+  importBatches                  ImportBatch[]
   teacherAssignments             TeacherAssignment[]
   attendanceRecords              AttendanceRecord[]
   timetableSlots                 TimetableSlot[]
@@ -228,6 +229,7 @@ model User {
   updatedAt DateTime @updatedAt
 
   auditLogs                   AuditLog[]
+  importBatches                ImportBatch[]
   classArmsLed                ClassArm[]                     @relation("ClassArmTeacher")
   invitesSent                 StaffInvite[]                  @relation("InviteSentBy")
   teacherAssignments          TeacherAssignment[]            @relation("TeacherAssignments")
@@ -392,6 +394,7 @@ model AcademicSession {
   liveClasses    LiveClass[]
   schemesOfWork  SchemeOfWork[]
   classHistory   StudentClassHistory[]
+  importBatches  ImportBatch[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
@@ -425,6 +428,7 @@ model Term {
   preschoolAssessmentPeriods    PreschoolAssessmentPeriod[]
   preschoolMilestoneAssessments PreschoolMilestoneAssessment[]
   preschoolReports              PreschoolReport[]
+  importBatches                 ImportBatch[]
 
   @@unique([academicSessionId, name])
   @@index([schoolId])
@@ -501,6 +505,7 @@ model ClassArm {
   scores             Score[]
   reportCards        ReportCard[]
   classHistory       StudentClassHistory[]
+  importBatches      ImportBatch[]
 
   @@unique([classGroupId, name])
   @@index([schoolId])
@@ -1595,6 +1600,64 @@ model AuditLog {
 
   @@index([schoolId, createdAt])
   @@index([resourceType, resourceId])
+}
+
+enum ImportDataType {
+  STUDENTS
+  RESULTS
+  CBT_QUESTIONS
+}
+
+enum ImportStatus {
+  COMPLETED
+  FAILED
+}
+
+/// One row per completed (or failed-outright) bulk import run, for the
+/// Data Management > Import History page. Deliberately no PENDING/
+/// VALIDATING/PROCESSING states — every import today runs synchronously
+/// within one request/response (there's no background job runner in this
+/// app), so a batch is only ever recorded once it's actually finished;
+/// there's nothing to show "in progress".
+///
+/// academicSessionId/termId/classArmId are nullable and only set where
+/// the import type actually has a single, well-defined context — a
+/// results import's rows can each name a different session/term/class,
+/// so those are left null for results rather than picking one
+/// arbitrarily; a class-scoped import (if one is added later) would set
+/// classArmId.
+///
+/// rowErrors stores a capped list of {rowNumber, error} for the row-level
+/// error report download — not every failure ever recorded in full for a
+/// huge file, just enough to help a school fix their spreadsheet.
+model ImportBatch {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  dataType ImportDataType
+  status   ImportStatus
+
+  academicSessionId String?
+  academicSession   AcademicSession? @relation(fields: [academicSessionId], references: [id], onDelete: SetNull)
+  termId            String?
+  term              Term?            @relation(fields: [termId], references: [id], onDelete: SetNull)
+  classArmId        String?
+  classArm          ClassArm?        @relation(fields: [classArmId], references: [id], onDelete: SetNull)
+
+  fileName       String
+  totalRows      Int
+  successCount   Int
+  failedCount    Int
+  rowErrors      Json?
+
+  importedById String
+  importedBy   User   @relation(fields: [importedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId, createdAt])
+  @@index([schoolId, dataType])
 }
 
 // ---------------------------------------------------------------------------

@@ -114,6 +114,7 @@ export function ResultsImportForm() {
 
           <form action={confirmAction} className="flex items-center gap-3">
             <input type="hidden" name="validRowsJson" value={previewState.validRowsJson ?? "[]"} />
+            <input type="hidden" name="fileName" value={previewState.fileName ?? "results.csv"} />
             <Button type="submit" disabled={isConfirming || validCount === 0}>
               {isConfirming ? "Importing..." : `Import ${validCount} score${validCount === 1 ? "" : "s"}`}
             </Button>
