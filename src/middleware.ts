@@ -4,14 +4,15 @@ import { authConfig } from "@/lib/auth/config";
 
 const { auth } = NextAuth(authConfig);
 
-const ADMIN_ROLES = new Set(["SUPER_ADMIN", "STAFF"]);
-
 export default auth((req) => {
   const { pathname } = req.nextUrl;
-  const isAdminRoute = pathname.startsWith("/admin");
-  const isDashboardRoute = pathname.startsWith("/dashboard");
+  const isProtected =
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/onboarding") ||
+    pathname.startsWith("/portal") ||
+    pathname.startsWith("/platform");
 
-  if (!isAdminRoute && !isDashboardRoute) {
+  if (!isProtected) {
     return NextResponse.next();
   }
 
@@ -23,13 +24,9 @@ export default auth((req) => {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (isAdminRoute && !ADMIN_ROLES.has(session.user.role)) {
-    return NextResponse.redirect(new URL("/dashboard", req.nextUrl.origin));
-  }
-
   return NextResponse.next();
 });
 
 export const config = {
-  matcher: ["/admin/:path*", "/dashboard/:path*"],
+  matcher: ["/dashboard/:path*", "/onboarding/:path*", "/portal/:path*", "/platform/:path*"],
 };
