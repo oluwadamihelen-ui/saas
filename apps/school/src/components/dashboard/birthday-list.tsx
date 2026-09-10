@@ -13,18 +13,18 @@ const PERSON_TYPE_LABEL = { STUDENT: "Student", STAFF: "Staff" } as const;
 /// directory page, so the two never drift in how a birthday is presented.
 export function BirthdayList({ entries, emptyMessage }: { entries: BirthdayEntry[]; emptyMessage?: string }) {
   if (entries.length === 0) {
-    return <EmptyState title={emptyMessage ?? "No upcoming birthdays to display."} className="border-0 py-8" />;
+    return <EmptyState title={emptyMessage ?? "No upcoming birthdays to display."} className="border-0 py-6" />;
   }
 
   return (
     <ul className="divide-y divide-border">
       {entries.map((entry) => (
-        <li key={`${entry.personType}:${entry.id}`} className={cn("flex items-center gap-3 p-3 sm:p-4", entry.isToday && "bg-warning-soft")}>
+        <li key={`${entry.personType}:${entry.id}`} className={cn("flex items-center gap-3 px-3 py-2.5 sm:px-4", entry.isToday && "bg-warning-soft")}>
           {entry.photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- may be a data: URL, next/image can't optimize it
-            <img src={entry.photoUrl} alt={entry.name} className="h-10 w-10 shrink-0 rounded-full border border-border object-cover" />
+            <img src={entry.photoUrl} alt={entry.name} className="h-9 w-9 shrink-0 rounded-full border border-border object-cover" />
           ) : (
-            <Avatar name={entry.name} className="h-10 w-10 text-sm" />
+            <Avatar name={entry.name} className="h-9 w-9 text-xs" />
           )}
 
           <div className="min-w-0 flex-1">

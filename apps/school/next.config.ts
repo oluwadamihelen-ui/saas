@@ -19,6 +19,14 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/**/*": ["./src/generated/prisma/**/*"],
   },
+  // Lets requirePermission/requireSchoolUser/requireSuperAdmin (src/lib/auth/require.ts)
+  // call the forbidden()/unauthorized() navigation APIs instead of throwing a
+  // plain Error — which Next.js has no default boundary for, so it fell
+  // through to the generic framework error page (a raw 500). These render
+  // src/app/forbidden.tsx / unauthorized.tsx instead.
+  experimental: {
+    authInterrupts: true,
+  },
 };
 
 export default nextConfig;
