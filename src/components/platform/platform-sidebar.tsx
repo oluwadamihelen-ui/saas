@@ -24,13 +24,13 @@ export function PlatformMobileNav() {
 
 export function PlatformSidebar() {
   return (
-    <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-surface md:flex">
-      <div className="flex h-16 items-center gap-2 border-b border-border px-6">
-        <Link href="/platform"><Logo height={26} /></Link>
-        <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent">Platform</span>
+    <aside className="hidden w-64 shrink-0 flex-col bg-navy md:flex">
+      <div className="flex h-16 items-center gap-2 border-b border-navy-border px-6">
+        <Link href="/platform"><Logo height={26} variant="light" /></Link>
+        <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium text-white">Platform</span>
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-        <NavTree items={NAV} />
+        <NavTree items={NAV} theme="navy" />
       </nav>
     </aside>
   );

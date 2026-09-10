@@ -5,7 +5,7 @@ import { brand } from "@/lib/brand";
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
-      <div className="relative hidden flex-col justify-between overflow-hidden bg-foreground p-10 text-white lg:flex">
+      <div className="relative hidden flex-col justify-between overflow-hidden bg-navy p-10 text-white lg:flex">
         <div
           className="pointer-events-none absolute inset-0 opacity-90"
           style={{

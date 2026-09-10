@@ -6,26 +6,45 @@ import { cn } from "@/lib/utils";
 /// lettermark style as <Logo>, generated from the school's own name/
 /// initial instead of "Schoolum" — so an unbranded school still looks
 /// like itself, not like the product vendor.
+///
+/// `variant="navy"` is for the dark sidebar rail: the fallback lettermark
+/// switches to white text, and an uploaded logo (which could be any
+/// color, including dark-on-transparent) sits on a small white plate so
+/// it stays legible regardless of what the school uploaded.
 export function SchoolLogo({
   name,
   logoUrl,
   height = 26,
   className,
+  variant = "light",
 }: {
   name: string;
   logoUrl?: string | null;
   height?: number;
   className?: string;
+  variant?: "light" | "navy";
 }) {
   if (logoUrl) {
     // eslint-disable-next-line @next/next/no-img-element -- logoUrl is a data: URL (uploaded, no external host), which next/image cannot optimize anyway.
-    return <img src={logoUrl} alt={name} className={cn("object-contain", className)} style={{ height, maxWidth: height * 6 }} />;
+    const img = <img src={logoUrl} alt={name} className={cn("object-contain", className)} style={{ height, maxWidth: height * 6 }} />;
+    if (variant === "navy") {
+      return (
+        <span className="inline-flex items-center rounded-md bg-white px-2 py-1">
+          {img}
+        </span>
+      );
+    }
+    return img;
   }
 
   const initial = name.trim().charAt(0).toUpperCase() || "S";
   return (
     <span
-      className={cn("inline-flex items-center gap-2 font-semibold tracking-tight text-foreground", className)}
+      className={cn(
+        "inline-flex items-center gap-2 font-semibold tracking-tight",
+        variant === "navy" ? "text-white" : "text-foreground",
+        className
+      )}
       style={{ fontSize: height * 0.6 }}
     >
       <span

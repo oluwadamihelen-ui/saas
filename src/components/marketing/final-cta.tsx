@@ -4,7 +4,7 @@ import { Reveal } from "./reveal";
 
 export function FinalCta() {
   return (
-    <section className="relative overflow-hidden bg-foreground py-20 sm:py-28">
+    <section className="relative overflow-hidden bg-navy py-20 sm:py-28">
       <div
         aria-hidden
         className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--accent)_0%,_transparent_60%)] opacity-20"

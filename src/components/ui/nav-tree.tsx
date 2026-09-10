@@ -28,13 +28,30 @@ function collectActiveGroupLabels(items: NavItem[], pathname: string, acc: Set<s
   }
 }
 
+export type NavTheme = "light" | "navy";
+
 /// Recursive, permission-agnostic nav renderer shared by the desktop
 /// sidebar and the mobile NavDrawer — filtering by permission happens
 /// before items reach here (see visibleNavFor in sidebar.tsx), so this
 /// component only knows about hrefs, labels and nesting. Groups (items
 /// with children) expand/collapse; whichever group chain contains the
 /// current route starts open.
-export function NavTree({ items, onNavigate, depth = 0 }: { items: NavItem[]; onNavigate?: () => void; depth?: number }) {
+///
+/// `theme="navy"` is the dark Schoolum sidebar palette (see globals.css
+/// --navy-* tokens) — used by the persistent desktop sidebars. The
+/// slide-out mobile NavDrawer always stays "light" for on-glass
+/// readability regardless of the desktop sidebar's theme.
+export function NavTree({
+  items,
+  onNavigate,
+  depth = 0,
+  theme = "light",
+}: {
+  items: NavItem[];
+  onNavigate?: () => void;
+  depth?: number;
+  theme?: NavTheme;
+}) {
   const pathname = usePathname();
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
     const acc = new Set<string>();
@@ -51,8 +68,10 @@ export function NavTree({ items, onNavigate, depth = 0 }: { items: NavItem[]; on
     });
   }
 
+  const navy = theme === "navy";
+
   return (
-    <div className={cn("space-y-1", depth > 0 && "ml-4 border-l border-border pl-3")}>
+    <div className={cn("space-y-0.5", depth > 0 && cn("ml-4 border-l pl-3", navy ? "border-navy-border" : "border-border"))}>
       {items.map((item) => {
         const Icon = item.icon;
         const active = isActive(item, pathname);
@@ -67,8 +86,14 @@ export function NavTree({ items, onNavigate, depth = 0 }: { items: NavItem[]; on
                 onClick={() => toggle(item.label)}
                 aria-expanded={isOpen}
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  active ? "text-accent" : "text-muted hover:bg-muted-surface hover:text-foreground"
+                  "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  navy
+                    ? active
+                      ? "text-white"
+                      : "text-navy-muted hover:bg-navy-hover hover:text-white"
+                    : active
+                      ? "text-accent"
+                      : "text-muted hover:bg-muted-surface hover:text-foreground"
                 )}
               >
                 {Icon && <Icon className="h-4 w-4 shrink-0" />}
@@ -76,8 +101,8 @@ export function NavTree({ items, onNavigate, depth = 0 }: { items: NavItem[]; on
                 <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", isOpen && "rotate-180")} />
               </button>
               {isOpen && (
-                <div className="mt-1">
-                  <NavTree items={item.children!} onNavigate={onNavigate} depth={depth + 1} />
+                <div className="mt-0.5">
+                  <NavTree items={item.children!} onNavigate={onNavigate} depth={depth + 1} theme={theme} />
                 </div>
               )}
             </div>
@@ -90,8 +115,14 @@ export function NavTree({ items, onNavigate, depth = 0 }: { items: NavItem[]; on
             href={item.href!}
             onClick={onNavigate}
             className={cn(
-              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-              active ? "bg-accent-soft text-accent" : "text-muted hover:bg-muted-surface hover:text-foreground"
+              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+              navy
+                ? active
+                  ? "bg-navy-active text-white"
+                  : "text-navy-muted hover:bg-navy-hover hover:text-white"
+                : active
+                  ? "bg-accent-soft text-accent"
+                  : "text-muted hover:bg-muted-surface hover:text-foreground"
             )}
           >
             {Icon && <Icon className="h-4 w-4 shrink-0" />}

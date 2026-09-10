@@ -176,22 +176,22 @@ export default async function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-sm">
-                <CalendarClock className="h-4 w-4" /> AI Assistant
+                <CalendarClock className="h-4 w-4" /> Schoolum Intelligence
               </CardTitle>
             </CardHeader>
             <CardContent>
               {canUseAssistant ? (
                 <EmptyState
-                  title="Ask about your school"
+                  title="Ask Schoolum about your school"
                   description="Get answers about students, attendance, results and finance."
                   action={
                     <Button asChild size="sm">
-                      <Link href="/dashboard/assistant">Open assistant</Link>
+                      <Link href="/dashboard/assistant">Open Schoolum AI</Link>
                     </Button>
                   }
                 />
               ) : (
-                <EmptyState title="No access" description="You don't have permission to use the AI assistant." />
+                <EmptyState title="No access" description="You don't have permission to use Schoolum AI." />
               )}
             </CardContent>
           </Card>

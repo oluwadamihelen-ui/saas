@@ -35,7 +35,7 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
 
 export function SiteFooter() {
   return (
-    <footer className="bg-foreground">
+    <footer className="bg-navy">
       <div className="container-shell grid grid-cols-2 gap-10 py-14 sm:grid-cols-3 lg:grid-cols-6 lg:py-16">
         <div className="col-span-2 lg:col-span-2">
           <Logo height={28} variant="light" />

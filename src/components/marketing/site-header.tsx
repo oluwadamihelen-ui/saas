@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
   { href: "#product", label: "Product" },
@@ -15,16 +14,13 @@ const NAV_LINKS = [
   { href: "#how-it-works", label: "Resources" },
 ];
 
+/// A persistent frosted bar rather than the old transparent-at-top/
+/// solid-on-scroll toggle — it needs to read well over the homepage's
+/// dark navy hero AND every plain-light marketing page without knowing
+/// which one it's on, so "always frosted" is the simplest thing that
+/// works everywhere.
 export function SiteHeader() {
-  const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
 
   // Lock body scroll while the mobile menu is open.
   useEffect(() => {
@@ -38,12 +34,7 @@ export function SiteHeader() {
   }, [mobileOpen]);
 
   return (
-    <header
-      className={cn(
-        "sticky top-0 z-50 border-b transition-colors duration-300",
-        scrolled ? "border-border bg-surface/85 backdrop-blur-md" : "border-transparent bg-transparent"
-      )}
-    >
+    <header className="sticky top-0 z-50 border-b border-border bg-surface/80 backdrop-blur-md">
       <div className="container-shell flex h-16 items-center justify-between sm:h-18">
         <Link href="/" className="shrink-0" onClick={() => setMobileOpen(false)}>
           <Logo height={30} />
