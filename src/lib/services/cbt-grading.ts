@@ -238,9 +238,17 @@ async function promoteOfficialAttempt(
   const exam = await tx.cBTExam.findUniqueOrThrow({ where: { id: examId } });
   if (!exam.assessmentComponentId) return;
 
+  // Grading happens live (same day as the sitting, not years later), so
+  // the student's *current* class is the correct class for this score —
+  // this is "recording reality as it happens" (source ENTERED), not the
+  // guess-from-current-class pattern the historical-accuracy work
+  // deliberately avoids for old data.
+  const student = await tx.student.findUnique({ where: { id: studentId }, select: { classArmId: true } });
+
   await saveScores(exam.schoolId, exam.createdById, {
     subjectId: exam.subjectId,
     termId: exam.termId,
+    classArmId: student?.classArmId ?? null,
     entries: [{ studentId, componentId: exam.assessmentComponentId, value: Math.round(score) }],
   });
 

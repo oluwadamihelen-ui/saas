@@ -45,7 +45,7 @@ export async function saveScoreGridAction(
   }
 
   try {
-    await saveScores(user.schoolId, user.id, { subjectId, termId, entries });
+    await saveScores(user.schoolId, user.id, { subjectId, termId, classArmId, entries });
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not save scores." };
   }

@@ -65,16 +65,39 @@ export async function getScoreEntryGrid(schoolId: string, classArmId: string, su
   };
 }
 
+/// classArmId is the class this batch of scores is actually being
+/// entered for — always known by the caller (the score grid is itself
+/// scoped to one class; CBT grading resolves the student's current class
+/// at the moment of grading). Set on Score.classArmId only when the row
+/// is first created (source "ENTERED" — this is live entry, not an
+/// import); an update to an existing score changes its value only and
+/// never touches classArmId/classArmSource, so correcting a score can
+/// never rewrite which class it was historically for.
 export async function saveScores(
   schoolId: string,
   enteredById: string,
-  input: { subjectId: string; termId: string; entries: { studentId: string; componentId: string; value: number }[] }
+  input: {
+    subjectId: string;
+    termId: string;
+    classArmId?: string | null;
+    entries: { studentId: string; componentId: string; value: number }[];
+  }
 ) {
   await prisma.$transaction(
     input.entries.map((e) =>
       prisma.score.upsert({
         where: { studentId_subjectId_termId_componentId: { studentId: e.studentId, subjectId: input.subjectId, termId: input.termId, componentId: e.componentId } },
-        create: { schoolId, studentId: e.studentId, subjectId: input.subjectId, termId: input.termId, componentId: e.componentId, value: e.value, enteredById },
+        create: {
+          schoolId,
+          studentId: e.studentId,
+          subjectId: input.subjectId,
+          termId: input.termId,
+          componentId: e.componentId,
+          value: e.value,
+          enteredById,
+          classArmId: input.classArmId || null,
+          classArmSource: input.classArmId ? "ENTERED" : null,
+        },
         update: { value: e.value, enteredById },
       })
     )
@@ -85,6 +108,28 @@ export async function saveScores(
 // Report cards
 // ---------------------------------------------------------------------------
 
+/// The class arm most of a student's own scores for a term agree on —
+/// almost always all of them, since a class-arm transfer mid-term is
+/// rare, but "most" rather than "first" handles it without special-casing.
+/// Null rows (pre-migration, or entered before this field existed) are
+/// ignored rather than counted as their own bucket.
+function resolveDominantClassArmId(scores: { classArmId: string | null }[]): string | null {
+  const counts = new Map<string, number>();
+  for (const s of scores) {
+    if (!s.classArmId) continue;
+    counts.set(s.classArmId, (counts.get(s.classArmId) ?? 0) + 1);
+  }
+  let best: string | null = null;
+  let bestCount = 0;
+  for (const [classArmId, count] of counts) {
+    if (count > bestCount) {
+      best = classArmId;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
 export async function computeReportCard(schoolId: string, studentId: string, termId: string) {
   const student = await prisma.student.findFirst({
     where: { schoolId, id: studentId },
@@ -92,15 +137,31 @@ export async function computeReportCard(schoolId: string, studentId: string, ter
   });
   if (!student) throw new Error("Student not found");
 
+  // The class this report card is actually for — resolved from the
+  // student's OWN scores for this term wherever they carry a verified
+  // historical class (Score.classArmId), never from Student.classArmId
+  // once that verified history exists, so a promoted student's past
+  // report card keeps showing their past class.
+  const ownScores = await prisma.score.findMany({ where: { schoolId, studentId, termId }, select: { classArmId: true } });
+  const verifiedClassArmId = resolveDominantClassArmId(ownScores);
+
   const [components, bands, allClassScores, term] = await Promise.all([
     prisma.assessmentComponent.findMany({ where: { schoolId } }),
     listGradeBands(schoolId),
-    student.classArmId
-      ? prisma.score.findMany({
-          where: { schoolId, termId, student: { classArmId: student.classArmId } },
-          include: { subject: true },
-        })
-      : Promise.resolve([]),
+    // Classmates for the average/position below must be whoever was
+    // ACTUALLY in this class this term. Where this student has a
+    // verified historical class on their own scores, filter classmates
+    // by that same Score.classArmId — the historically accurate answer.
+    // Where none of their scores carry one yet (legacy data predating
+    // this field, or a term with no classArmId ever recorded), there is
+    // no verified history to filter by; fall back to the pre-existing
+    // behavior of joining through the student's current class, exactly
+    // as this always worked before — better than returning nothing.
+    verifiedClassArmId
+      ? prisma.score.findMany({ where: { schoolId, termId, classArmId: verifiedClassArmId }, include: { subject: true } })
+      : student.classArmId
+        ? prisma.score.findMany({ where: { schoolId, termId, student: { classArmId: student.classArmId } }, include: { subject: true } })
+        : prisma.score.findMany({ where: { schoolId, studentId, termId }, include: { subject: true } }),
     prisma.term.findFirst({ where: { schoolId, id: termId } }),
   ]);
 
@@ -143,8 +204,14 @@ export async function computeReportCard(schoolId: string, studentId: string, ter
 
   const reportCard = await prisma.reportCard.upsert({
     where: { studentId_termId: { studentId, termId } },
-    create: { schoolId, studentId, termId },
-    update: {},
+    create: {
+      schoolId,
+      studentId,
+      termId,
+      classArmId: verifiedClassArmId,
+      classArmSource: verifiedClassArmId ? "ENTERED" : null,
+    },
+    update: {}, // classArmId is set once, at creation — never replaced by a later recompute
   });
 
   return {
