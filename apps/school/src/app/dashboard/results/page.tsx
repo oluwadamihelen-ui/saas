@@ -45,7 +45,15 @@ export default async function ResultsPage({
             {canEnter ? "Enter scores for" : "View scores for"} {currentTerm ? currentTerm.name : "the current term"}.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="secondary">
+            <a href="/api/results/export">Export CSV</a>
+          </Button>
+          {canEnter && (
+            <Button asChild variant="secondary">
+              <Link href="/dashboard/results/import">Import CSV</Link>
+            </Button>
+          )}
           <Button asChild variant="secondary">
             <Link href="/dashboard/results/report-cards">Report cards</Link>
           </Button>

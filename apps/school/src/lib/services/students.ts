@@ -75,6 +75,12 @@ async function generateAdmissionNumber(schoolId: string) {
 }
 
 export interface StudentInput {
+  /// Only meaningful for a bulk import migrating a school's existing
+  /// records (see student-import.ts) — direct enrollment and admission
+  /// always leave this unset so createStudent generates one, since a
+  /// human-entered admission number risks colliding with the counter's
+  /// next value.
+  admissionNumber?: string;
   firstName: string;
   lastName: string;
   otherNames?: string | null;
@@ -105,7 +111,7 @@ export interface StudentInput {
 /// needs to be called in this one place to cover both (spec section 10).
 export async function createStudent(schoolId: string, input: StudentInput) {
   await requireStudentCapacity(schoolId);
-  const admissionNumber = await generateAdmissionNumber(schoolId);
+  const admissionNumber = input.admissionNumber?.trim() || (await generateAdmissionNumber(schoolId));
 
   return prisma.$transaction(async (tx) => {
     const student = await tx.student.create({

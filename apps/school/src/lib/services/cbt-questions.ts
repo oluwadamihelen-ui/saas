@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import { requireFeature, requireCbtQuestionBankCapacity } from "@/lib/billing/entitlements";
+import { parseCsvRecords } from "@/lib/csv";
 import type { CBTQuestionType, CBTDifficulty, CBTQuestionStatus } from "@/generated/prisma/client";
 
 const PAGE_SIZE = 20;
@@ -317,54 +318,19 @@ export interface ImportRowResult {
 
 const IMPORTABLE_TYPES = new Set(["MULTIPLE_CHOICE", "MULTIPLE_SELECT", "TRUE_FALSE"]);
 
-/// Minimal RFC4180-ish CSV line splitter: handles double-quoted fields,
-/// escaped quotes (""), and commas inside quotes. No multi-line quoted
-/// fields (a question prompt spanning multiple lines isn't supported in
-/// v1 — use the form for those).
-function parseCsvLine(line: string): string[] {
-  const fields: string[] = [];
-  let current = "";
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    if (inQuotes) {
-      if (char === '"' && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else if (char === '"') {
-        inQuotes = false;
-      } else {
-        current += char;
-      }
-    } else if (char === '"') {
-      inQuotes = true;
-    } else if (char === ",") {
-      fields.push(current);
-      current = "";
-    } else {
-      current += char;
-    }
-  }
-  fields.push(current);
-  return fields.map((f) => f.trim());
-}
-
 export async function parseImportCsv(
   schoolId: string,
   csvText: string
 ): Promise<{ rows: ImportRowResult[]; validCount: number }> {
-  const lines = csvText.split(/\r\n|\r|\n/).filter((l) => l.trim().length > 0);
-  if (lines.length === 0) return { rows: [], validCount: 0 };
+  const { records } = parseCsvRecords(csvText);
+  if (records.length === 0) return { rows: [], validCount: 0 };
 
-  const header = parseCsvLine(lines[0]).map((h) => h.toLowerCase());
   const subjects = await prisma.subject.findMany({ where: { schoolId }, select: { id: true, code: true, name: true } });
   const subjectByCode = new Map(subjects.map((s) => [s.code.toLowerCase(), s]));
 
   const rows: ImportRowResult[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const values = parseCsvLine(lines[i]);
-    const raw: Record<string, string> = {};
-    header.forEach((h, idx) => (raw[h] = values[idx] ?? ""));
+  for (let i = 0; i < records.length; i++) {
+    const raw = records[i];
 
     const errors: string[] = [];
     const subject = subjectByCode.get((raw.subjectcode ?? "").toLowerCase());
@@ -417,7 +383,7 @@ export async function parseImportCsv(
           }
         : null;
 
-    rows.push({ rowNumber: i + 1, data, raw, errors });
+    rows.push({ rowNumber: i + 2, data, raw, errors });
   }
 
   return { rows, validCount: rows.filter((r) => r.data).length };

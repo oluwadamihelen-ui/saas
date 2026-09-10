@@ -38,6 +38,7 @@ import {
   LayoutGrid,
   UserCheck,
   TrendingUp,
+  Upload,
 } from "lucide-react";
 import { SchoolLogo } from "@/components/brand/school-logo";
 import { PERMISSIONS, type PermissionKey } from "@/lib/permissions";
@@ -96,6 +97,15 @@ const NAV: DashboardNavItem[] = [
         ],
       },
       { href: "/dashboard/administration/feedback", label: "Feedback", icon: MessageCircle, requiredPermission: PERMISSIONS.FEEDBACK_VIEW },
+      {
+        label: "Import data",
+        icon: Upload,
+        children: [
+          { href: "/dashboard/students/import", label: "Import Students", icon: GraduationCap, requiredPermission: PERMISSIONS.STUDENTS_CREATE },
+          { href: "/dashboard/results/import", label: "Import Results", icon: Award, requiredPermission: PERMISSIONS.RESULTS_ENTER },
+          { href: "/dashboard/cbt/question-bank/import", label: "Import CBT Questions", icon: ListChecks, requiredPermission: PERMISSIONS.CBT_MANAGE_QUESTION_BANK },
+        ],
+      },
     ],
   },
   {

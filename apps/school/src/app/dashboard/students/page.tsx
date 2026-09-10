@@ -48,11 +48,21 @@ export default async function StudentsPage({
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Students</h1>
           <p className="text-sm text-muted">{total} student{total === 1 ? "" : "s"}</p>
         </div>
-        {canEnroll && (
-          <Button asChild>
-            <Link href="/dashboard/students/new">Enroll a student</Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="secondary" size="sm">
+            <a href="/api/students/export">Export CSV</a>
           </Button>
-        )}
+          {canEnroll && (
+            <>
+              <Button asChild variant="secondary" size="sm">
+                <Link href="/dashboard/students/import">Import CSV</Link>
+              </Button>
+              <Button asChild>
+                <Link href="/dashboard/students/new">Enroll a student</Link>
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       <Card>

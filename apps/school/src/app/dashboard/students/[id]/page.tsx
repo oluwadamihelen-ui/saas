@@ -93,6 +93,9 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button asChild variant="secondary" size="sm">
+            <a href={`/api/students/${student.id}/export`}>Export data</a>
+          </Button>
           {canEdit && (
             <Button asChild variant="secondary" size="sm">
               <Link href={`/dashboard/students/${student.id}/edit`}>Edit</Link>
