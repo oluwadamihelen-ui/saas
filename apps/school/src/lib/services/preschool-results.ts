@@ -162,6 +162,25 @@ export async function saveMilestoneAssessments(
   if (input.entries.length === 0) throw new Error("No assessments to save.");
 
   const studentIds = [...new Set(input.entries.map((e) => e.studentId))];
+  const milestoneIds = [...new Set(input.entries.map((e) => e.milestoneId))];
+
+  // Every id in the payload is client-supplied (the grid form posts raw
+  // studentId/milestoneId pairs) — verify each one actually belongs to
+  // this school before writing anything, so a crafted request can't
+  // attach an assessment to another school's student or milestone (IDOR).
+  const [term, period, subject, students, milestones] = await Promise.all([
+    prisma.term.findFirst({ where: { schoolId, id: input.termId } }),
+    prisma.preschoolAssessmentPeriod.findFirst({ where: { schoolId, id: input.assessmentPeriodId, termId: input.termId } }),
+    prisma.subject.findFirst({ where: { schoolId, id: input.subjectId } }),
+    prisma.student.findMany({ where: { schoolId, id: { in: studentIds } }, select: { id: true } }),
+    prisma.preschoolMilestone.findMany({ where: { schoolId, id: { in: milestoneIds } }, select: { id: true } }),
+  ]);
+  if (!term) throw new Error("Term not found.");
+  if (!period) throw new Error("Assessment period not found.");
+  if (!subject) throw new Error("Subject not found.");
+  if (students.length !== studentIds.length) throw new Error("One or more students were not found in this school.");
+  if (milestones.length !== milestoneIds.length) throw new Error("One or more milestones were not found in this school.");
+
   if (!canOverrideLock) {
     const lockedReports = await prisma.preschoolReport.findMany({
       where: { schoolId, termId: input.termId, studentId: { in: studentIds }, status: { in: ["APPROVED", "PUBLISHED"] } },

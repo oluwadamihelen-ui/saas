@@ -207,9 +207,11 @@ async function main() {
   ];
   const classArms: { id: string; classGroupId: string; typicalAge: number }[] = [];
   const classGroups: { id: string; order: number }[] = [];
+  const classGroupByName = new Map<string, { id: string; order: number }>();
   for (const [index, group] of classPlan.entries()) {
     const classGroup = await prisma.classGroup.create({ data: { schoolId: school.id, name: group.name, order: index } });
     classGroups.push({ id: classGroup.id, order: index });
+    classGroupByName.set(group.name, { id: classGroup.id, order: index });
     for (const armName of group.arms) {
       const arm = await prisma.classArm.create({ data: { schoolId: school.id, classGroupId: classGroup.id, name: armName } });
       classArms.push({ id: arm.id, classGroupId: classGroup.id, typicalAge: group.typicalAge });
@@ -217,7 +219,7 @@ async function main() {
   }
 
   const subjects = [
-    "Numeracy", "Literacy", "Phonics", "Basic Science and Technology", "Social Studies",
+    "Numeracy", "Literacy", "English Language", "Phonics", "Basic Science and Technology", "Social Studies",
     "Civic Education", "Christian Religious Studies", "Cultural and Creative Arts",
     "Computer Studies", "French", "Verbal Reasoning", "Quantitative Reasoning",
     "Physical and Health Education", "Handwriting",
@@ -227,6 +229,7 @@ async function main() {
   });
   const numeracy = subjectRows.find((s) => s.name === "Numeracy")!;
   const literacy = subjectRows.find((s) => s.name === "Literacy")!;
+  const englishLanguage = subjectRows.find((s) => s.name === "English Language")!;
 
   console.log("Enrolling demo students...");
   const enrolledStudents: { id: string; classArmId: string }[] = [];
@@ -369,6 +372,85 @@ async function main() {
         }))
       )
     ),
+  });
+
+  console.log("Setting up Pre-School Milestone Results demo data...");
+
+  // Brief-specified demo: Nursery 1 assessed by milestones (not scores), an
+  // English Language Scheme of Work with 3 weeks/4 milestones, and a
+  // student "Abayo" with the example assessments — so a fresh install has
+  // something to click through immediately.
+  const nursery1 = classGroupByName.get("Nursery 1")!;
+  const nursery1Arm = classArms.find((a) => a.classGroupId === nursery1.id)!;
+  await prisma.classGroup.update({ where: { id: nursery1.id }, data: { assessmentMode: "MILESTONE" } });
+
+  const abayoAdmissionNumber = `${thisYear}-${String(admissionSeq++).padStart(4, "0")}`;
+  const abayo = await prisma.student.create({
+    data: {
+      schoolId: school.id,
+      admissionNumber: abayoAdmissionNumber,
+      firstName: "Abayo",
+      lastName: "Adewale",
+      gender: "MALE",
+      dateOfBirth: new Date(`${thisYear - 4}-03-10`),
+      nationality: "Nigeria",
+      city: "Lagos",
+      state: "Lagos",
+      classArmId: nursery1Arm.id,
+      status: "ACTIVE",
+    },
+  });
+
+  const englishScheme = await prisma.schemeOfWork.create({
+    data: {
+      schoolId: school.id,
+      academicSessionId: session.id,
+      termId: currentTerm.id,
+      classGroupId: nursery1.id,
+      subjectId: englishLanguage.id,
+      createdById: teacher2.id,
+    },
+  });
+
+  const weekPlan: { weekNumber: number; title: string; milestones: string[] }[] = [
+    { weekNumber: 1, title: "Pronouns", milestones: ["Identify pronouns", "Underline pronouns mixed with other parts of speech"] },
+    { weekNumber: 2, title: "Adjectives", milestones: ["Make sentences using adjectives"] },
+    { weekNumber: 3, title: "Adverbs", milestones: ["Identify common adverbs"] },
+  ];
+  const milestoneByTitle = new Map<string, { id: string }>();
+  for (const [index, week] of weekPlan.entries()) {
+    const topic = await prisma.schemeOfWorkTopic.create({
+      data: { schoolId: school.id, schemeOfWorkId: englishScheme.id, weekNumber: week.weekNumber, title: week.title, order: index },
+    });
+    for (const [mIndex, title] of week.milestones.entries()) {
+      const milestone = await prisma.preschoolMilestone.create({
+        data: { schoolId: school.id, topicId: topic.id, title, order: mIndex, createdById: teacher2.id },
+      });
+      milestoneByTitle.set(title, { id: milestone.id });
+    }
+  }
+
+  const continuousAssessment = await prisma.preschoolAssessmentPeriod.create({
+    data: { schoolId: school.id, termId: currentTerm.id, name: "Continuous Assessment", type: "CONTINUOUS_ASSESSMENT" },
+  });
+
+  const abayoAssessments: { title: string; level: "EXCEEDED" | "ACHIEVED" | "PROGRESSING" | "DEVELOPING" | "NEEDS_SUPPORT" }[] = [
+    { title: "Identify pronouns", level: "ACHIEVED" },
+    { title: "Underline pronouns mixed with other parts of speech", level: "DEVELOPING" },
+    { title: "Make sentences using adjectives", level: "ACHIEVED" },
+    { title: "Identify common adverbs", level: "NEEDS_SUPPORT" },
+  ];
+  await prisma.preschoolMilestoneAssessment.createMany({
+    data: abayoAssessments.map((a) => ({
+      schoolId: school.id,
+      studentId: abayo.id,
+      milestoneId: milestoneByTitle.get(a.title)!.id,
+      subjectId: englishLanguage.id,
+      termId: currentTerm.id,
+      assessmentPeriodId: continuousAssessment.id,
+      level: a.level,
+      assessedById: teacher2.id,
+    })),
   });
 
   console.log("Setting up fees, invoices, payments and expenses...");
@@ -1335,6 +1417,7 @@ async function main() {
   console.log(`  SUPER_ADMIN      superadmin@winfield.demo`);
   console.log(`\nSecond demo school "${trialSchoolName}" (Starter plan, 14-day trial, same password: ${DEMO_PASSWORD}):`);
   console.log(`  SCHOOL_OWNER     ${trialOwner.email}`);
+  console.log(`\nPre-School Results demo: class "Nursery 1" (assessmentMode=MILESTONE), subject "English Language", student "Abayo Adewale" (${abayoAdmissionNumber}) with 4 example milestone assessments. Visit /dashboard/results/preschool.`);
 }
 
 main()
