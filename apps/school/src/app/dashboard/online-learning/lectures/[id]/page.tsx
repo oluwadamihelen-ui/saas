@@ -62,6 +62,11 @@ export default async function LectureDetailPage({ params }: { params: Promise<{ 
           <CardTitle>Overview</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
+          {lecture.weekNumber && (
+            <p>
+              <span className="font-medium text-foreground">Week:</span> <span className="text-muted">Week {lecture.weekNumber}</span>
+            </p>
+          )}
           {lecture.topic && (
             <p>
               <span className="font-medium text-foreground">Topic:</span> <span className="text-muted">{lecture.topic}</span>

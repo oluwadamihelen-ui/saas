@@ -3030,6 +3030,10 @@ model Lecture {
 
   title              String
   topic              String?
+  /// Which week of the term this lecture covers (Week 1, Week 2, ...) —
+  /// optional so existing lectures and quick drafts aren't forced to set
+  /// one; purely informational, not tied to a Scheme of Work.
+  weekNumber         Int?
   description        String?
   learningObjectives String?
   instructions       String?

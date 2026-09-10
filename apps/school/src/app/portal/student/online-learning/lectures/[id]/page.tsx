@@ -23,8 +23,13 @@ export default async function StudentLecturePage({ params }: { params: Promise<{
         <p className="text-sm text-muted">Teacher: {lecture.teacher.name}</p>
       </div>
 
-      {(lecture.topic || lecture.description || lecture.learningObjectives) && (
+      {(lecture.weekNumber || lecture.topic || lecture.description || lecture.learningObjectives) && (
         <div className="space-y-2 rounded-md border border-border p-4 text-sm">
+          {lecture.weekNumber && (
+            <p>
+              <span className="font-medium text-foreground">Week:</span> <span className="text-muted">Week {lecture.weekNumber}</span>
+            </p>
+          )}
           {lecture.topic && (
             <p>
               <span className="font-medium text-foreground">Topic:</span> <span className="text-muted">{lecture.topic}</span>

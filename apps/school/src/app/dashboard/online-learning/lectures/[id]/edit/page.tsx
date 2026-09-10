@@ -37,6 +37,7 @@ export default async function EditLecturePage({ params }: { params: Promise<{ id
             defaults={{
               subjectClassKey: `${lecture.subjectId}|${lecture.classArmId}`,
               termId: lecture.termId,
+              weekNumber: lecture.weekNumber ? String(lecture.weekNumber) : "",
               title: lecture.title,
               topic: lecture.topic ?? "",
               description: lecture.description ?? "",

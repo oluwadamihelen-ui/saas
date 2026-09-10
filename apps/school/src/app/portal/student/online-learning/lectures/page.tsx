@@ -34,7 +34,10 @@ export default async function StudentLecturesPage() {
               <Card key={lecture.id}>
                 <CardContent className="space-y-2 pt-6">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted">{lecture.subject.name}</p>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted">
+                      {lecture.subject.name}
+                      {lecture.weekNumber && ` · Week ${lecture.weekNumber}`}
+                    </p>
                     <Badge variant={STATUS_VARIANT[status]}>{STATUS_LABEL[status]}</Badge>
                   </div>
                   <p className="font-medium text-foreground">{lecture.title}</p>

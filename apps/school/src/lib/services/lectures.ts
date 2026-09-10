@@ -30,6 +30,7 @@ export interface LectureInput {
   termId: string;
   title: string;
   topic?: string | null;
+  weekNumber?: number | null;
   description?: string | null;
   learningObjectives?: string | null;
   instructions?: string | null;
@@ -102,6 +103,7 @@ export async function createLecture(schoolId: string, teacherId: string, input: 
         termId: input.termId,
         title: input.title,
         topic: input.topic || null,
+        weekNumber: input.weekNumber ?? null,
         description: input.description || null,
         learningObjectives: input.learningObjectives || null,
         instructions: input.instructions || null,
@@ -128,6 +130,7 @@ export async function updateLecture(schoolId: string, teacherId: string, lecture
         termId: input.termId,
         title: input.title,
         topic: input.topic || null,
+        weekNumber: input.weekNumber ?? null,
         description: input.description || null,
         learningObjectives: input.learningObjectives || null,
         instructions: input.instructions || null,

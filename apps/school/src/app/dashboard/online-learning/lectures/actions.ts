@@ -23,6 +23,7 @@ import type { LectureFormState } from "./lecture-form";
 const lectureSchema = z.object({
   subjectClassKey: z.string().trim().min(1, "Select a subject and class"),
   termId: z.string().trim().min(1, "Select a term"),
+  weekNumber: z.coerce.number().int().min(1).max(52).optional().or(z.literal("")),
   title: z.string().trim().min(1, "Title is required").max(200),
   topic: z.string().trim().max(200).optional().or(z.literal("")),
   description: z.string().trim().max(5000).optional().or(z.literal("")),
@@ -80,6 +81,7 @@ async function buildLectureInput(schoolId: string, formData: FormData): Promise<
   const parsed = lectureSchema.safeParse({
     subjectClassKey: formData.get("subjectClassKey"),
     termId: formData.get("termId"),
+    weekNumber: formData.get("weekNumber") || "",
     title: formData.get("title"),
     topic: formData.get("topic") ?? "",
     description: formData.get("description") ?? "",
@@ -108,6 +110,7 @@ async function buildLectureInput(schoolId: string, formData: FormData): Promise<
       termId: term.id,
       title: parsed.data.title,
       topic: parsed.data.topic || null,
+      weekNumber: parsed.data.weekNumber ? Number(parsed.data.weekNumber) : null,
       description: parsed.data.description || null,
       learningObjectives: parsed.data.learningObjectives || null,
       instructions: parsed.data.instructions || null,

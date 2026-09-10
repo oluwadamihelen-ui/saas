@@ -38,9 +38,12 @@ interface ResourceRow {
   existingFileUrl?: string | null;
 }
 
+const WEEK_OPTIONS = Array.from({ length: 20 }, (_, i) => i + 1);
+
 export interface LectureFormDefaults {
   subjectClassKey?: string;
   termId?: string;
+  weekNumber?: string;
   title?: string;
   topic?: string;
   description?: string;
@@ -84,7 +87,7 @@ export function LectureForm({
 
       <section className="space-y-4">
         <h3 className="text-sm font-semibold text-foreground">Lecture details</h3>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="subjectClassKey">Subject &amp; class</Label>
             <Select id="subjectClassKey" name="subjectClassKey" required defaultValue={defaults?.subjectClassKey ?? ""}>
@@ -110,6 +113,17 @@ export function LectureForm({
               {terms.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.academicSession.name} — {t.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="weekNumber">Week (optional)</Label>
+            <Select id="weekNumber" name="weekNumber" defaultValue={defaults?.weekNumber ?? ""}>
+              <option value="">No specific week</option>
+              {WEEK_OPTIONS.map((w) => (
+                <option key={w} value={w}>
+                  Week {w}
                 </option>
               ))}
             </Select>

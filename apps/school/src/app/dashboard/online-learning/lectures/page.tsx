@@ -47,6 +47,7 @@ export default async function MyLecturesPage() {
                 <TableCell className="font-medium text-foreground">{lecture.title}</TableCell>
                 <TableCell className="text-muted">
                   {lecture.subject.name} · {lecture.classArm.classGroup.name} {lecture.classArm.name}
+                  {lecture.weekNumber && ` · Week ${lecture.weekNumber}`}
                 </TableCell>
                 <TableCell className="text-muted">{lecture._count.resources} item(s)</TableCell>
                 <TableCell>
