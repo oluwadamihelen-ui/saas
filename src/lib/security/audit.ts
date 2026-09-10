@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 
 interface AuditEntry {
+  hotelId: string | null;
   actorId: string | null;
   action: string;
   resourceType: string;
@@ -13,6 +14,7 @@ interface AuditEntry {
 export async function recordAuditLog(entry: AuditEntry) {
   await prisma.auditLog.create({
     data: {
+      hotelId: entry.hotelId,
       actorId: entry.actorId,
       action: entry.action,
       resourceType: entry.resourceType,

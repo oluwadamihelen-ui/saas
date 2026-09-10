@@ -1,38 +1,23 @@
 import PDFDocument from "pdfkit";
-import path from "node:path";
-import { prisma } from "@/lib/db";
+import { formatCurrency, formatDate } from "@/lib/utils";
+import type { Prisma } from "@/generated/prisma/client";
 
-const LOGO_PATH = path.join(process.cwd(), "public/brand/bridgecodes-logo-on-white.png");
+type InvoiceWithRelations = Prisma.InvoiceGetPayload<{
+  include: { reservation: { include: { room: true; roomType: true } }; hotel: true };
+}>;
 
-interface GeneralSettings {
-  companyName?: string;
-  supportEmail?: string;
-}
-
-function formatMoney(amount: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount);
-  } catch {
-    return `${currency} ${amount.toFixed(2)}`;
-  }
+interface LineItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
 }
 
 /**
- * Renders a professional invoice PDF server-side (pdfkit). Line items and
- * totals come from the Invoice/InvoiceItem records, which snapshot what was
- * actually charged -- never recomputed from current pricing.
+ * Renders a professional A4 PDF invoice for a hotel stay from an already-
+ * issued Invoice row (its lineItems JSON snapshot, not a live recompute).
  */
-export async function generateInvoicePdfBuffer(invoiceId: string): Promise<Buffer> {
-  const invoice = await prisma.invoice.findUniqueOrThrow({
-    where: { id: invoiceId },
-    include: { items: true, order: { include: { customer: true } } },
-  });
-
-  const generalSetting = await prisma.setting.findUnique({ where: { key: "general" } });
-  const general = generalSetting?.value as GeneralSettings | undefined;
-  const companyName = general?.companyName ?? "BridgeCodes, Inc.";
-  const supportEmail = general?.supportEmail ?? "support@bridgecodes.example";
-
+export async function renderInvoicePdf(invoice: InvoiceWithRelations, guestName: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 50 });
     const chunks: Buffer[] = [];
@@ -40,70 +25,81 @@ export async function generateInvoicePdfBuffer(invoiceId: string): Promise<Buffe
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    try {
-      doc.image(LOGO_PATH, 50, 45, { width: 150 });
-      doc.moveDown(3.5);
-    } catch {
-      // Falls back to a text wordmark if the asset is ever unavailable.
-      doc.fontSize(20).font("Helvetica-Bold").text(companyName);
-      doc.moveDown(0.3);
+    const hotel = invoice.hotel;
+    const currency = hotel.currency;
+    const reservation = invoice.reservation;
+    const lineItems = invoice.lineItems as unknown as LineItem[];
+
+    // Header
+    doc.fontSize(18).font("Helvetica-Bold").text(hotel.name, 50, 50);
+    doc.fontSize(9).font("Helvetica").fillColor("#555");
+    const addressLines = [hotel.address, [hotel.city, hotel.state].filter(Boolean).join(", "), hotel.country, hotel.phone, hotel.email].filter(Boolean);
+    doc.text(addressLines.join("\n"), 50, 72);
+
+    doc.fillColor("#000").fontSize(20).font("Helvetica-Bold").text("INVOICE", 350, 50, { width: 200, align: "right" });
+    doc.fontSize(10).font("Helvetica").text(`Invoice #: ${invoice.invoiceNumber}`, 350, 78, { width: 200, align: "right" });
+    doc.text(`Date: ${formatDate(invoice.issuedAt)}`, 350, 92, { width: 200, align: "right" });
+    doc.text(`Reservation: ${reservation.reference}`, 350, 106, { width: 200, align: "right" });
+
+    doc.moveTo(50, 140).lineTo(545, 140).strokeColor("#ddd").stroke();
+
+    // Bill to / stay details
+    doc.fillColor("#000").fontSize(11).font("Helvetica-Bold").text("Billed To", 50, 155);
+    doc.fontSize(10).font("Helvetica").text(guestName, 50, 172);
+
+    doc.fontSize(11).font("Helvetica-Bold").text("Stay Details", 320, 155);
+    doc.fontSize(10).font("Helvetica");
+    doc.text(`Room: ${reservation.room.roomNumber} (${reservation.roomType.name})`, 320, 172);
+    doc.text(`Check-in: ${formatDate(reservation.checkInDate)}`, 320, 187);
+    doc.text(`Check-out: ${formatDate(reservation.checkOutDate)}`, 320, 202);
+    doc.text(`Nights: ${reservation.nights}`, 320, 217);
+
+    // Line items table
+    let y = 250;
+    doc.moveTo(50, y).lineTo(545, y).strokeColor("#ddd").stroke();
+    y += 8;
+    doc.fontSize(10).font("Helvetica-Bold");
+    doc.text("Description", 50, y);
+    doc.text("Qty", 350, y, { width: 40, align: "right" });
+    doc.text("Unit Price", 390, y, { width: 75, align: "right" });
+    doc.text("Total", 470, y, { width: 75, align: "right" });
+    y += 16;
+    doc.moveTo(50, y).lineTo(545, y).strokeColor("#ddd").stroke();
+    y += 8;
+
+    doc.font("Helvetica").fontSize(10);
+    for (const item of lineItems) {
+      const rowHeight = doc.heightOfString(item.description, { width: 290 }) + 6;
+      doc.text(item.description, 50, y, { width: 290 });
+      doc.text(String(item.quantity), 350, y, { width: 40, align: "right" });
+      doc.text(formatCurrency(item.unitPrice, currency), 390, y, { width: 75, align: "right" });
+      doc.text(formatCurrency(item.total, currency), 470, y, { width: 75, align: "right" });
+      y += Math.max(rowHeight, 18);
+      if (y > 680) {
+        doc.addPage();
+        y = 50;
+      }
     }
-    doc.fontSize(9).font("Helvetica").fillColor("#667085").text(supportEmail);
-    doc.moveDown(1.5);
 
-    doc.fontSize(16).font("Helvetica-Bold").fillColor("#0f1115").text(`Invoice ${invoice.invoiceNumber}`);
-    doc.fontSize(9).font("Helvetica").fillColor("#667085");
-    doc.text(`Issued: ${invoice.issuedAt.toDateString()}`);
-    if (invoice.dueDate) doc.text(`Due: ${invoice.dueDate.toDateString()}`);
-    doc.text(`Status: ${invoice.status}`);
-    doc.moveDown(1);
+    y += 10;
+    doc.moveTo(320, y).lineTo(545, y).strokeColor("#ddd").stroke();
+    y += 10;
 
-    doc.fontSize(10).font("Helvetica-Bold").fillColor("#0f1115").text("Billed to");
-    doc.fontSize(9).font("Helvetica").fillColor("#344054");
-    doc.text(invoice.order.billingName ?? invoice.order.customer.name);
-    doc.text(invoice.order.billingEmail ?? invoice.order.customer.email);
-    if (invoice.order.billingCompany) doc.text(invoice.order.billingCompany);
-    if (invoice.order.billingAddress) doc.text(invoice.order.billingAddress);
-    doc.moveDown(1.5);
-
-    const tableTop = doc.y;
-    doc.fontSize(9).font("Helvetica-Bold").fillColor("#667085");
-    doc.text("Description", 50, tableTop, { width: 300 });
-    doc.text("Qty", 350, tableTop, { width: 50, align: "right" });
-    doc.text("Unit Price", 400, tableTop, { width: 75, align: "right" });
-    doc.text("Total", 475, tableTop, { width: 75, align: "right" });
-    doc.moveTo(50, tableTop + 15).lineTo(550, tableTop + 15).strokeColor("#e4e6eb").stroke();
-
-    let y = tableTop + 22;
-    doc.font("Helvetica").fillColor("#0f1115");
-    for (const item of invoice.items) {
-      doc.fontSize(9);
-      doc.text(item.description, 50, y, { width: 300 });
-      doc.text(String(item.quantity), 350, y, { width: 50, align: "right" });
-      doc.text(formatMoney(Number(item.unitPrice), invoice.currency), 400, y, { width: 75, align: "right" });
-      doc.text(formatMoney(Number(item.total), invoice.currency), 475, y, { width: 75, align: "right" });
-      y += 20;
-    }
-
-    doc.moveTo(50, y + 4).lineTo(550, y + 4).strokeColor("#e4e6eb").stroke();
-    y += 14;
-
-    const totalsRow = (label: string, value: string, bold = false) => {
-      doc.fontSize(9).font(bold ? "Helvetica-Bold" : "Helvetica").fillColor(bold ? "#0f1115" : "#667085");
-      doc.text(label, 350, y, { width: 125, align: "right" });
-      doc.text(value, 475, y, { width: 75, align: "right" });
-      y += 16;
+    const summaryRow = (label: string, value: string, bold = false) => {
+      doc.font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(bold ? 11 : 10);
+      doc.text(label, 320, y, { width: 130 });
+      doc.text(value, 470, y, { width: 75, align: "right" });
+      y += bold ? 20 : 16;
     };
 
-    totalsRow("Subtotal", formatMoney(Number(invoice.subtotal), invoice.currency));
-    if (Number(invoice.discount) > 0) totalsRow("Discount", `-${formatMoney(Number(invoice.discount), invoice.currency)}`);
-    totalsRow("Tax", formatMoney(Number(invoice.tax), invoice.currency));
-    totalsRow("Total", formatMoney(Number(invoice.total), invoice.currency), true);
+    summaryRow("Subtotal", formatCurrency(invoice.subtotal, currency));
+    if (Number(invoice.discount) > 0) summaryRow("Discount", `-${formatCurrency(invoice.discount, currency)}`);
+    if (Number(invoice.tax) > 0) summaryRow("Tax", formatCurrency(invoice.tax, currency));
+    summaryRow("Total", formatCurrency(invoice.total, currency), true);
+    summaryRow("Amount Paid", formatCurrency(invoice.amountPaid, currency));
+    summaryRow(Number(invoice.balance) > 0 ? "Balance Due" : "Balance", formatCurrency(invoice.balance, currency), true);
 
-    if (invoice.paidAt) {
-      doc.moveDown(2);
-      doc.fontSize(9).font("Helvetica").fillColor("#0d8a4f").text(`Paid on ${invoice.paidAt.toDateString()}`, 50);
-    }
+    doc.fontSize(8).fillColor("#888").text(`Generated by StayOS for ${hotel.name}. Thank you for your stay.`, 50, 780, { width: 495, align: "center" });
 
     doc.end();
   });

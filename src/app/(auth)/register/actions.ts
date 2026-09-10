@@ -1,15 +1,27 @@
 "use server";
 
-import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { prisma } from "@/lib/db";
+import { createHotelWithOwner } from "@/lib/services/hotels";
 import { logger } from "@/lib/security/logger";
 
-const registerSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(120),
-  email: z.string().trim().toLowerCase().email("Enter a valid email"),
-  password: z.string().min(8, "Password must be at least 8 characters").max(200),
-  company: z.string().trim().max(200).optional(),
+const onboardingSchema = z.object({
+  hotelName: z.string().trim().min(2, "Hotel name is required").max(150),
+  address: z.string().trim().max(300).optional(),
+  city: z.string().trim().max(120).optional(),
+  state: z.string().trim().max(120).optional(),
+  country: z.string().trim().max(120).optional(),
+  phone: z.string().trim().max(40).optional(),
+  hotelEmail: z.string().trim().toLowerCase().email("Enter a valid hotel email").optional().or(z.literal("")),
+  website: z.string().trim().max(200).optional(),
+  currency: z.string().trim().min(3).max(3),
+  timezone: z.string().trim().min(1),
+  checkInTime: z.string().trim().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Use HH:mm"),
+  checkOutTime: z.string().trim().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Use HH:mm"),
+  numberOfRooms: z.coerce.number().int().min(1, "Must have at least 1 room").max(5000),
+  description: z.string().trim().max(2000).optional(),
+  ownerName: z.string().trim().min(1, "Your name is required").max(120),
+  ownerEmail: z.string().trim().toLowerCase().email("Enter a valid email"),
+  ownerPassword: z.string().min(8, "Password must be at least 8 characters").max(200),
 });
 
 export interface RegisterState {
@@ -17,38 +29,20 @@ export interface RegisterState {
   message?: string;
 }
 
-export async function registerCustomer(_prev: RegisterState, formData: FormData): Promise<RegisterState> {
-  const parsed = registerSchema.safeParse({
-    name: formData.get("name"),
-    email: formData.get("email"),
-    password: formData.get("password"),
-    company: formData.get("company") || undefined,
-  });
-
+export async function registerHotel(_prev: RegisterState, formData: FormData): Promise<RegisterState> {
+  const raw = Object.fromEntries(formData.entries());
+  const parsed = onboardingSchema.safeParse(raw);
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
   }
 
-  const { name, email, password, company } = parsed.data;
-
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
-    return { status: "error", message: "An account with this email already exists." };
+  try {
+    await createHotelWithOwner({ ...parsed.data, hotelEmail: parsed.data.hotelEmail || undefined });
+  } catch (error) {
+    logger.error("register.hotel_onboarding_failed", { error: error instanceof Error ? error.message : String(error) });
+    const message = error instanceof Error ? error.message : "Unable to create your hotel right now. Please try again shortly.";
+    return { status: "error", message };
   }
-
-  const customerRole = await prisma.role.findUnique({ where: { key: "CUSTOMER" } });
-  if (!customerRole) {
-    logger.error("register.missing_role", { role: "CUSTOMER" });
-    return { status: "error", message: "Unable to create account right now. Please try again shortly." };
-  }
-
-  const passwordHash = await bcrypt.hash(password, 12);
-
-  await prisma.user.create({
-    data: { name, email, passwordHash, company, roleId: customerRole.id, status: "ACTIVE" },
-  });
-
-  logger.info("register.success", { email });
 
   return { status: "success" };
 }

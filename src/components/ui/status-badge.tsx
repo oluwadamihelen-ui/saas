@@ -1,71 +1,47 @@
 import { Badge } from "./badge";
 
 const STATUS_MAP: Record<string, { label: string; variant: "neutral" | "accent" | "success" | "warning" | "danger" }> = {
-  // Orders
-  PENDING_PAYMENT: { label: "Pending Payment", variant: "warning" },
-  PAID: { label: "Paid", variant: "success" },
-  PROCESSING: { label: "Processing", variant: "accent" },
-  AWAITING_CUSTOMER: { label: "Awaiting You", variant: "warning" },
-  IN_PROGRESS: { label: "In Progress", variant: "accent" },
-  COMPLETED: { label: "Completed", variant: "success" },
-  CANCELLED: { label: "Cancelled", variant: "neutral" },
-  REFUNDED: { label: "Refunded", variant: "neutral" },
-  // Payments
+  // Reservations
   PENDING: { label: "Pending", variant: "warning" },
+  CONFIRMED: { label: "Confirmed", variant: "accent" },
+  CHECKED_IN: { label: "Checked In", variant: "success" },
+  CHECKED_OUT: { label: "Checked Out", variant: "neutral" },
+  CANCELLED: { label: "Cancelled", variant: "neutral" },
+  NO_SHOW: { label: "No Show", variant: "danger" },
+  // Rooms
+  AVAILABLE: { label: "Available", variant: "success" },
+  RESERVED: { label: "Reserved", variant: "accent" },
+  OCCUPIED: { label: "Occupied", variant: "warning" },
+  DIRTY: { label: "Dirty", variant: "danger" },
+  CLEANING: { label: "Cleaning", variant: "accent" },
+  INSPECTED: { label: "Inspected", variant: "accent" },
+  MAINTENANCE: { label: "Maintenance", variant: "warning" },
+  OUT_OF_SERVICE: { label: "Out of Service", variant: "danger" },
+  // Payments / Invoices
+  COMPLETED: { label: "Completed", variant: "success" },
   FAILED: { label: "Failed", variant: "danger" },
-  PARTIALLY_REFUNDED: { label: "Partially Refunded", variant: "neutral" },
-  // Deployments
-  QUEUED: { label: "Queued", variant: "neutral" },
-  PREPARING: { label: "Preparing", variant: "accent" },
-  CONNECTING: { label: "Connecting", variant: "accent" },
-  INSTALLING: { label: "Installing", variant: "accent" },
-  CONFIGURING: { label: "Configuring", variant: "accent" },
-  DNS_SETUP: { label: "DNS Setup", variant: "accent" },
-  SSL_SETUP: { label: "SSL Setup", variant: "accent" },
-  TESTING: { label: "Testing", variant: "accent" },
-  NEEDS_CUSTOMER_ACTION: { label: "Needs Your Action", variant: "warning" },
-  // Domains / hosting
-  ACTIVE: { label: "Active", variant: "success" },
-  EXPIRED: { label: "Expired", variant: "danger" },
-  SUSPENDED: { label: "Suspended", variant: "danger" },
-  TRANSFERRED: { label: "Transferred", variant: "neutral" },
-  TERMINATED: { label: "Terminated", variant: "neutral" },
-  UPCOMING: { label: "Upcoming", variant: "warning" },
-  // Tickets
-  OPEN: { label: "Open", variant: "accent" },
-  WAITING_FOR_CUSTOMER: { label: "Waiting on You", variant: "warning" },
-  RESOLVED: { label: "Resolved", variant: "success" },
-  CLOSED: { label: "Closed", variant: "neutral" },
-  // Licenses
-  REVOKED: { label: "Revoked", variant: "danger" },
-  // Ticket priority
+  REFUNDED: { label: "Refunded", variant: "neutral" },
+  DRAFT: { label: "Draft", variant: "neutral" },
+  ISSUED: { label: "Issued", variant: "accent" },
+  PAID: { label: "Paid", variant: "success" },
+  VOID: { label: "Void", variant: "neutral" },
+  // Housekeeping
+  IN_PROGRESS: { label: "In Progress", variant: "accent" },
+  // Maintenance
+  REPORTED: { label: "Reported", variant: "warning" },
+  ASSIGNED: { label: "Assigned", variant: "accent" },
+  // Priority
   LOW: { label: "Low", variant: "neutral" },
   MEDIUM: { label: "Medium", variant: "accent" },
   HIGH: { label: "High", variant: "warning" },
   URGENT: { label: "Urgent", variant: "danger" },
-  // Health
-  UNKNOWN: { label: "Unknown", variant: "neutral" },
-  HEALTHY: { label: "Healthy", variant: "success" },
-  WARNING: { label: "Warning", variant: "warning" },
-  OFFLINE: { label: "Offline", variant: "danger" },
-  // Jobs / misc
-  RUNNING: { label: "Running", variant: "accent" },
-  SUCCEEDED: { label: "Succeeded", variant: "success" },
-  RETRYING: { label: "Retrying", variant: "warning" },
-  // Applications
-  DRAFT: { label: "Draft", variant: "neutral" },
-  PUBLISHED: { label: "Published", variant: "success" },
-  UNPUBLISHED: { label: "Unpublished", variant: "neutral" },
-  ARCHIVED: { label: "Archived", variant: "neutral" },
-  // Customization requests / quotes
-  SUBMITTED: { label: "Submitted", variant: "accent" },
-  REVIEWING: { label: "Reviewing", variant: "accent" },
-  QUOTED: { label: "Quoted", variant: "warning" },
-  CONVERTED: { label: "Converted", variant: "success" },
-  DECLINED: { label: "Declined", variant: "neutral" },
-  SENT: { label: "Sent", variant: "warning" },
-  ACCEPTED: { label: "Accepted", variant: "success" },
-  REJECTED: { label: "Rejected", variant: "neutral" },
+  // Hotel status
+  TRIAL: { label: "Trial", variant: "warning" },
+  ACTIVE: { label: "Active", variant: "success" },
+  SUSPENDED: { label: "Suspended", variant: "danger" },
+  // Employment
+  ON_LEAVE: { label: "On Leave", variant: "warning" },
+  TERMINATED: { label: "Terminated", variant: "neutral" },
 };
 
 export function StatusBadge({ status }: { status: string }) {

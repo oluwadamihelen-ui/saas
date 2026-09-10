@@ -15,15 +15,15 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "BridgeCodes — Software. Deployed. Managed.",
-    template: "%s | BridgeCodes",
+    default: "StayOS — Hotel Management System",
+    template: "%s | StayOS",
   },
   description:
-    "Buy, customize, deploy and manage powerful web applications without the cost and complexity of building everything from scratch.",
+    "A modern, multi-property hotel management platform: reservations, front desk, housekeeping, payments and reporting in one place.",
   metadataBase: new URL(process.env.APP_URL ?? "http://localhost:3000"),
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">

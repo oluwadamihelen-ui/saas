@@ -1,16 +1,11 @@
-# BridgeCodes
+# StayOS
 
-A software marketplace and managed deployment platform: browse production-ready
-web applications, buy a license, choose how it gets deployed (your own server,
-platform hosting, or a fully managed setup), optionally register a domain, and
-track the whole thing from a dashboard. Billing supports one-time and
-recurring (subscription) pricing with PDF invoices, and every application
-release is a versioned record (`ApplicationVersion` + its deployment spec)
-that a deployment is created against — so "what got deployed" is always
-traceable back to a specific version, order, and target.
+A multi-property hotel management system: reservations, front desk
+(check-in/check-out, walk-ins), rooms and housekeeping, guest folios and
+payments, maintenance, expenses, and operational reporting — with every
+hotel's data fully isolated from every other hotel's.
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full system design, provider
-abstraction layer, and phased roadmap.
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full system design.
 
 ## Stack
 
@@ -19,19 +14,20 @@ Auth.js v5 · BullMQ + Redis · Zod
 
 ## Getting started
 
-Requirements: Node 20+, PostgreSQL, Redis.
+Requirements: Node 20+, PostgreSQL (with the `btree_gist` extension
+available — it's part of the standard `postgresql-contrib` package), Redis.
 
 ```bash
 npm install
-cp .env.example .env      # fill in DATABASE_URL, REDIS_URL, CREDENTIALS_ENCRYPTION_KEY
+cp .env.example .env      # fill in DATABASE_URL, REDIS_URL, AUTH_SECRET
 npx prisma migrate dev
 npm run db:seed
 npm run dev                # http://localhost:3000
 ```
 
-In a second terminal, run the worker process (required for purchases to
-progress past "Queued", and for domain renewal reminders/auto-renewal and
-recurring hosting billing):
+In a second terminal, run the worker process (schedules a daily sweep for
+arrival/departure reminders, stale-balance alerts, and auto no-show
+flagging):
 
 ```bash
 npm run worker
@@ -41,54 +37,63 @@ npm run worker
 
 All seeded with password `Passw0rd!`:
 
-| Role | Email |
-|---|---|
-| Super Admin | admin@bridgecodes.example |
-| Staff | ops@bridgecodes.example |
-| Customer | sarah@brightretail.com |
-| Customer | david@northgaterealty.com |
-| Customer | grace@clinicly.example |
+| Role | Email | Hotel |
+|---|---|---|
+| Super Admin | admin@stayos.example | — (platform-wide) |
+| Hotel Owner | owner@sunrisehotel.example | Sunrise Hotel (Lagos, NGN) |
+| Hotel Manager | manager@sunrisehotel.example | Sunrise Hotel |
+| Receptionist | reception@sunrisehotel.example | Sunrise Hotel |
+| Accountant | accounts@sunrisehotel.example | Sunrise Hotel |
+| Housekeeping | housekeeping@sunrisehotel.example | Sunrise Hotel |
+| Maintenance | maintenance@sunrisehotel.example | Sunrise Hotel |
+| Hotel Owner | owner@oceanviewhotel.example | Ocean View Hotel (Cape Town, ZAR) |
+| Hotel Owner | owner@royalsuites.example | Royal Suites (New York, USD) |
 
-The platform runs entirely on mock payment/domain/hosting/deployment/email
-providers by default — the full purchase → deployment journey works with no
-external credentials. See Admin → Providers to inspect provider status, and
-`.env.example` for how to switch a category to a real adapter.
+Each hotel has the same staff roles seeded under its own domain (e.g.
+`manager@oceanviewhotel.example`). Sign in as two different hotels' owners
+side by side to see that neither can see the other's reservations, guests,
+rooms, or payments.
 
-### The purchase → deployment journey
+### The core workflow
 
-1. **Admin** creates an application, adds a version (e.g. `1.0.0`) with a
-   deployment specification (runtime, build/start commands, env vars, health
-   check path) under Admin → Applications → Versions, and publishes it.
-2. **Customer** buys the application; on payment confirmation
-   (`/api/webhooks/[provider]`, idempotent and amount-validated) the order
-   moves to `PAID` and a PDF invoice is generated.
-3. **Customer** goes to Dashboard → Deployments → Deploy Your Application and
-   picks a target — their own server, platform hosting, or the built-in mock
-   "demo infrastructure" target (no real server needed to try the flow).
-4. The **deployment pipeline worker** (`npm run worker`) picks up the queued
-   job and walks the deployment through
-   `QUEUED → PREPARING → CONNECTING → INSTALLING → CONFIGURING → HEALTH_CHECK
-   → COMPLETED`, writing a log entry at each step. A deployment only reaches
-   `COMPLETED` once its health check actually passes.
-5. **Customer** sees a live progress timeline and a "successfully deployed"
-   state; **admin** sees the same deployment with full technical logs, plus
-   retry/rollback/cancel actions.
+1. **A hotel signs up** at `/register` — this creates the `Hotel` row and its
+   first `HOTEL_OWNER` user in one transaction (`createHotelWithOwner`,
+   `lib/services/hotels.ts`).
+2. **The owner sets up rooms**: room types (Standard, Deluxe, Suite — price,
+   capacity, amenities) under Room Types, then individual rooms under Rooms.
+3. **A reservation is created** — either through Reservations → New (any
+   source: online, phone, corporate, travel agent) or Front Desk → New
+   Walk-in (search availability → pick a room → guest details → optional
+   payment → optional immediate check-in, all as one operation).
+   Availability search and reservation creation both go through the same
+   overlap check (`lib/services/availability.ts`), and the database itself
+   enforces it with a Postgres `EXCLUDE` constraint on `Reservation` — see
+   ARCHITECTURE.md §3.
+4. **Check-in** moves the reservation to `CHECKED_IN` and the room to
+   `OCCUPIED`. Charges (room service, laundry, mini bar, ...) can be added to
+   the stay at any point.
+5. **Check-out** optionally takes a final payment, requires the balance to be
+   settled (or an explicit override), generates a PDF-ready invoice from the
+   guest's folio, moves the room to `DIRTY`, and creates a housekeeping task.
+6. **Housekeeping** works the room through
+   `Dirty → Cleaning → Inspected → Available`; a failed inspection sends it
+   back to `Dirty`.
+7. **Reports** (occupancy, revenue, room performance, guest statistics,
+   expenses, outstanding balances) are computed live from the database for
+   Today / This Week / This Month / a custom range.
 
 ## Scripts
 
 ```bash
 npm run dev              # start the app
-npm run worker           # deployment pipeline + domain renewal + hosting billing schedulers
+npm run worker           # daily operations sweep (BullMQ)
 npm run build             # production build
 npm run lint               # eslint
 npm test                   # vitest — unit tests + DB-backed integration tests
-                            # (tests/integration/*), run against the same
-                            # local Postgres/Redis as `npm run dev`
-npm run test:e2e-smoke     # Playwright smoke test of the full customer journey
-                            # (requires `npm run dev` running in another terminal)
-npm run test:e2e-acceptance # Playwright walkthrough of purchase -> deployment
-                            # request -> worker pipeline -> COMPLETED, checked
-                            # from both the customer and admin side (requires
-                            # `npm run dev` and `npm run worker` running)
-npm run db:seed            # (re)seed the database
+                            # (tests/integration/*, incl. double-booking
+                            # prevention and cross-hotel isolation), run
+                            # against the same local Postgres as `npm run dev`
+npm run db:seed            # (re)seed the database — three hotels, full staff
+                            # rosters, rooms, guests, and a realistic mix of
+                            # reservation lifecycles
 ```

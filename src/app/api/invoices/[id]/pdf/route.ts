@@ -1,36 +1,21 @@
-import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
-import { prisma } from "@/lib/db";
-import { generateInvoicePdfBuffer } from "@/lib/services/invoice-pdf";
-import { getUserPermissions } from "@/lib/auth/require";
+import { NextResponse } from "next/server";
+import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/auth/permissions";
+import { getInvoice } from "@/lib/services/invoices";
+import { renderInvoicePdf } from "@/lib/services/invoice-pdf";
+import { prisma } from "@/lib/db";
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const user = await requirePermission(PERMISSIONS.INVOICES_VIEW);
   const { id } = await params;
-  const invoice = await prisma.invoice.findUnique({ where: { id } });
-  if (!invoice) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const isOwner = invoice.customerId === session.user.id;
-  let isAuthorizedStaff = false;
-  if (!isOwner) {
-    if (session.user.role === "SUPER_ADMIN") {
-      isAuthorizedStaff = true;
-    } else if (session.user.role === "STAFF") {
-      const perms = await getUserPermissions(session.user.id);
-      isAuthorizedStaff = perms.has(PERMISSIONS.INVOICES_MANAGE);
-    }
-  }
+  const invoice = await getInvoice(user.hotelId, id);
+  if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
 
-  if (!isOwner && !isAuthorizedStaff) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const guest = await prisma.guest.findUnique({ where: { id: invoice.guestId } });
+  const pdf = await renderInvoicePdf(invoice, guest ? `${guest.firstName} ${guest.lastName}` : "Guest");
 
-  const pdf = await generateInvoicePdfBuffer(id);
-
-  return new NextResponse(pdf as unknown as BodyInit, {
+  return new NextResponse(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="${invoice.invoiceNumber}.pdf"`,

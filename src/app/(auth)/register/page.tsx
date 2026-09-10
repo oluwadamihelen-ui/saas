@@ -3,14 +3,14 @@ import type { Metadata } from "next";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { RegisterForm } from "./register-form";
 
-export const metadata: Metadata = { title: "Create an account" };
+export const metadata: Metadata = { title: "Register your hotel" };
 
 export default function RegisterPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Create your account</CardTitle>
-        <CardDescription>Start buying and deploying applications in minutes.</CardDescription>
+        <CardTitle>Set up your hotel</CardTitle>
+        <CardDescription>Create your property profile and owner account to start managing reservations today.</CardDescription>
       </CardHeader>
       <CardContent>
         <RegisterForm />

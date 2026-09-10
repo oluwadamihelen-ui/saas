@@ -1,45 +1,29 @@
-# BridgeCodes — Architecture
+# StayOS — Architecture
 
-BridgeCodes is a software marketplace + managed deployment platform: customers buy
-ready-made web applications, choose how they're deployed (their own server,
-platform-provided hosting, or a fully managed setup), optionally register a
-domain, and track the entire lifecycle from a dashboard. The platform never
-owns physical infrastructure — it's an **orchestration layer** in front of
-swappable third-party providers.
-
-```
-Customer → Platform (Next.js) → Provider Adapter Interface → Third-party API
-                                 (Payment/Domain/DNS/Hosting/Deployment/Email)
-```
-
-This document describes the system as implemented through **Phase 1
-(Foundation)**, **Phase 2 (Payments, Billing & Commercial Foundation)**,
-**Phase 3 (Application Versioning & Deployment Foundation)**,
-**Phase 4 (Domains)**, **Phase 5 (Hosting)**, and **Phase 6 (Business
-Operations)**. Phase 7 builds on this foundation without architectural
-changes — see [Phased Plan](#phased-plan).
+StayOS is a multi-property hotel management system (a hotel operations
+SaaS): reservations, front desk, rooms and housekeeping, guest folios and
+payments, maintenance, expenses, and reporting — for independent hotels,
+guest houses, and small hotel groups. Every hotel's operational data is
+completely isolated from every other hotel's.
 
 ## 1. Recommended Architecture
 
-- **Framework**: Next.js 16 (App Router, Turbopack, React Server Components)
-  for both the frontend and the backend (server actions + route handlers).
-  A single deployable avoids the operational overhead of a separate API
-  service for a V1, while every domain rule lives in `src/lib/services/*`
-  so it could be extracted behind a REST/RPC boundary later without
-  rewriting business logic.
-- **Database**: PostgreSQL via Prisma ORM. One normalized relational schema
-  (see `prisma/schema.prisma`) covering identity, catalog, orders, payments,
-  deployments, domains, hosting, support, and audit logging.
-- **Background jobs**: BullMQ + Redis. Deployment provisioning runs as a
-  queued pipeline processed by a standalone worker process
-  (`npm run worker`), never inline in an HTTP request.
-- **Auth**: Auth.js (NextAuth v5), credentials provider, JWT sessions,
-  database-backed RBAC (roles + permissions + per-user overrides).
+- **Framework**: Next.js 16 (App Router, Turbopack, React Server
+  Components) for both frontend and backend (server actions + a small
+  number of route handlers). Every domain rule lives in
+  `src/lib/services/*`, never inline in a page or action.
+- **Database**: PostgreSQL via Prisma ORM (`prisma/schema.prisma`). One
+  `Hotel` row per property; nearly every other model carries a `hotelId`
+  foreign key.
+- **Background jobs**: BullMQ + Redis, for the single recurring job the
+  system needs today — the daily operations sweep (§7).
+- **Auth**: Auth.js v5, Credentials provider, JWT sessions. A session
+  carries the caller's resolved hotel membership (§4), not just their
+  identity.
 - **Styling**: Tailwind CSS v4 with a small custom design-token layer
   (`src/app/globals.css`) — no component library dependency for visual
   identity, though Radix primitives back a few interactive components.
-- **Validation**: Zod schemas at every server action / route handler
-  boundary.
+- **Validation**: Zod schemas at every server action boundary.
 
 ## 2. Database Schema
 
@@ -47,751 +31,311 @@ Full schema: `prisma/schema.prisma`. Key clusters:
 
 | Cluster | Models |
 |---|---|
-| Identity & RBAC | `User`, `Role`, `Permission`, `RolePermission`, `UserPermission`, `Organization`, `OrganizationMember` |
-| Catalog | `Category`, `Application`, `ApplicationImage`, `ApplicationFeature`, `ApplicationReview`, `ApplicationPricing`, `ApplicationLicense`, `Bundle`, `BundleItem`, `Coupon` |
-| Commerce | `Order`, `OrderItem`, `Payment`, `PaymentWebhookEvent`, `Refund`, `Invoice`, `InvoiceItem`, `Subscription`, `RenewalEvent` |
-| Versioning & Release | `ApplicationVersion`, `DeploymentSpecification`, `ApplicationArtifact` |
-| Deployment | `DeploymentTarget`, `Deployment`, `DeploymentJob`, `DeploymentLog`, `DeploymentCredential` |
-| Infrastructure | `Domain`, `DomainOrder`, `DNSRecord`, `HostingPlan`, `HostingAccount` |
-| Providers | `Provider`, `ProviderCredential` (encrypted) |
-| Operations | `SupportTicket`, `SupportMessage`, `CustomizationRequest`, `Quote`, `QuoteItem`, `Notification`, `EmailTemplate`, `NotificationSchedule`, `AuditLog`, `Setting`, `AnalyticsEvent` |
+| Platform identity | `User`, `Permission`, `RolePermission`, `UserPermission` |
+| Hotel & staff | `Hotel`, `HotelMember` |
+| Rooms | `RoomType`, `Room`, `RoomStatusLog` |
+| Guests & stays | `Guest`, `Reservation`, `RoomTransfer` |
+| Billing | `Payment`, `AdditionalCharge`, `Invoice`, `Expense` |
+| Operations | `HousekeepingTask`, `MaintenanceRequest` |
+| Platform-wide | `Notification`, `AuditLog`, `Setting` |
 
 Design notes:
 
-- **UUID primary keys** everywhere; `createdAt`/`updatedAt` on every mutable
-  model; indexes on foreign keys and common filter columns (status, email,
-  slug, expiry dates).
-- **Multi-tenancy is modeled, not enforced yet.** `Organization` +
-  `OrganizationMember` exist and `Order`/`Domain`/`Deployment`/etc. carry an
-  optional `organizationId`, so a customer can belong to a company account
-  later without a schema migration. V1 checkout attaches everything to the
-  individual `User`.
-- **`Order.fulfillmentIntent` (JSON)** captures the customer's checkout-time
-  choices (deployment type, server details, requested domain) so the
-  post-payment fulfillment step knows what to provision — this keeps
-  `Order`/`OrderItem` about *billing*, not *provisioning*.
-- **Order items preserve historical pricing.** `OrderItem.unitPrice`/`total`
-  are copied at purchase time and never recomputed from the live
-  `ApplicationPricing` row, so a later price change never rewrites what a
-  past customer actually paid or what their invoice/PDF shows.
-- **`PaymentWebhookEvent`** records every inbound webhook delivery
-  (`provider` + `providerEventId`, unique together) *before* it's processed,
-  so a provider's at-least-once delivery retrying the same event is a no-op
-  (caught as a Prisma `P2002` unique violation) rather than a duplicate
-  order-paid transition or a double-issued license.
-- **`DeploymentCredential` is a separate, append-only table** holding only
-  encrypted ciphertext, keyed to a `DeploymentTarget` (not a `Deployment`) —
-  credentials belong to *where* the app runs, and outlive any one deployment
-  attempt to that target. `Deployment` itself carries no server/credential
-  fields; non-secret connection metadata (host, port, control panel) lives
-  on `DeploymentTarget`.
-- **License architecture** (`ApplicationLicense`) is intentionally simple —
-  status enum + optional expiry/allowed domains — and does not require
-  online verification by default (`requiresOnlineVerification: false`), per
-  the requirement that a licensing outage must never brick a customer's app.
-- **App Developer role and revenue share** are architected (`RoleKey.DEVELOPER`,
-  `Application.createdById`) but not exposed in any UI yet — future work is
-  additive (a `developerId` + payout ledger), not a redesign.
+- **UUID primary keys** everywhere; `createdAt`/`updatedAt` on mutable
+  models; indexes on foreign keys and common filter columns (`hotelId` +
+  status, `hotelId` + date, phone/email for guest search).
+- **`hotelId` on every operational model** is the literal tenant boundary.
+  It is never nullable on hotel-scoped models (it *is* nullable on the few
+  platform-wide models — `Notification`, `AuditLog`, `Setting` — where a
+  row can belong to the platform itself, e.g. a Super Admin action with no
+  associated hotel).
+- **No global `Role` table.** Platform-level access is a single boolean
+  (`User.isSuperAdmin`) — deliberately separate from any hotel's staff, per
+  the requirement that the platform Super Admin is not a hotel role.
+  Hotel-level access is `HotelMember.role` (a `RoleKey` enum), scoped to one
+  `(hotelId, userId)` pair via `@@unique([hotelId, userId])` — the same
+  person can hold memberships (and different roles) at more than one hotel,
+  which is what lets a hotel *group* owner eventually manage several
+  properties without a schema change (§8).
+- **Reservation is the financial and operational spine of a stay.** It
+  carries the locked-in `roomRate`/`nights`/`subtotal`/`tax` computed at
+  booking time (never recomputed from a room type's live price), plus
+  running `totalAmount`/`amountPaid`/`balance` that
+  `recomputeReservationTotals()` (`lib/services/reservations.ts`)
+  recalculates from the live sum of `AdditionalCharge` and completed
+  `Payment` rows every time either changes — so the folio is always
+  authoritative and never hand-edited out of sync.
+- **`Invoice.lineItems` is a JSON snapshot**, not a live view. It's built
+  once (at checkout) from the folio at that moment and never silently
+  rewritten by a later charge or payment — a correction is an explicit
+  `reissueInvoice()` call, audit-logged, not an automatic recompute. This
+  mirrors why `OrderItem.unitPrice` is frozen at purchase time in
+  transactional systems generally: a historical financial document must
+  reflect what was true when it was issued.
+- **`RoomTransfer` and `RoomStatusLog` are append-only history tables.**
+  Transferring a guest updates `Reservation.roomId` to the new room but
+  keeps a permanent record of the original assignment; every room status
+  change (automatic or manual override) is logged with who changed it, from
+  what, to what, and why.
+- **Cancellations and no-shows are status changes, never deletes.**
+  `Reservation.status` moves to `CANCELLED` (with `cancellationReason`,
+  `cancelledById`, `cancelledAt`) or `NO_SHOW` — the row, and its full
+  history, stays.
 
-### 2.1 Application → Version → Spec → Artifact → Deployment
+## 3. Double-Booking Prevention
 
-Phase 3 splits what used to be a single `ApplicationVersion` row into four
-models with distinct responsibilities, so a commercial release record, a
-technical runtime contract, and a build output are never conflated:
+This is enforced at two layers, deliberately redundant:
 
-```
-Application                       "School Management Pro" — the product
-  └─ ApplicationVersion            "1.0.0" — a release: status (DRAFT/
-                                   STABLE/DEPRECATED), isLatest/isStable
-                                   flags, changelog. What a customer's
-                                   license/order/invoice references.
-       ├─ DeploymentSpecification  the *technical contract* for running
-                                   this version: runtime, build/start
-                                   commands, required services, health
-                                   check path, and EnvironmentVariable
-                                   rows each flagged PUBLIC or SECRET.
-       └─ ApplicationArtifact      the *build output* to install:
-                                   DOCKER_IMAGE / GIT_REPOSITORY /
-                                   GIT_COMMIT / ARCHIVE / OTHER + a
-                                   location reference.
+1. **Application layer** (`lib/services/availability.ts`): before creating,
+   extending, or transferring a reservation, `isRoomAvailable()` checks for
+   any other reservation on the same room whose status is `PENDING`,
+   `CONFIRMED`, or `CHECKED_IN` (i.e. still holding the room) with an
+   overlapping `[checkInDate, checkOutDate)` range. This is what produces a
+   clean, friendly validation error ("Room 204 is not available for the
+   selected dates") instead of a raw database error.
+2. **Database layer** (`prisma/migrations/.../migration.sql`): a Postgres
+   `EXCLUDE USING gist` constraint on `Reservation`, over `(roomId WITH =,
+   tsrange(checkInDate, checkOutDate, '[)') WITH &&)`, filtered to the same
+   three "blocking" statuses. This is the guarantee that actually holds
+   under concurrency — two receptionists booking the same room in the same
+   instant race at the database, and the loser's `INSERT` fails with a
+   Postgres exclusion violation (`23P01`), which the service layer catches
+   and turns into the same friendly error.
 
-DeploymentTarget                  "where" — a customer's server, platform
-                                   hosting, or the mock demo target.
-                                   Distinct from HostingProvider (which
-                                   *provisions* infrastructure) and from
-                                   the DeploymentAdapter (which *installs
-                                   onto* it) — see §7.1.
+Every write path that can move a reservation's room or dates —
+`createReservation`, `extendStay`, `transferRoom` — goes through both
+layers. `searchAvailableRooms()` uses the same overlap definition so a
+receptionist is never even offered a room the create step would reject.
 
-Deployment                        one attempt to run one ApplicationVersion
-                                   on one DeploymentTarget. References
-                                   Customer, Order, ApplicationVersion,
-                                   DeploymentTarget, and optionally Domain
-                                   and a `previousDeploymentId` self-relation
-                                   (used by rollback).
-  └─ DeploymentJob                 the BullMQ-tracked unit of work; one per
-                                   deployment attempt (initial run, retry,
-                                   or rollback).
-       └─ DeploymentLog            append-only, timestamped, with an
-                                   `isCustomerVisible` flag so admins see
-                                   the full technical trace and customers
-                                   see a redacted subset.
-```
+## 4. Multi-Hotel Isolation
 
-`Application.createApplicationVersion()` / `publishApplicationVersion()`
-(`lib/services/application-versions.ts`) atomically flip `isLatest` off the
-previous version when a new one is published for the same application, so
-"the latest version" is always a single, unambiguous row —
-`getLatestVersion(applicationId)` is what `createDeployment()` and checkout
-resolve against when a specific version isn't pinned.
+The mechanism, not just the intent: **`requireHotelUser()`**
+(`lib/auth/require.ts`) resolves the caller's active `hotelId` from their
+server-side session — never from a client-supplied argument, route param,
+or form field. Every hotel-scoped server action and page starts by calling
+`requireHotelUser()` or `requirePermission()` (which calls it internally),
+and every service function takes `hotelId` as an explicit first argument
+that it uses to filter (or scope the `where` of) every query. There is no
+code path where a request can name a different hotel's id and reach its
+data — `tests/integration/hotel-isolation.test.ts` exercises this directly:
+querying Hotel A's services with Hotel B's resource ids returns `null`/empty
+results, not Hotel B's data.
 
-## 3. Folder Structure
+A user's session is established at login (`src/auth.ts`): if
+`User.isSuperAdmin`, the session has no `hotelId` at all (the Super Admin
+console, `/super/*`, requires *not* having a hotel context — see below). If
+not, `authorize()` resolves an active `HotelMember` row (preferring the
+user's `primaryHotelId`) and puts that hotel's id, name, currency, and the
+user's role *at that hotel* into the JWT. A user who belongs to more than
+one hotel (a group scenario, §8) can switch active hotel via
+`resolveHotelSwitch()` (server-verified against their real `HotelMember`
+rows) + `useSession().update()`, without a full re-login.
+
+`src/proxy.ts` (Next.js 16's renamed `middleware.ts`) adds a coarse-grained
+guard before any page code runs: `/app/*` requires a session with a
+`hotelId` and redirects a Super Admin to `/super`; `/super/*` requires
+`isSuperAdmin` and redirects everyone else to `/app`. Page-level
+`requirePermission()`/`requireHotelUser()` calls are the actual enforcement
+(matching the existing convention that middleware is a UX redirect, not the
+authorization boundary).
+
+## 5. Roles & Permissions
+
+`RoleKey`: `SUPER_ADMIN` (platform, not a `HotelMember` role),
+`HOTEL_OWNER`, `HOTEL_MANAGER`, `RECEPTIONIST`, `ACCOUNTANT`,
+`HOUSEKEEPING`, `MAINTENANCE`, `STAFF`.
+
+`lib/auth/permissions.ts` is the canonical permission catalog
+(`reservations.manage`, `checkin.manage`, `payments.manage`, ...) and each
+hotel role's default grant set. Unlike a marketplace platform with a single
+global `RolePermission` table, a hotel's Owner can override an individual
+staff member's permissions **at that hotel specifically**:
+`UserPermission` is keyed `(userId, hotelId, permissionId)`, so revoking one
+receptionist's ability to manage rooms at Hotel A never touches what that
+same person can do if they also work at Hotel B.
+`getUserPermissions(userId, hotelId)` (`lib/auth/permissions-resolve.ts`)
+resolves role defaults + overrides fresh on every check — deliberately
+no next-auth dependency, so it's usable from tests and scripts.
+
+Sidebar navigation (`components/dashboard/nav-items.ts`) is filtered
+server-side by the caller's resolved permission set — a receptionist never
+even sees a "Staff" or "Settings" link, not just a page that would reject
+them.
+
+## 6. Folder Structure
 
 ```
 prisma/
-  schema.prisma            # full data model
-  seed/index.ts            # realistic seed data (roles, apps, orders, tickets...)
-scripts/
-  worker.ts                # standalone BullMQ worker entrypoint
-  e2e-smoke.mjs             # Playwright script driving the full customer journey
+  schema.prisma                # full data model
+  migrations/.../migration.sql # includes the EXCLUDE constraint (§3)
+  seed/index.ts                 # three hotels, full staff rosters, rooms,
+                                 # guests, and a realistic reservation mix —
+                                 # built entirely through the real service
+                                 # layer (createReservation, checkIn/Out,
+                                 # recordPayment, ...), not hand-crafted rows
 src/
   app/
-    (marketing)/            # public site: home, apps, categories, services,
-                             # domains, hosting, pricing, about, contact, legal
-    (auth)/                 # login, register
-    (customer)/dashboard/   # customer portal
-    (admin)/admin/          # admin & staff console
-    checkout/                # checkout, mock payment page, payment callback
+    (auth)/                    # /login, /register (hotel onboarding)
+    app/                       # the hotel operations app (/app/*)
+      front-desk/               # arrivals/departures/current guests/
+                                 # outstanding/no-shows + walk-in flow
+      reservations/              # list, new (search + book), detail
+                                 # (workflow actions + folio)
+      rooms/, room-types/        # room & room-type CRUD, status control
+      guests/                    # search, profile, history
+      housekeeping/, maintenance/ # task/request boards
+      payments/, invoices/, expenses/
+      reports/                   # occupancy/revenue/reservations/room
+                                 # performance/guest stats/expenses, by
+                                 # Today/Week/Month/custom range
+      calendar/                  # room x day availability grid
+      staff/, settings/, audit-log/, notifications/
+    super/                      # platform Super Admin console (/super/*):
+                                 # hotels, subscription status/plan,
+                                 # platform users, platform settings
     api/
-      auth/[...nextauth]/   # Auth.js route handler
-      domains/search/       # domain availability search API
-      webhooks/[provider]/  # payment provider webhooks (signature-verified,
-                             # idempotent via PaymentWebhookEvent)
-      invoices/[id]/pdf/    # auth-checked invoice PDF download
-  auth.ts                   # Auth.js config (Node runtime, Credentials provider)
-  middleware.ts              # edge-safe route guard for /admin and /dashboard
+      auth/[...nextauth]/       # Auth.js route handler
+      invoices/[id]/pdf/         # auth-checked, hotel-scoped invoice PDF
+  auth.ts                       # Auth.js config (Node runtime)
+  proxy.ts                      # edge-safe route guard (Next.js 16's
+                                 # renamed middleware.ts)
   components/
-    ui/                      # design-system primitives (Button, Card, Badge...)
-    marketing/, marketplace/, dashboard/, admin/, providers/
+    ui/                          # design-system primitives
+    dashboard/                    # sidebar, topbar (hotel switcher,
+                                 # notifications), nav config
+    charts/                       # recharts wrappers (revenue, occupancy,
+                                 # bookings, room-status)
   lib/
-    auth/                    # permission catalog, require*() guards, edge config;
-                              # permissions-resolve.ts has no next-auth dependency
-                              # so it can be imported from plain Node/test contexts
-    providers/                # provider abstraction layer (see below)
-    services/                 # business logic: applications, orders, checkout,
-                               # fulfillment, deployments, deployment-targets,
-                               # application-versions, invoice-pdf, settings,
-                               # notifications, admin-metrics
-    queue/                    # BullMQ queue + worker for deployment pipeline
-    security/                 # encryption, structured logger, audit log
-    utils/                    # id generators, formatting
-  generated/prisma/           # generated Prisma client (gitignored)
+    auth/                        # permission catalog, require*() guards,
+                                 # hotel-switch verification
+    services/                     # business logic — see §2-§7
+    queue/                        # BullMQ connection + the operations
+                                 # sweep queue/worker
+    security/                     # audit log, structured logger, encryption
+  generated/prisma/               # generated Prisma client (gitignored)
 tests/
-  setup.ts                    # dotenv + fallback encryption key for the vitest run
-  providers/, services/, queue/  # unit tests (mocked/pure logic)
-  integration/                # DB-backed tests against the real local
-                               # Postgres/Redis (full purchase-to-deployment
-                               # journey, webhook idempotency, RBAC overrides,
-                               # version publishing)
+  setup.ts
+  utils/, security/                # pure unit tests
+  integration/                     # DB-backed: double-booking prevention,
+                                 # cross-hotel isolation — run against the
+                                 # same local Postgres as `npm run dev`
 ```
 
-## 4. API Architecture
+## 7. Operational Workflows
 
-There is no separate REST API for the browser — the App Router's server
-actions and route handlers are the API surface, but internal logic is never
-written directly inline in a page or action. Every action calls into a
-service module:
+- **Reservation lifecycle**: `PENDING → CONFIRMED → CHECKED_IN →
+  CHECKED_OUT`, with `CANCELLED`/`NO_SHOW` as terminal branches from
+  `PENDING`/`CONFIRMED`. `lib/services/reservations.ts` owns every
+  transition; `lib/services/front-desk.ts` owns check-in/check-out
+  specifically (including the walk-in shortcut: find-or-create guest →
+  create reservation → optional payment → optional immediate check-in, as
+  one call).
+- **Room status machine** (`lib/services/rooms.ts`,
+  `canTransitionRoomStatus()`): `AVAILABLE → RESERVED → OCCUPIED → DIRTY →
+  CLEANING → INSPECTED → AVAILABLE`, with `MAINTENANCE`/`OUT_OF_SERVICE`
+  reachable from most states. Check-in/check-out, housekeeping task
+  transitions, and maintenance resolution all call the same
+  `setRoomStatus()` — there is no other write path to `Room.status`, so
+  `RoomStatusLog` is a complete history.
+- **Housekeeping** (`lib/services/housekeeping.ts`): a task moves
+  `PENDING → IN_PROGRESS → COMPLETED → INSPECTED`, driving the room through
+  `DIRTY → CLEANING → INSPECTED(awaiting sign-off) → AVAILABLE`. A failed
+  inspection reopens the task (`PENDING`) and sends the room back to
+  `DIRTY` rather than leaving it stuck.
+- **Maintenance** (`lib/services/maintenance.ts`): `REPORTED → ASSIGNED →
+  IN_PROGRESS → COMPLETED`/`CANCELLED`. Taking a room out of service is an
+  explicit choice at report time (`takeRoomOutOfService`) rather than
+  automatic, since a reported issue on an occupied room usually shouldn't
+  silently block checkout.
+- **Guest folio** (`lib/services/folio.ts`): computed live from the
+  reservation's room charge, `AdditionalCharge` rows, and completed
+  `Payment` rows — never a cached total. The same folio function backs both
+  the reservation detail page and invoice generation.
+- **Financial reporting** (`lib/services/reports.ts`): occupancy, revenue
+  (by day and by payment method), reservations (by status/source,
+  check-ins/check-outs/cancellations/no-shows), room performance, popular
+  room types, guest statistics, and expenses — all computed from live rows
+  for an arbitrary date range. `profitEstimate()` is explicitly labeled as
+  an estimate (revenue collected minus recorded expenses) everywhere it's
+  shown, not represented as accounting-grade profit.
+- **Daily operations sweep** (`lib/services/operations-sweep.ts`, run by
+  `scripts/worker.ts` via a BullMQ repeatable job — the platform's one
+  recurring background job): reminds staff of tomorrow's arrivals/
+  departures, flags checked-out reservations with a balance outstanding
+  more than 3 days, and auto-flags a reservation `NO_SHOW` (freeing the
+  room) if a full day has passed since its check-in date with no check-in.
 
-- `ApplicationService` (`lib/services/applications.ts`) — marketplace
-  queries (search, filters, categories).
-- `OrderService` (`lib/services/orders.ts`) — order creation, marking paid
-  (idempotent), invoice generation, license issuance.
-- `CheckoutService` (`lib/services/checkout.ts`) — turns a validated
-  checkout form into order lines + a provider-initialized payment.
-- `FulfillmentService` (`lib/services/fulfillment.ts`) — runs once per paid
-  order: provisions hosting/domain via provider adapters, builds the
-  `DeploymentTarget` the customer described at checkout, then hands off to
-  `DeploymentService`.
-- `DeploymentTargetService` (`lib/services/deployment-targets.ts`) —
-  validates and creates `DeploymentTarget` rows (zod-validated
-  hostname/port, SSRF-resistant), including the shared "mock infrastructure"
-  target used by the demo deployment flow.
-- `DeploymentService` (`lib/services/deployments.ts`) — creates
-  `Deployment`/`DeploymentJob` rows against a resolved `ApplicationVersion`
-  + `DeploymentTarget` and enqueues the pipeline.
-- `ApplicationVersionService` (`lib/services/application-versions.ts`) —
-  creates/publishes `ApplicationVersion` + `DeploymentSpecification` +
-  `ApplicationArtifact`, and resolves "the latest version" for an app.
-- `InvoicePdfService` (`lib/services/invoice-pdf.ts`) — renders a PDF
-  invoice buffer (pdfkit) from an `Invoice` and its line items.
-- `SettingsService` (`lib/services/settings.ts`) — reads platform-wide
-  settings (currently the default currency) from the `Setting` table.
-- `NotificationService` (`lib/services/notifications.ts`) — in-app +
-  email notifications.
-- `admin-metrics.ts` — read-side aggregation for the admin dashboard/analytics.
+## 8. Multi-Branch / Hotel Groups (architecture, not yet UI)
 
-Only true external integrations (`/api/webhooks/[provider]`,
-`/api/domains/search`, `/api/auth/*`) are HTTP route handlers, because they
-must be reachable by something other than our own browser client.
+`Hotel.parentGroupId` (a self-relation) lets a hotel belong to a parent
+group hotel (`isGroupHQ: true`, no rooms/guests/reservations of its own) —
+"Royal Hotel Group → Lagos Branch → Abuja Branch" is representable today
+without a schema change. Combined with `HotelMember` allowing one `User` to
+hold independent roles at multiple `Hotel` rows, and the hotel-switcher
+already wired in the topbar (`resolveHotelSwitch()` +
+`useSession().update()`), a group owner managing several properties is an
+additive UI feature (a cross-hotel rollup dashboard), not a rewrite.
 
-## 5. Provider Abstraction Architecture
-
-Every third-party category has a TypeScript interface in
-`src/lib/providers/<category>/types.ts`, a `Mock*` implementation used by
-default, and — for payments — a real `Paystack` implementation, chosen as
-the single "real" V1 integration because it natively supports the NGN
-examples throughout the spec. Everything else (domains, hosting, DNS,
-deployment execution, email) ships as a mock with the same interface a real
-adapter would implement, so swapping one in later is additive:
-
-```
-PaymentProvider      → MockPaymentProvider, PaystackPaymentProvider
-DomainProvider        → MockDomainProvider          (capabilities-flagged)
-HostingProvider       → MockHostingProvider
-DeploymentProviderAdapter → MockDeploymentProvider   (resolved for every
-                                                       provider key —
-                                                       ssh/cpanel/plesk/
-                                                       docker/cloud/mock —
-                                                       via a registry, see
-                                                       §7.1)
-EmailProvider         → MockEmailProvider
-```
-
-`src/lib/providers/registry.ts` is the single place that decides which
-concrete adapter backs each interface, driven by environment variables
-(`PAYMENT_PROVIDER`, `DOMAIN_PROVIDER`, ...) with a database fallback
-(`Provider`/`ProviderCredential`, credentials AES-256-GCM encrypted) for
-credentials configured through the admin UI. Calling code (services, jobs)
-only ever imports `getPaymentProvider()` etc. — never a vendor class.
-`getDeploymentProvider()` delegates to the dedicated
-`deploymentAdapterRegistry` (§7.1) rather than the generic env/DB lookup,
-since a deployment adapter is chosen per `DeploymentTarget.provider`, not
-once globally.
-
-The `Provider` row's `mode` field is one of `MOCK | CONFIGURED | CONNECTED |
-ERROR`, matching the spec's requirement to visibly distinguish "not really
-wired up yet" from "verified working" in the admin UI (Providers page →
-Test Connection).
-
-`DomainProvider` capabilities are declared per adapter
-(`DomainProviderCapabilities`) rather than assumed, since real registrars
-vary in what they expose over API.
-
-### 5.1 PaymentProvider interface (Phase 2)
-
-```ts
-interface PaymentProvider {
-  key: string;
-  capabilities: PaymentProviderCapabilities;   // e.g. { supportsRefunds,
-                                                //   supportsSubscriptions,
-                                                //   supportsWebhooks, ... }
-  createPayment(input): Promise<PaymentInitResult>;
-  verifyPayment(reference): Promise<PaymentVerification>;
-  handleWebhook(payload, signature): Promise<WebhookResult>;
-  refundPayment(reference, amount?): Promise<RefundResult>;
-  getTransaction(reference): Promise<TransactionRecord>;
-  createCustomer?(input): Promise<CustomerRecord>;         // optional
-  createSubscription?(input): Promise<SubscriptionRecord>; // optional
-  cancelSubscription?(id): Promise<void>;                  // optional
-}
-```
-
-`capabilities` is required on every adapter and read by the UI (e.g. to hide
-a "Refund" button for a provider that can't refund) rather than the code
-assuming every provider supports everything. The optional `createCustomer`/
-`createSubscription`/`cancelSubscription` methods let `MockPaymentProvider`
-and `PaystackPaymentProvider` both implement recurring billing without
-forcing every future adapter (e.g. a bank-transfer-only provider) to fake
-subscription support it doesn't have.
-
-`MockPaymentProvider` keeps an in-memory `Map` of simulated
-transactions/customers/subscriptions so `verifyPayment`/`getTransaction`
-return the amount/currency actually recorded at `createPayment` time — not
-a hardcoded stand-in — which is what lets the webhook route's amount/
-currency validation (§10) be exercised meaningfully in tests without a real
-provider. Those Maps are attached to `globalThis` (the same pattern
-`lib/db.ts` uses for the Prisma client), not left as plain module-level
-`const`s: Next.js compiles Server Actions and Route Handlers as separate
-bundles, each re-evaluating this module, so a plain module-level Map would
-mean `createPayment()` (called from checkout's Server Action) and the
-webhook route's `verifyPayment()` silently saw two different, independently
-empty Maps — the payment would be created but never found as confirmed.
-The same risk applies to *any* cached provider singleton, not just payments'
-own Maps, so `registry.ts`'s `cachedPaymentProvider`/`cachedDomainProvider`/
-`cachedHostingProvider`/`cachedEmailProvider` variables are all `globalThis`-
-backed too — otherwise a `MockDomainProvider` or `MockHostingProvider`
-constructed while handling a Route Handler would be a different instance,
-with different in-memory state, than one constructed while handling a
-Server Action.
-
-## 6. Authentication & RBAC Architecture
-
-- **Auth.js v5**, Credentials provider, JWT session strategy (no database
-  session table needed for V1; OAuth/adapter-backed sessions are a drop-in
-  addition later since the schema already has a normalized `User`).
-- Split config: `src/lib/auth/config.ts` is edge-safe (no Prisma/bcrypt) and
-  is reused by `src/middleware.ts` for route protection; `src/auth.ts`
-  extends it with the Credentials provider for the Node runtime (server
-  actions, the NextAuth route handler).
-- **RBAC**: four seeded roles (`SUPER_ADMIN`, `STAFF`, `CUSTOMER`,
-  `DEVELOPER`), a `Permission` catalog (`lib/auth/permissions.ts`), and
-  `RolePermission` for default grants. `UserPermission` allows a
-  `SUPER_ADMIN` to grant or revoke an individual permission for one staff
-  member without creating a new role — this is the "permissions must be
-  configurable" requirement.
-- `lib/auth/require.ts` exposes `requireUser()`, `requireRole(...)`, and
-  `requirePermission(key)` guards used at the top of every admin page/action;
-  `middleware.ts` provides a coarse-grained redirect for `/admin/*` and
-  `/dashboard/*` before any page code runs.
-
-## 7. Deployment Architecture
-
-Long-running provisioning never happens inside an HTTP request:
-
-```
-Payment webhook verified
-  → markOrderPaid()            (idempotent, amount/currency re-validated)
-  → fulfillOrder()              provisions hosting/domain via provider adapters,
-                                 creates the DeploymentTarget the customer
-                                 described at checkout
-  → createDeployment()          resolves ApplicationVersion (latest, or a
-                                 pinned one) + DeploymentTarget, creates
-                                 Deployment (QUEUED) + DeploymentJob row
-  → enqueueDeploymentPipeline()  BullMQ job, keyed by DeploymentJob.id
-  → [separate worker process — processDeploymentPipeline()]
-      QUEUED → PREPARING → CONNECTING → INSTALLING → CONFIGURING →
-      (DATABASE_SETUP → MIGRATING, if the spec declares a database) →
-      (DNS_SETUP → SSL_SETUP, if a domain is attached) →
-      HEALTH_CHECK → COMPLETED   — or → FAILED / NEEDS_CUSTOMER_ACTION
-  → DeploymentLog entries at every step (customer-visible subset, secrets
-    redacted before they're ever written)
-  → notifyUser() on completion/failure
-```
-
-The worker (`scripts/worker.ts`, run via `npm run worker`) is a separate
-Node process from the web server, matching the requirement that deployment
-commands run through controlled backend workers, not the browser or the
-request/response cycle. A deployment reaches `COMPLETED` **only** if the
-`runHealthCheck()` step actually passes — there is no code path that marks a
-deployment successful before that check runs, matching the "never fake a
-success state for real infrastructure" rule.
-
-Customers see a 9-step simplified timeline
-(`components/dashboard/deployment-timeline.tsx`, `DEPLOYMENT_TIMELINE_STEPS`
-in `lib/services/deployments.ts`) derived from `Deployment.status`; admins
-additionally see the full status enum (including `DATABASE_SETUP`/
-`MIGRATING`) plus raw `DeploymentLog`/`DeploymentJob` rows for
-troubleshooting. Commands are always generated from the version's
-`DeploymentSpecification` (runtime, build/start command, required services)
-— a customer-provided string is validated (zod, allowlist regex on
-hostname/port) before it's ever stored, and never gets interpolated into a
-shell command.
-
-### 7.1 DeploymentTarget vs. HostingProvider vs. DeploymentAdapter
-
-Three concepts that look similar are kept deliberately separate, because
-conflating them is what makes a deployment system unmaintainable once a
-second real adapter shows up:
-
-| Concept | Answers | Example |
-|---|---|---|
-| **HostingProvider** | *Provisions infrastructure* — creates the account/server/instance to begin with. | `hostingProvider.createAccount()` in `fulfillOrder()` calls out to a hosting reseller API and gets back a `HostingAccount`. |
-| **DeploymentTarget** | *Where* a deployment runs — a concrete, addressable destination. | A customer's own server (hostname/port/credentials), a `HostingAccount` the platform just provisioned, or the shared `MOCK` demo target. Always a `DeploymentTarget` row; `type` is `CUSTOMER_SERVER \| PLATFORM_HOSTING \| MANAGED \| MOCK`. |
-| **DeploymentAdapter** | *How* to install onto a target — the mechanics of connecting and running commands. | `MockDeploymentProvider` today; `SSHAdapter`/`CPanelAdapter`/`PleskAdapter`/`DockerAdapter`/`CloudProviderAdapter` later, chosen by `DeploymentTarget.provider` via `deploymentAdapterRegistry.resolve(provider)`. |
-
-A `DeploymentTarget` can exist without ever having been through
-`HostingProvider` (a customer's own server), and a `HostingAccount` from
-`HostingProvider` always gets wrapped in a `DeploymentTarget` before a
-deployment can reference it — the pipeline only ever talks to
-`DeploymentTarget` + `DeploymentAdapter`, never to `HostingProvider`
-directly.
-
-```ts
-interface DeploymentProviderAdapter {
-  key: string;
-  validateTarget(target): Promise<ValidationResult>;
-  prepareEnvironment(target, spec): Promise<void>;
-  deploy(target, spec, artifact): Promise<DeployResult>;
-  configureEnvironment(target, envVars): Promise<void>;
-  configureDomain(target, domain): Promise<void>;
-  configureSSL(target, domain): Promise<void>;
-  runMigrations(target, spec): Promise<void>;
-  runHealthCheck(target, spec): Promise<HealthCheckResult>;
-  rollback(target, previousDeployment): Promise<void>;
-  getStatus(target): Promise<TargetStatus>;
-  destroy(target): Promise<void>;
-}
-```
-
-`DeploymentAdapterRegistry` (`lib/providers/deployment/registry.ts`) is the
-single place new adapter keys get registered; every key currently resolves
-to `MockDeploymentProvider`, so registering a real `SSHAdapter` later is a
-one-line change in the registry, not a rewrite of the pipeline or the
-worker.
-
-### 7.2 Retry classification & customer action
-
-`isTransientError()` (`lib/queue/deploymentWorker.ts`) distinguishes two
-failure kinds so a broken customer server config is never retried forever:
-
-- **Transient** (network blip, target momentarily unreachable) → BullMQ
-  retries the job with backoff (`attempts: 3`).
-- **Configuration** (`DeploymentConfigurationError` — bad hostname/
-  credentials, missing required service, health check never passes) →
-  `Deployment.status` moves to `NEEDS_CUSTOMER_ACTION` and the job is not
-  retried; the customer sees what needs fixing and can re-submit a
-  corrected `DeploymentTarget`.
-
-`Deployment.rollback` (admin action, `previousDeploymentId` self-relation)
-calls the adapter's `rollback()` against the last known-good deployment for
-the same target rather than attempting to reconstruct one from scratch.
-
-## 8. Domain Architecture
-
-Domain registration and renewal are purchases like any other, not a
-special-cased side effect of checkout — both flow through the same
-Order → Payment → `fulfillOrder()` pipeline described in §7, keyed off a
-`DomainOrder` ledger row rather than acting on the registrar immediately.
-
-```
-Customer requests REGISTER or RENEW
-  → initiateDomainOrder()       checks availability (REGISTER) or ownership
-                                 (RENEW), gets a price quote from the
-                                 registrar adapter, creates an Order +
-                                 OrderItem(DOMAIN) + DomainOrder (PENDING)
-  → payment provider checkout    same createPayment()/authorizationUrl flow
-                                 as an application purchase
-  → payment confirmed            markOrderPaid() (idempotent, validated)
-  → fulfillOrder()
-      → processDomainOrders()    for every PENDING DomainOrder on this
-                                 order: calls registerDomain()/renewDomain()
-                                 on the registrar adapter, creates/updates
-                                 the Domain row, marks the DomainOrder
-                                 COMPLETED or FAILED, notifies the customer
-                                 either way — never silently drops a failure
-```
-
-`processDomainOrders()` runs unconditionally at the top of `fulfillOrder()`
-(before the application-license/deployment logic), so a domain-only order
-(a standalone registration or a renewal) is fulfilled correctly even though
-it has no associated application — and a combined "app + domain" checkout
-still gets its `Domain` row created before the `DeploymentTarget` that
-references it is built.
-
-### 8.1 DomainProvider pricing and statefulness
-
-`DomainProvider.getPricingQuote(domain, years, action)` (added alongside the
-interface's existing search/register/renew/transfer/DNS methods) is what
-`initiateDomainOrder()` calls to price an order before creating it — pricing
-is never hardcoded at the call site.
-
-`MockDomainProvider` keeps in-memory state (module-level `Map`s, the same
-pattern as `MockPaymentProvider`'s transaction store) so a domain it has
-registered is reported unavailable on a later `checkAvailability()` call and
-`getDomainDetails()` reflects what was actually registered, instead of fixed
-canned data. That state is per-process, though — the web server and the
-worker process each get their own instance — so `renewDomain(domain, years,
-currentExpiresAt?)` accepts the domain's current expiry as an optional third
-argument; callers always pass what our own `Domain.expiresAt` column says
-(the real source of truth for "when does this expire"), so a renewal
-triggered from the worker process still extends from the correct date even
-though the worker's mock instance never saw the original registration.
-
-### 8.2 DNS record management
-
-`lib/services/dns-records.ts` validates a record's shape against its `type`
-(`dnsRecordSchema`, a zod `superRefine` — an `A` record's value must be an
-IPv4 address, `MX`/`SRV` require a priority, etc.) before it's ever sent to
-`DomainProvider.createDNSRecord()` or persisted as a `DNSRecord` row. Both
-the admin domain detail page and the customer's own domain detail page use
-the same service and the same add/delete UI, scoped by ownership
-(`requireUser()` + `customerId` check) on the customer side and by
-`PERMISSIONS.DOMAINS_MANAGE` on the admin side.
-
-### 8.3 Renewal notification scheduler
-
-`runDomainRenewalSweep()` (`lib/services/domain-renewal-scheduler.ts`) is
-the first *repeating* job in the codebase — every other queue (the
-deployment pipeline) is triggered once per event, never on a schedule. It's
-driven by a BullMQ job scheduler (`lib/queue/domainRenewalQueue.ts`,
-`Queue.upsertJobScheduler`, daily) processed by a dedicated worker
-(`lib/queue/domainRenewalWorker.ts`), both started from `scripts/worker.ts`
-alongside the deployment worker. The sweep function itself is exported
-standalone — callable directly (a test, a manual admin trigger) the same way
-`processDeploymentPipeline` is, not only reachable through the queue.
-
-Each run:
-
-1. Reads the configurable threshold days from `NotificationSchedule`
-   (key `"domain.expiry"`, e.g. `[30, 14, 7, 3, 1]`), falling back to that
-   same default if the row is missing.
-2. Scans `Domain` rows expiring within the widest configured window.
-3. A domain past its expiry with no successful renewal is flipped to
-   `EXPIRED` and the customer is notified.
-4. A domain with `autoRenew: true` inside a short trigger window (3 days)
-   is renewed automatically: the registrar adapter is called, the
-   `Domain`/`DomainOrder`/`RenewalEvent` rows are updated, and the customer
-   is notified either of the successful auto-renewal or (if the registrar
-   call fails) that they need to renew manually — auto-renew failing closed
-   rather than silently doing nothing.
-5. A domain with `autoRenew: false` gets a reminder notification on each
-   day that exactly matches a configured threshold.
-
-`RenewalEvent` (`referenceType: "DOMAIN"`) is the durable record of where a
-given domain is in this cycle (`UPCOMING` → `SUCCEEDED`/`FAILED`). The model
-is generalized (`referenceType: DOMAIN | HOSTING | SUBSCRIPTION`) for exactly
-this reuse; hosting's own renewal (§9) ended up not needing it, since
-`Subscription.status` alone already carries the state a hosting renewal
-cares about — see §9 for why.
-
-## 9. Hosting Architecture
-
-Hosting bills differently from domains: there's no "opt in to auto-renew"
-choice to make, because there's nothing to remind the customer to do — an
-`ACTIVE` `Subscription` simply bills every cycle until the customer cancels
-it. So where domain renewal (§8.3) branches on a reminder-vs-auto-renew
-decision, hosting renewal is one path: charge, and roll the period forward.
-
-```
-Customer requests an upgrade/downgrade or cancellation
-  → changeHostingPlan() / terminateHostingAccount()  (lib/services/hosting-accounts.ts)
-      calls the adapter's upgradePlan()/downgradePlan()/deleteAccount(),
-      updates HostingAccount, re-prices or cancels the linked Subscription,
-      audit-logs and notifies the customer -- takes effect immediately, at
-      the new price starting the next billing cycle (no proration)
-
-runHostingRenewalSweep()   (the platform's own daily job, not customer-initiated)
-  → finds HOSTING Subscriptions whose nextBillingDate has arrived
-  → ACTIVE, due now         charges through the same createOrder() +
-                             markOrderPaid() any other purchase uses (so a
-                             hosting renewal gets a real Order, Payment, and
-                             Invoice, not a synthetic side effect), then
-                             rolls currentPeriodStart/End and
-                             nextBillingDate forward one month
-  → PAST_DUE, still fresh   retried the same way -- recovers to ACTIVE if
-                             the charge now succeeds
-  → PAST_DUE, > 7 days      given up on: HostingAccount is suspended via
-                             the adapter and the Subscription is marked
-                             EXPIRED, rather than retried forever
-```
-
-`fulfillOrder()` creates the `Subscription` row at initial purchase time
-(alongside the `HostingAccount` it's for) — this was a real gap fixed in
-this phase: previously only seed data created that row, so a real
-`PLATFORM_HOSTING` purchase would provision a working hosting account that
-was then never billed again after the first month.
-
-Since mock billing has no real gateway to fail, `runHostingRenewalSweep`'s
-failure path (mark `PAST_DUE`, notify) exists for correctness and is
-exercised by tests, but isn't reachable through normal mock operation —
-matching how deployment health checks and domain renewals also default to
-"always succeeds" in mock mode. The PAST_DUE → suspend escalation *is*
-reachable and demonstrated: a subscription seeded already `PAST_DUE` and
-overdue gets suspended on the very first sweep.
-
-`getHostingProvider()` has the same env-var/DB-credential resolution shape
-as `getPaymentProvider()`/`getDomainProvider()` (§5, §8.1) — a real hosting
-adapter is a config change away, not a call-site rewrite. `MockHostingProvider`
-lazily registers an account it's asked to act on but never saw `createAccount()`
-called for (seed data, and any account created before this instance existed) —
-the alternative, throwing "unknown account," would make upgrade/suspend/
-downgrade fail for every seeded or cross-process account, which defeats the
-point of a demo environment. `getUsage()` is deterministic per account (a
-hash of its ID) rather than random noise on every call, so two reads of the
-same account agree, and grows slowly with account age rather than jumping
-around.
-
-## 10. Security Architecture
+## 9. Security Architecture
 
 - **Passwords**: bcrypt, cost factor 12.
-- **Sessions**: JWT, HttpOnly cookies (Auth.js default), server-side role
-  check on every protected route via middleware + per-action guards.
-- **Secrets at rest**: `lib/security/encryption.ts` — AES-256-GCM,
-  per-value random IV, auth tag verified on decrypt. Used for
-  `ProviderCredential` and `DeploymentCredential`. The encryption key comes
-  from `CREDENTIALS_ENCRYPTION_KEY` (never hardcoded); `.env.example` ships
-  a placeholder, not a real key.
-- **Structured, redacted logging**: `lib/security/logger.ts` emits JSON with
-  a deep `redactSensitive()` pass that blanks any field whose key looks like
-  a password/secret/token before it's ever written — applied to every log
-  call site (auth attempts, provider calls, deployment pipeline, webhooks).
-- **Webhook verification**: `/api/webhooks/[provider]` verifies an HMAC
-  signature (`PaymentProvider.verifyWebhookSignature`) before any payload
-  content is trusted; a frontend "payment succeeded" redirect is treated as
-  a hint, not a source of truth — `/checkout/callback` re-verifies with the
-  provider server-side before rendering success.
-- **Webhook idempotency**: the route extracts a stable event id
-  (`extractEventId()`) and inserts a `PaymentWebhookEvent` row *before*
-  acting on the payload; a duplicate delivery hits the unique constraint
-  (`provider` + `providerEventId`), is caught as a Prisma `P2002`, and is
-  acknowledged without re-processing — a provider's at-least-once retry
-  never double-issues a license or double-marks an order paid.
-- **Payment amount/currency validation**: the webhook route checks the
-  payload's amount/currency against the order before calling
-  `markOrderPaid()` (409 on mismatch), and `markOrderPaid()` itself
-  re-validates the same thing as defense-in-depth — the write path never
-  trusts a single caller to have checked correctly.
-- **Deployment target validation**: `deploymentTargetSchema` (zod) allowlists
-  hostname format and port range before a customer-supplied target is ever
-  stored or reaches the deployment pipeline, closing the SSRF/command-
-  injection surface at the boundary rather than downstream.
-- **Deployment log redaction**: log messages written during the pipeline are
-  checked against a secret-shaped pattern (password/secret/private key)
-  before being persisted as `DeploymentLog` rows, on top of the general
-  `redactSensitive()` pass — a leaked credential in a provider response
-  never ends up visible to a customer or in the log table.
-- **Input validation**: Zod schemas on every server action and route
-  handler; Prisma parameterizes all queries (no raw SQL in the codebase).
-- **Audit log**: `recordAuditLog()` called from every admin mutation
-  (price changes, status changes, refunds, staff/permission changes,
-  provider credential updates) — never logs the credential value itself.
-- **RBAC enforcement** happens server-side in every server action, not just
-  in the UI (`requirePermission`/`requireRole` at the top of each action).
+- **Sessions**: JWT, HttpOnly cookies (Auth.js default); every `/app/*` and
+  `/super/*` request is guarded by `proxy.ts` and then by a
+  `requirePermission()`/`requireSuperAdmin()` call in the page/action
+  itself.
+- **Hotel isolation**: see §4 — the load-bearing guarantee is "hotelId
+  always comes from the session," not client input.
+- **Input validation**: Zod schemas on every server action; Prisma
+  parameterizes all queries.
+- **Audit log**: `recordAuditLog()` (hotel-scoped, or `hotelId: null` for a
+  platform-level Super Admin action) called from every meaningful mutation
+  — reservation created/cancelled/checked-in/checked-out, payment recorded,
+  room status changed, expense recorded, staff/permission changes, hotel
+  subscription changes.
+- **Invoice access**: `/api/invoices/[id]/pdf` requires
+  `PERMISSIONS.INVOICES_VIEW` and looks the invoice up scoped to the
+  caller's `hotelId` — a valid invoice id from a different hotel resolves
+  to "not found," not the PDF (verified live: see the isolation check in
+  §4's test, and the same pattern manually verified against the running
+  app).
+- **Secrets**: `AUTH_SECRET` from the environment, never hardcoded;
+  `.env.example` ships placeholders only.
 
-## 11. UI/UX Architecture
+## 10. UI/UX Architecture
 
 - A small token layer in `globals.css` (`--background`, `--surface`,
-  `--accent`, status colors) drives every component — one accent color
-  (`#4338ca`), neutral surfaces, no gradients, restrained radius/shadow.
+  `--accent`, status colors) drives every component — one accent color, no
+  gradients, restrained radius/shadow, a professional icon set (lucide-react,
+  no emoji).
 - `components/ui/*` are the shared primitives (Button, Card, Badge, Input,
-  StatusBadge, EmptyState) reused across marketing, dashboard, and admin —
-  the same visual language everywhere rather than three separate designs.
+  StatusBadge, EmptyState, Pagination) reused across the hotel app and the
+  Super Admin console.
 - `StatusBadge` centralizes color/label mapping for every enum in the
-  system (order, payment, deployment, domain, ticket, license...) so a
-  status never renders inconsistently between pages.
-- Deployment progress uses the same timeline component in both the customer
-  and admin views (admin additionally sees technical logs).
-- Loading/empty states: `EmptyState` component used wherever a list can be
-  legitimately empty (no orders yet, no tickets, etc.) instead of a blank
-  table.
+  system (reservation, room, payment, invoice, housekeeping, maintenance,
+  hotel, employment status) so a status never renders inconsistently
+  between pages.
+- Real charts (`components/charts/*`, recharts) for revenue, occupancy,
+  bookings, and room-status breakdown — driven by the services in §7, never
+  static/sample data.
+- Loading/empty states: `EmptyState` used wherever a list can legitimately
+  be empty (no reservations yet, no housekeeping tasks, ...).
 
-## 12. Phased Plan
+## 11. What's Deliberately Not Built Yet
 
-**Phase 1 — Foundation (delivered).** Project setup, full schema, auth +
-RBAC, admin dashboard, customer dashboard, marketplace + detail pages,
-application CRUD, checkout, orders, invoices, and an initial mock-first
-deployment pipeline.
+Per the platform's own "future features" scope, the architecture is shaped
+to add these without a rewrite, but they are not implemented:
 
-**Phase 2 — Payments, Billing & Commercial Foundation (delivered).**
-`PaymentProvider` interface extended with `capabilities`, `getTransaction`,
-and optional `createCustomer`/`createSubscription`/`cancelSubscription`;
-webhook idempotency (`PaymentWebhookEvent`) and amount/currency validation;
-order items preserve historical pricing; PDF invoice generation and
-download endpoint; subscription lifecycle (`currentPeriodStart/End`,
-`RenewalEvent`) with a customer subscriptions page and an admin cancel
-action. Remaining: additional payment adapters (Stripe/Flutterwave) behind
-the same interface, a scheduled renewal-charge cron (`RenewalEvent` rows are
-created and readable today but nothing yet fires them automatically), and a
-dedicated refunds queue/report beyond the current admin action.
-
-**Phase 3 — Application Versioning & Deployment Foundation (delivered).**
-`ApplicationVersion` split from `DeploymentSpecification` and
-`ApplicationArtifact` (§2.1); `DeploymentTarget` as a distinct "where" entity
-kept separate from `HostingProvider` and `DeploymentAdapter` (§7.1);
-`DeploymentAdapterRegistry` with the expanded adapter interface
-(validate/prepare/deploy/configure/migrate/health-check/rollback/destroy);
-expanded `DeploymentStatus` enum with a simplified customer timeline vs.
-detailed admin view; transient-vs-configuration error classification
-(`NEEDS_CUSTOMER_ACTION`, never endlessly retried); deployment only reaches
-`COMPLETED` after a real health check passes; customer "Deploy Your
-Application" flow; admin retry/cancel/rollback actions; deployment log
-secret redaction; audit logging of version/deployment actions. Remaining:
-real adapters (`SSHAdapter`, `CPanelAdapter`, `PleskAdapter`,
-`DockerAdapter`, `CloudProviderAdapter`) implementing
-`DeploymentProviderAdapter` — the registry and pipeline are already shaped
-to accept them without further changes; scheduled health-check re-runs
-(currently only run once per deployment, at completion).
-
-**Phase 4 — Domains (delivered).** Registration and renewal both flow
-through the same Order/Payment/`fulfillOrder()` pipeline as any other
-purchase via a `DomainOrder` ledger (§8); `DomainProvider` gained a pricing
-quote method and `MockDomainProvider` gained real in-memory state so
-registered domains are reflected in later availability/detail calls; DNS
-record management (add/delete, type-aware validation) on both the admin and
-customer domain detail pages; the renewal notification scheduler
-(`runDomainRenewalSweep`, §8.3) — the first repeating BullMQ job in the
-codebase — reminds customers, auto-renews opted-in domains, and expires
-lapsed ones, using the `NotificationSchedule` and `RenewalEvent` models that
-were previously unused schema. Remaining: a real registrar adapter (the
-`DOMAIN_PROVIDER` env var is wired in `getDomainProvider()`, same shape as
-payments, ready for one) and a purchasable domain transfer flow (the
-`transferDomain` provider method and `DomainAction.TRANSFER` enum value
-exist; nothing enqueues one yet).
-
-**Phase 5 — Hosting (delivered).** Upgrade/downgrade/suspend/terminate on
-both the admin and customer hosting detail pages, backed by
-`lib/services/hosting-accounts.ts`; `MockHostingProvider` gained real
-per-account state (upgrade/downgrade persist, usage is deterministic
-instead of random); `getHostingProvider()` has the same env-var/DB-credential
-resolution shape as payments/domains. `fulfillOrder()` now creates the
-`Subscription` row a hosting purchase needs for recurring billing (a real
-gap — previously only seed data created it). `runHostingRenewalSweep`
-(§9) — the second repeating job in the codebase — bills due subscriptions
-through the normal Order/Payment/Invoice pipeline and suspends accounts
-whose billing has been failing too long. Remaining: a real hosting adapter
-(the seam is wired, same as domains); admin plan CRUD (plans are still
-seed-only — no create/edit UI); a standalone "buy hosting without an app"
-purchase flow (today a `HostingPlan` is only purchasable as part of an
-application checkout with `PLATFORM_HOSTING` selected, so the marketing
-hosting page's plan cards link to the app catalog rather than a direct
-purchase).
-
-**Phase 6 — Business Operations (delivered).** Support ticketing and
-settings were already delivered in earlier phases. Coupons, quotes, and
-bundles — previously schema-only despite an earlier note claiming coupons
-were delivered — now have full application code: `lib/services/coupons.ts`
-(`validateCoupon`/`incrementCouponUsage`, percent-or-fixed, capped at the
-order subtotal, checked against active window and usage limit) wired into
-checkout (`couponCode` on both the app and bundle checkout forms) and
-`createOrder()`, with admin CRUD at `/admin/coupons`.
-`lib/services/customization-requests.ts` and `lib/services/quotes.ts`
-implement the full custom-work flow: a customer submits a
-`CustomizationRequest` (`/dashboard/quotes/new`), staff move it through
-SUBMITTED → REVIEWING and price it into a `Quote` with line items
-(`/admin/quotes/requests/[id]`), the customer accepts or declines
-(`/dashboard/quotes/[id]`), and acceptance creates an Order the same way any
-other purchase does — the quote only flips to ACCEPTED and the request to
-CONVERTED once `fulfillOrder()` confirms payment (`processQuoteOrder()`,
-mirroring the `DomainOrder`/`processDomainOrders()` ledger pattern from
-Phase 4), never on accept-intent alone. `lib/services/bundles.ts` adds admin
-bundle CRUD (`/admin/bundles`, items typed APPLICATION/HOSTING_PLAN/
-DOMAIN/SERVICE), a marketing listing and detail page (`/bundles`), and a
-checkout entry point (`/checkout/bundle/[slug]`) that creates an order with
-a single BUNDLE-type line item at the bundle's flat price; `markOrderPaid()`
-issues a real `ApplicationLicense` for each APPLICATION-type `BundleItem`
-once that order is paid, the same as buying each app individually. Remaining:
-a renewal-style notification cron for quotes nearing `expiresAt` (today a
-quote simply becomes un-acceptable once expired — no reminder is sent
-beforehand); domain/hosting-type bundle items are modeled and priceable but
-not yet auto-fulfilled the way application items are (they still require
-manual follow-up, same as a domain or hosting item on a custom quote).
-
-**Phase 7 — Advanced.** In-app upgrade flow for a customer moving between
-already-published `ApplicationVersion`s (creating new versions and
-publishing them is delivered — see §2.1 — a customer-initiated "upgrade my
-running deployment" action is not), license online-verification endpoint,
-developer marketplace + revenue share (`RoleKey.DEVELOPER` seeded,
-`Application.createdById` present), uptime monitoring beyond the single
-post-deploy health check.
-
-## 13. Local Development
-
-```bash
-cp .env.example .env            # fill in DATABASE_URL / REDIS_URL for local services
-npx prisma migrate dev
-npm run db:seed
-npm run dev                     # web app on :3000
-npm run worker                  # separate terminal: deployment pipeline worker
-npm test                        # vitest — unit tests plus DB-backed integration
-                                 # tests (tests/integration/*) run against your
-                                 # local Postgres/Redis, same as `npm run dev`
-npm run test:e2e-smoke          # Playwright: full customer journey against a running dev server
-```
-
-Demo accounts (seeded, password `Passw0rd!` for all): `admin@bridgecodes.example`
-(Super Admin), `ops@bridgecodes.example` (Staff), `sarah@brightretail.com` /
-`david@northgaterealty.com` / `grace@clinicly.example` (Customers).
-
-Everything runs against mock providers out of the box — no real payment,
-domain, or hosting credentials required. Setting `PAYMENT_PROVIDER=paystack`
-plus `PAYSTACK_SECRET_KEY` (or saving the credential from Admin → Providers)
-activates the real Paystack adapter without any code change.
+- Real email/SMS/WhatsApp delivery for notifications (today: real, functional
+  in-app notifications only — `NotificationChannel` already models the other
+  channels).
+- A public booking engine / guest-facing website (online bookings can be
+  entered by staff today via `ReservationSource.ONLINE`; there's no
+  unauthenticated booking flow).
+- Payment gateway integration (payments are recorded by staff against a
+  method, e.g. card/POS/bank transfer; there's no online payment capture).
+- Restaurant/Bar POS, inventory, and laundry management as first-class
+  modules (`AdditionalCharge` already models restaurant/bar/laundry/mini-bar
+  charges against a stay, but not standalone POS/inventory systems).
+- OTA/channel manager integrations (Booking.com, Airbnb).
+- A cross-hotel rollup dashboard for group owners (the data model supports
+  it — §8 — the UI does not exist yet).
