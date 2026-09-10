@@ -39,6 +39,10 @@ import {
   UserCheck,
   TrendingUp,
   Upload,
+  Database,
+  Download,
+  History,
+  FileSpreadsheet,
 } from "lucide-react";
 import { SchoolLogo } from "@/components/brand/school-logo";
 import { PERMISSIONS, type PermissionKey } from "@/lib/permissions";
@@ -181,6 +185,18 @@ const NAV: DashboardNavItem[] = [
     children: [
       { href: "/dashboard/announcements", label: "Announcements", icon: Megaphone, requiredPermission: PERMISSIONS.ANNOUNCEMENTS_VIEW },
       { href: "/dashboard/messages", label: "Messages", icon: MessageSquare, requiredPermission: PERMISSIONS.MESSAGES_VIEW },
+    ],
+  },
+  {
+    label: "Data Management",
+    icon: Database,
+    requiredAnyPermission: [PERMISSIONS.DATA_IMPORT, PERMISSIONS.DATA_EXPORT],
+    children: [
+      { href: "/dashboard/data", label: "Overview", icon: Database },
+      { href: "/dashboard/data/import", label: "Import Data", icon: Upload, requiredPermission: PERMISSIONS.DATA_IMPORT },
+      { href: "/dashboard/data/export", label: "Export Data", icon: Download, requiredPermission: PERMISSIONS.DATA_EXPORT },
+      { href: "/dashboard/data/history", label: "Import History", icon: History, requiredPermission: PERMISSIONS.DATA_IMPORT },
+      { href: "/dashboard/data/templates", label: "Download Templates", icon: FileSpreadsheet, requiredPermission: PERMISSIONS.DATA_EXPORT },
     ],
   },
   { href: "/dashboard/assistant", label: "Schoolum AI", icon: Sparkles, requiredPermission: PERMISSIONS.ASSISTANT_USE },

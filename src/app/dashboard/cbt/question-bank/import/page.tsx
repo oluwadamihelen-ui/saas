@@ -2,10 +2,7 @@ import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ImportForm } from "./import-form";
-
-const TEMPLATE_HEADER = "subjectcode,type,difficulty,topic,prompt,marks,option1,option1correct,option2,option2correct,option3,option3correct,option4,option4correct,explanation";
-const TEMPLATE_EXAMPLE =
-  'MTH,MULTIPLE_CHOICE,EASY,Fractions,"What is 1/2 + 1/4?",1,1/4,false,3/4,true,1/2,false,1,false,"Add the fractions using a common denominator."';
+import { CBT_IMPORT_TEMPLATE_HEADER as TEMPLATE_HEADER, CBT_IMPORT_TEMPLATE_EXAMPLE as TEMPLATE_EXAMPLE } from "@/lib/services/import-templates";
 
 export default async function ImportQuestionsPage() {
   await requirePermission(PERMISSIONS.CBT_MANAGE_QUESTION_BANK);
@@ -32,6 +29,9 @@ export default async function ImportQuestionsPage() {
             Only MULTIPLE_CHOICE, MULTIPLE_SELECT and TRUE_FALSE are supported via import — use the question form for essay,
             matching, ordering, short answer or fill-in-the-blank questions.
           </p>
+          <a href="/api/data/templates/cbt-questions" className="mt-3 inline-block text-xs text-accent hover:underline">
+            Download this as a CSV template &rarr;
+          </a>
         </CardContent>
       </Card>
 

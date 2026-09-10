@@ -3,11 +3,7 @@ import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { StudentImportForm } from "./import-form";
-
-const TEMPLATE_HEADER =
-  "admissionNumber,firstName,lastName,otherNames,gender,dateOfBirth,className,address,city,state,bloodGroup,emergencyContact,allergies,medicalNotes,guardianFirstName,guardianLastName,guardianPhone,guardianEmail,guardianRelationship";
-const TEMPLATE_EXAMPLE =
-  '2023-0014,Amaka,Okafor,,FEMALE,2015-03-12,"Primary 4 A","12 Ikorodu Road",Lagos,Lagos,O+,08012345678,None,,Chidi,Okafor,08087654321,chidi.okafor@example.com,FATHER';
+import { STUDENT_IMPORT_TEMPLATE_HEADER as TEMPLATE_HEADER, STUDENT_IMPORT_TEMPLATE_EXAMPLE as TEMPLATE_EXAMPLE } from "@/lib/services/import-templates";
 
 export default async function ImportStudentsPage() {
   await requirePermission(PERMISSIONS.STUDENTS_CREATE);
@@ -42,6 +38,9 @@ export default async function ImportStudentsPage() {
             <li>gender is MALE, FEMALE, or blank. dateOfBirth uses YYYY-MM-DD.</li>
             <li>A guardian is only created for a row if guardianFirstName, guardianLastName and guardianPhone are all filled in.</li>
           </ul>
+          <a href="/api/data/templates/students" className="mt-3 inline-block text-xs text-accent hover:underline">
+            Download this as a CSV template &rarr;
+          </a>
         </CardContent>
       </Card>
 

@@ -5,9 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { listTerms, listSubjects, listClassArms } from "@/lib/services/academics";
 import { listAssessmentComponents } from "@/lib/services/results";
 import { ResultsImportForm } from "./import-form";
-
-const TEMPLATE_HEADER = "sessionName,termName,className,admissionNumber,subjectCode,componentName,score";
-const TEMPLATE_EXAMPLE = '2025/2026,First Term,"JSS 2 A",2023-0014,MTH,CA1,18';
+import { RESULTS_IMPORT_TEMPLATE_HEADER as TEMPLATE_HEADER, RESULTS_IMPORT_TEMPLATE_EXAMPLE as TEMPLATE_EXAMPLE } from "@/lib/services/import-templates";
 
 export default async function ImportResultsPage() {
   const user = await requirePermission(PERMISSIONS.RESULTS_ENTER);
@@ -52,6 +50,9 @@ export default async function ImportResultsPage() {
             blank, the score still imports, but with no historical class on record (Schoolum never guesses a historical class from a
             student&apos;s current class, since that could misattribute results for any student who has since changed class).
           </p>
+          <a href="/api/data/templates/results" className="mt-3 inline-block text-xs text-accent hover:underline">
+            Download this as a CSV template &rarr;
+          </a>
         </CardContent>
       </Card>
 
