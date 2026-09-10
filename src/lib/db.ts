@@ -14,10 +14,26 @@ import { PrismaClient } from "@/generated/prisma/client";
 /// explicitly bypasses that broken auto-detection. Runs once per cold
 /// start; a no-op if the var is already set or the directory can't be
 /// read (falls back to Prisma's own detection, same as before).
+///
+/// The generated directory can hold engines for more than one platform
+/// at once (this schema's binaryTargets lists both "native" and
+/// "rhel-openssl-3.0.x", so a local Windows/macOS dev install and a
+/// Linux deploy target sit side by side) — the filename's extension is
+/// platform-specific (.dll.node / .dylib.node / .so.node), so matching
+/// on that picks the one this process can actually load instead of
+/// whichever sorts first.
+const ENGINE_EXTENSION_BY_PLATFORM: Partial<Record<NodeJS.Platform, string>> = {
+  win32: ".dll.node",
+  darwin: ".dylib.node",
+  linux: ".so.node",
+};
 if (!process.env.PRISMA_QUERY_ENGINE_LIBRARY) {
   try {
     const generatedDir = path.join(process.cwd(), "src/generated/prisma");
-    const engineFile = fs.readdirSync(generatedDir).find((f) => f.startsWith("libquery_engine-") && f.endsWith(".node"));
+    const wantExtension = ENGINE_EXTENSION_BY_PLATFORM[process.platform];
+    const engineFile = fs
+      .readdirSync(generatedDir)
+      .find((f) => f.includes("query_engine") && (wantExtension ? f.endsWith(wantExtension) : f.endsWith(".node")));
     if (engineFile) process.env.PRISMA_QUERY_ENGINE_LIBRARY = path.join(generatedDir, engineFile);
   } catch {
     // Leave Prisma's own detection to run (and potentially fail) as before.
