@@ -1,47 +1,54 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
 
-const FOOTER_LINKS = {
-  Product: [
-    { href: "/apps", label: "Applications" },
-    { href: "/categories", label: "Categories" },
-    { href: "/pricing", label: "Pricing" },
-    { href: "/services", label: "Services" },
-  ],
-  Infrastructure: [
-    { href: "/domains", label: "Domains" },
-    { href: "/hosting", label: "Hosting" },
-  ],
-  Company: [
-    { href: "/about", label: "About" },
-    { href: "/contact", label: "Contact" },
-  ],
-  Legal: [
-    { href: "/legal/terms", label: "Terms of Service" },
-    { href: "/legal/privacy", label: "Privacy Policy" },
-    { href: "/legal/refunds", label: "Refund Policy" },
-    { href: "/legal/acceptable-use", label: "Acceptable Use" },
-  ],
-};
+const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
+  {
+    title: "Product",
+    links: [
+      { label: "Features", href: "#features" },
+      { label: "Solutions", href: "#why-schoolum" },
+      { label: "Pricing", href: "/pricing" },
+    ],
+  },
+  {
+    title: "Company",
+    links: [
+      { label: "About", href: "/about" },
+      { label: "Contact", href: "/contact" },
+    ],
+  },
+  {
+    title: "Support",
+    links: [
+      { label: "Help Center", href: "/help" },
+      { label: "Documentation", href: "/docs" },
+    ],
+  },
+  {
+    title: "Legal",
+    links: [
+      { label: "Privacy Policy", href: "/privacy" },
+      { label: "Terms of Service", href: "/terms" },
+    ],
+  },
+];
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-border bg-surface">
-      <div className="container-shell grid grid-cols-2 gap-8 py-14 md:grid-cols-5">
-        <div className="col-span-2 space-y-3">
-          <Logo height={28} />
-          <p className="max-w-xs text-sm text-muted">
-            Ready-to-launch software, deployment and infrastructure — delivered as one managed service.
-          </p>
+    <footer className="bg-foreground">
+      <div className="container-shell grid grid-cols-2 gap-10 py-14 sm:grid-cols-3 lg:grid-cols-6 lg:py-16">
+        <div className="col-span-2 lg:col-span-2">
+          <Logo height={28} variant="light" />
+          <p className="mt-4 max-w-xs text-sm text-white/60">Modern school management made simple.</p>
         </div>
 
-        {Object.entries(FOOTER_LINKS).map(([heading, links]) => (
-          <div key={heading}>
-            <p className="text-sm font-semibold text-foreground">{heading}</p>
-            <ul className="mt-3 space-y-2">
-              {links.map((link) => (
-                <li key={link.href}>
-                  <Link href={link.href} className="text-sm text-muted hover:text-foreground">
+        {COLUMNS.map((column) => (
+          <div key={column.title}>
+            <p className="text-sm font-semibold text-white">{column.title}</p>
+            <ul className="mt-4 space-y-3">
+              {column.links.map((link) => (
+                <li key={link.label}>
+                  <Link href={link.href} className="text-sm text-white/60 transition-colors hover:text-white">
                     {link.label}
                   </Link>
                 </li>
@@ -50,10 +57,12 @@ export function SiteFooter() {
           </div>
         ))}
       </div>
-      <div className="border-t border-border py-6">
-        <p className="container-shell text-xs text-muted">
-          © {new Date().getFullYear()} BridgeCodes, Inc. All rights reserved.
-        </p>
+
+      <div className="border-t border-white/10">
+        <div className="container-shell flex flex-col items-center justify-between gap-3 py-6 text-xs text-white/50 sm:flex-row">
+          <p>&copy; {new Date().getFullYear()} Schoolum. All rights reserved.</p>
+          <p>Built for schools across Africa.</p>
+        </div>
       </div>
     </footer>
   );
