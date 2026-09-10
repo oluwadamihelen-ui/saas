@@ -79,7 +79,7 @@ export function LectureForm({
   }
 
   return (
-    <form action={formAction} className="space-y-8" encType="multipart/form-data">
+    <form action={formAction} className="space-y-8">
       <input type="hidden" name="resourceKeys" value={resources.map((r) => r.key).join(",")} />
 
       <section className="space-y-4">

@@ -16,7 +16,7 @@ export function BrandingForm({ school }: { school: { name: string; logoUrl: stri
   const router = useRouter();
 
   return (
-    <form action={formAction} className="space-y-4" encType="multipart/form-data">
+    <form action={formAction} className="space-y-4">
       <div className="space-y-1.5">
         <Label>Current logo</Label>
         <div className="flex items-center gap-4">

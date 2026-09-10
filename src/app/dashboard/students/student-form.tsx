@@ -52,7 +52,7 @@ export function StudentForm({
   const studentName = `${defaults?.firstName ?? ""} ${defaults?.lastName ?? ""}`.trim() || "Student";
 
   return (
-    <form action={formAction} className="space-y-8" encType="multipart/form-data">
+    <form action={formAction} className="space-y-8">
       <section className="space-y-4">
         <h3 className="text-sm font-semibold text-foreground">Personal information</h3>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
