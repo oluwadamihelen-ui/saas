@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission, requireSchoolUser } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { submitFeedback, markFeedbackReviewed } from "@/lib/services/feedback";
+import { notifyNewFeedback } from "@/lib/services/notifications";
 
 export interface FeedbackFormState {
   status: "idle" | "error" | "success";
@@ -22,7 +23,8 @@ export async function submitFeedbackAction(_prev: FeedbackFormState, formData: F
   const parsed = submitSchema.safeParse({ message: formData.get("message") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
 
-  await submitFeedback(user.schoolId, user.id, parsed.data.message);
+  const feedback = await submitFeedback(user.schoolId, user.id, parsed.data.message);
+  await notifyNewFeedback(user.schoolId, feedback.id, user.id);
   revalidatePath("/dashboard/administration/feedback");
   revalidatePath("/portal/parent/feedback");
   revalidatePath("/portal/student/feedback");

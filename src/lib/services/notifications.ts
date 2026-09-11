@@ -151,6 +151,36 @@ export async function notifyNewMessage(schoolId: string, conversationId: string,
   ]);
 }
 
+/// submittedById is excluded from recipients (the rare case of a staff
+/// member who both submits feedback and holds feedback.view shouldn't
+/// notify themselves). Recipients are whoever currently holds
+/// feedback.view for this school — same "whoever has the permission
+/// right now" pattern as notifyNewMessage's staff inbox, not a fixed
+/// assigned reviewer.
+export async function notifyNewFeedback(schoolId: string, feedbackId: string, submittedById: string) {
+  const feedback = await prisma.feedback.findFirst({
+    where: { schoolId, id: feedbackId },
+    include: { submittedBy: true },
+  });
+  if (!feedback) return;
+
+  const staffWithAccess = await prisma.user.findMany({
+    where: { schoolId, role: { rolePermissions: { some: { permission: { key: "feedback.view" } } } } },
+    select: { id: true },
+  });
+  const recipientIds = staffWithAccess.map((s) => s.id).filter((id) => id !== submittedById);
+
+  const preview = feedback.message.length > 140 ? `${feedback.message.slice(0, 140)}…` : feedback.message;
+  await notifyRecipients(
+    schoolId,
+    recipientIds,
+    "FEEDBACK_SUBMITTED",
+    `New feedback from ${feedback.submittedBy.name}`,
+    preview,
+    "/dashboard/administration/feedback"
+  );
+}
+
 export async function notifyAttendanceAbsent(schoolId: string, studentId: string, date: Date) {
   const recipients = await studentAndGuardianUserIds(schoolId, studentId);
   await notifyRecipients(
