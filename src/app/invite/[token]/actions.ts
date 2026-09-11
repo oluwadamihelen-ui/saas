@@ -5,7 +5,9 @@ import { acceptInvite } from "@/lib/services/staff";
 
 const schema = z.object({
   token: z.string().min(1),
-  name: z.string().trim().min(1, "Name is required").max(120),
+  // Only required for an ACCOUNT_INVITATION (no account yet) — a
+  // PASSWORD_SETUP invite's account already has a name, set at creation.
+  name: z.string().trim().max(120).nullish(),
   password: z.string().min(8, "Password must be at least 8 characters").max(200),
 });
 
@@ -26,7 +28,7 @@ export async function acceptStaffInvite(_prev: AcceptInviteState, formData: Form
   }
 
   try {
-    await acceptInvite(parsed.data.token, { name: parsed.data.name, password: parsed.data.password });
+    await acceptInvite(parsed.data.token, { name: parsed.data.name ?? undefined, password: parsed.data.password });
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not accept invite." };
   }

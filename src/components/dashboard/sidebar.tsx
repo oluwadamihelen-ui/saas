@@ -79,7 +79,7 @@ const NAV: DashboardNavItem[] = [
         label: "User",
         icon: Contact,
         children: [
-          { href: "/dashboard/staff", label: "Create User", icon: UserPlus, requiredPermission: PERMISSIONS.STAFF_INVITE },
+          { href: "/dashboard/staff/new", label: "Create User", icon: UserPlus, requiredPermission: PERMISSIONS.STAFF_INVITE },
           { href: "/dashboard/administration/users/reset-password", label: "Reset Password", icon: KeyRound, requiredPermission: PERMISSIONS.USERS_MANAGE },
           { href: "/dashboard/academics", label: "Assign Subject & Class", icon: BookOpen, requiredPermission: PERMISSIONS.ACADEMICS_MANAGE },
           { href: "/dashboard/administration/users", label: "All Users", icon: Users, requiredPermission: PERMISSIONS.USERS_MANAGE },
@@ -110,6 +110,7 @@ const NAV: DashboardNavItem[] = [
           { href: "/dashboard/students/import", label: "Import Students", icon: GraduationCap, requiredPermission: PERMISSIONS.STUDENTS_CREATE },
           { href: "/dashboard/results/import", label: "Import Results", icon: Award, requiredPermission: PERMISSIONS.RESULTS_ENTER },
           { href: "/dashboard/cbt/question-bank/import", label: "Import CBT Questions", icon: ListChecks, requiredPermission: PERMISSIONS.CBT_MANAGE_QUESTION_BANK },
+          { href: "/dashboard/staff/bulk", label: "Multiple Users Registration", icon: UserPlus, requiredPermission: PERMISSIONS.STAFF_INVITE },
         ],
       },
     ],

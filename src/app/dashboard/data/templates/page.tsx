@@ -1,4 +1,4 @@
-import { GraduationCap, Award, ListChecks, Download } from "lucide-react";
+import { GraduationCap, Award, ListChecks, Download, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -30,6 +30,14 @@ const TEMPLATES = [
     href: "/api/data/templates/cbt-questions",
     icon: ListChecks,
     permission: PERMISSIONS.CBT_MANAGE_QUESTION_BANK,
+  },
+  {
+    key: "staff",
+    title: "Staff",
+    description: "Columns the Multiple Users Registration importer expects — role must match one of your school's own role names.",
+    href: "/api/data/templates/staff",
+    icon: Users,
+    permission: PERMISSIONS.STAFF_INVITE,
   },
 ] as const;
 

@@ -19,6 +19,12 @@ export const CBT_IMPORT_TEMPLATE_HEADER =
 export const CBT_IMPORT_TEMPLATE_EXAMPLE =
   'MTH,MULTIPLE_CHOICE,EASY,Fractions,"What is 1/2 + 1/4?",1,1/4,false,3/4,true,1/2,false,1,false,"Add the fractions using a common denominator."';
 
+/// Matches the raw row keys lib/services/staff-import.ts's shared
+/// validator expects — the same keys whether a row came from this CSV
+/// shape or the bulk registration page's manual-entry table.
+export const STAFF_IMPORT_TEMPLATE_HEADER = "name,email,role,phone,staffid,jobtitle,department";
+export const STAFF_IMPORT_TEMPLATE_EXAMPLE = 'John Ade,john.ade@example.com,Teacher,08012345678,STAFF-014,Class Teacher,Sciences';
+
 /// Re-parses each raw example-row string above (the same text shown inline
 /// on the import pages) back into fields, then re-serializes through
 /// rowsToCsv — so quoting stays correct without a second hand-written
@@ -66,4 +72,17 @@ export async function buildCbtQuestionsTemplateCsv(schoolId: string): Promise<st
     ? [subject.code, "TRUE_FALSE", "EASY", "", "Replace this with your own question", "1", "True", "true", "False", "false", "", "", "", "", ""]
     : undefined;
   return templateCsv(CBT_IMPORT_TEMPLATE_HEADER, [CBT_IMPORT_TEMPLATE_EXAMPLE], extraRow);
+}
+
+/// role must match one of the school's own assignable role names exactly
+/// (e.g. "Teacher", "Accountant / Bursar") — the second example row uses
+/// a real one when the school has any, the same "illustrate with this
+/// school's own real setup" approach as the other templates.
+export async function buildStaffTemplateCsv(schoolId: string): Promise<string> {
+  const role = await prisma.role.findFirst({
+    where: { schoolId, key: { notIn: ["SCHOOL_OWNER", "PARENT", "STUDENT"] } },
+    orderBy: { name: "asc" },
+  });
+  const extraRow = role ? ["Mary Okafor", "mary.okafor@example.com", role.name, "", "", "", ""] : undefined;
+  return templateCsv(STAFF_IMPORT_TEMPLATE_HEADER, [STAFF_IMPORT_TEMPLATE_EXAMPLE], extraRow);
 }

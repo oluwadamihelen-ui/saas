@@ -232,6 +232,24 @@ model User {
   /// the Upcoming Birthdays feature; month/day matter, the year does not.
   dateOfBirth DateTime?
 
+  /// Staff-only fields (User Management phase 2) — always optional, and
+  /// meaningless for a PARENT/STUDENT portal account. There is no separate
+  /// Staff model in this app: a staff member is simply a User whose role
+  /// isn't PARENT/STUDENT, so these live directly on User rather than a
+  /// second table.
+  phone      String?
+  /// Unique per school when set, never globally — see the @@unique below.
+  /// Null for every portal account and for staff who haven't been given
+  /// one.
+  staffId    String?
+  jobTitle   String?
+  /// Free-text, not a relation to the (separate, unrelated) Department
+  /// model — that model only groups ClassGroups and isn't a staff concept
+  /// in this schema. A real department-management module is out of scope;
+  /// this is the simplest field that lets a school record and see one.
+  department String?
+  gender     Gender?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -239,6 +257,10 @@ model User {
   importBatches                ImportBatch[]
   classArmsLed                ClassArm[]                     @relation("ClassArmTeacher")
   invitesSent                 StaffInvite[]                  @relation("InviteSentBy")
+  /// Password-setup invites issued for this account specifically (see
+  /// StaffInvite.userId) — distinct from invitesSent (invites this user
+  /// has sent to others).
+  passwordSetupInvites        StaffInvite[]                  @relation("PasswordSetupForUser")
   teacherAssignments          TeacherAssignment[]            @relation("TeacherAssignments")
   attendanceMarked            AttendanceRecord[]             @relation("AttendanceMarkedBy")
   teacherTimetableSlots       TimetableSlot[]                @relation("TeacherTimetableSlots")
@@ -302,6 +324,12 @@ model User {
   classroomMessagesDeleted     ClassroomMessage[]   @relation("ClassroomMessageDeletedBy")
   liveClassRecordingsInitiated LiveClassRecording[] @relation("LiveClassRecordingInitiatedBy")
 
+  /// Postgres unique indexes treat NULL as distinct from every other NULL,
+  /// so any number of staff with no staffId coexist fine within a school —
+  /// this only rejects two staff in the *same* school sharing the *same*
+  /// non-null staffId. The same staffId is free to reuse in a different
+  /// school.
+  @@unique([schoolId, staffId])
   @@index([schoolId])
 }
 
@@ -359,6 +387,34 @@ enum InviteStatus {
   EXPIRED
 }
 
+/// One live (PENDING) invite per (schoolId, email) at a time — see the
+/// unique constraint below — so there is never ambiguity about which link
+/// is current. That single slot serves two distinct purposes:
+///
+/// ACCOUNT_INVITATION (userId null): the original flow — the account
+/// doesn't exist yet; accepting the link creates it (name + password
+/// collected on accept). This is the only purpose in every pre-existing
+/// invite in the system and its acceptance behavior is unchanged.
+///
+/// PASSWORD_SETUP (userId set): the account already exists (created
+/// immediately by an admin via Direct Creation, or converted from a
+/// pending ACCOUNT_INVITATION) and can't authenticate yet — see
+/// UserStatus.INVITED and auth.ts's authorize(), which already rejects
+/// any non-ACTIVE user. Accepting the link only sets a password and
+/// flips the account to ACTIVE; no new User is created.
+///
+/// Converting a pending ACCOUNT_INVITATION to Direct Creation, and
+/// regenerating a password-setup link, both reuse the SAME row (via
+/// upsertPendingInvite in lib/services/staff.ts) rather than creating a
+/// new one — the old token stops matching any row at all the moment it's
+/// overwritten, so at most one link per person is ever valid, and the
+/// (schoolId, email, status) uniqueness below never has to reason about
+/// multiple historical PENDING/REVOKED rows for the same email.
+enum InvitePurpose {
+  ACCOUNT_INVITATION
+  PASSWORD_SETUP
+}
+
 model StaffInvite {
   id       String @id @default(cuid())
   schoolId String
@@ -366,12 +422,19 @@ model StaffInvite {
 
   email       String
   roleId      String
-  role        Role         @relation(fields: [roleId], references: [id])
-  token       String       @unique
-  status      InviteStatus @default(PENDING)
+  role        Role          @relation(fields: [roleId], references: [id])
+  token       String        @unique
+  status      InviteStatus  @default(PENDING)
+  purpose     InvitePurpose @default(ACCOUNT_INVITATION)
   expiresAt   DateTime
   invitedById String
-  invitedBy   User         @relation("InviteSentBy", fields: [invitedById], references: [id])
+  invitedBy   User          @relation("InviteSentBy", fields: [invitedById], references: [id])
+
+  /// Set only for a PASSWORD_SETUP invite — the already-existing account
+  /// this link sets a password for. Null for an ACCOUNT_INVITATION, which
+  /// by definition has no account yet.
+  userId String?
+  user   User?   @relation("PasswordSetupForUser", fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
@@ -1613,6 +1676,7 @@ enum ImportDataType {
   STUDENTS
   RESULTS
   CBT_QUESTIONS
+  STAFF
 }
 
 enum ImportStatus {

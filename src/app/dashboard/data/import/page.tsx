@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { GraduationCap, Award, ListChecks } from "lucide-react";
+import { GraduationCap, Award, ListChecks, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -36,6 +36,14 @@ const IMPORT_TYPES = [
     href: "/dashboard/cbt/question-bank/import",
     icon: ListChecks,
     permission: PERMISSIONS.CBT_MANAGE_QUESTION_BANK,
+  },
+  {
+    key: "staff",
+    title: "Staff",
+    description: "Create or invite multiple staff accounts at once.",
+    href: "/dashboard/staff/bulk",
+    icon: Users,
+    permission: PERMISSIONS.STAFF_INVITE,
   },
 ] as const;
 

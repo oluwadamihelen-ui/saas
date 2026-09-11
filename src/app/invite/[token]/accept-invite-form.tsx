@@ -9,7 +9,10 @@ import { acceptStaffInvite, type AcceptInviteState } from "./actions";
 
 const initialState: AcceptInviteState = { status: "idle" };
 
-export function AcceptInviteForm({ token, email }: { token: string; email: string }) {
+export function AcceptInviteForm({ token, email, name }: { token: string; email: string; name: string | null }) {
+  // A non-null name means the account already exists (PASSWORD_SETUP) —
+  // it's shown read-only instead of collected, and never submitted.
+  const isPasswordSetup = name !== null;
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(acceptStaffInvite, initialState);
   // React resets uncontrolled fields once the action succeeds, so capture
@@ -33,10 +36,17 @@ export function AcceptInviteForm({ token, email }: { token: string; email: strin
         <Label>Email</Label>
         <Input value={email} disabled />
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="name">Full name</Label>
-        <Input id="name" name="name" required placeholder="Jane Doe" />
-      </div>
+      {isPasswordSetup ? (
+        <div className="space-y-1.5">
+          <Label>Full name</Label>
+          <Input value={name} disabled />
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          <Label htmlFor="name">Full name</Label>
+          <Input id="name" name="name" required placeholder="Jane Doe" />
+        </div>
+      )}
       <div className="space-y-1.5">
         <Label htmlFor="password">Choose a password</Label>
         <Input
@@ -51,7 +61,7 @@ export function AcceptInviteForm({ token, email }: { token: string; email: strin
         />
       </div>
       <Button type="submit" disabled={isPending} className="w-full">
-        {isPending ? "Activating..." : "Activate account"}
+        {isPending ? "Activating..." : isPasswordSetup ? "Set password and sign in" : "Activate account"}
       </Button>
       {state.status === "error" && <p className="text-sm text-danger">{state.message}</p>}
     </form>
