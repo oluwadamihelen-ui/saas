@@ -324,7 +324,8 @@ export async function getClassPerformanceOverview(
   termId?: string
 ): Promise<ClassPerformanceOverview> {
   const access = await getAccessibleClassArmIds(schoolId, actingUserId, perms);
-  if (!canAccessClassArm(access, classArmId)) throw new PerformanceAccessDeniedError();
+  if (!canAccessClassArm(access, classArmId))
+    throw new PerformanceAccessDeniedError("You are not authorized to view performance analysis for this class.");
 
   const classArm = await prisma.classArm.findFirst({ where: { schoolId, id: classArmId }, include: { classGroup: true } });
   if (!classArm) throw new Error("Class not found.");
@@ -374,7 +375,8 @@ export async function getSchoolPerformanceOverview(
   // assigned to several classes) gets the class-level view for each of
   // their own classes, never a cross-school rollup (brief: "Do not allow
   // arbitrary access to all students").
-  if (access !== "ALL") throw new PerformanceAccessDeniedError();
+  if (access !== "ALL")
+    throw new PerformanceAccessDeniedError("You are not authorized to view the school-wide performance overview.");
 
   const orderedPeriods = await listOrderedPeriods(schoolId);
   const targetPeriod = await resolveTargetPeriod(schoolId, termId, orderedPeriods);
@@ -443,5 +445,6 @@ export async function getSchoolPerformanceOverview(
     highRiskStudents,
     mostImprovedStudents,
     classes,
+    allStudents: analyses,
   };
 }

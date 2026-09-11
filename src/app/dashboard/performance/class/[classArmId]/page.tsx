@@ -73,6 +73,9 @@ export default async function ClassPerformancePage({
           </div>
           <Button type="submit" variant="secondary" size="sm">View</Button>
         </form>
+        <Button asChild variant="secondary" size="sm">
+          <a href={`/api/performance/export?classArmId=${overview.classArmId}&termId=${overview.termId}`}>Export CSV</a>
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

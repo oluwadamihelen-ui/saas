@@ -52,7 +52,8 @@ export async function getSubjectPerformanceIntelligence(
   termId?: string
 ): Promise<SubjectPerformanceIntelligence> {
   const access = await getAccessibleClassArmIds(schoolId, actingUserId, perms);
-  if (access !== "ALL") throw new PerformanceAccessDeniedError();
+  if (access !== "ALL")
+    throw new PerformanceAccessDeniedError("Subject performance intelligence spans every class and is available to administrators only.");
 
   const subject = await prisma.subject.findFirst({ where: { schoolId, id: subjectId } });
   if (!subject) throw new Error("Subject not found.");

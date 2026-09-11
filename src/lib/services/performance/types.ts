@@ -208,6 +208,10 @@ export interface SchoolPerformanceOverview {
   highRiskStudents: StudentPerformanceAnalysis[];
   mostImprovedStudents: StudentPerformanceAnalysis[];
   classes: Omit<ClassPerformanceOverview, "students">[];
+  /// Every analyzed student, unfiltered — kept off the dashboard UI (which
+  /// only ever renders the two slices above) and used by the CSV export
+  /// route, which needs the complete list rather than a top-20 sample.
+  allStudents: StudentPerformanceAnalysis[];
 }
 
 export interface PerformanceThresholds {

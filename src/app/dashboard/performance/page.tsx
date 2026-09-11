@@ -98,6 +98,9 @@ export default async function StudentSuccessPage({ searchParams }: { searchParam
           <Button asChild variant="secondary" size="sm">
             <Link href="/dashboard/performance/subject">Subject intelligence</Link>
           </Button>
+          <Button asChild variant="secondary" size="sm">
+            <a href={`/api/performance/export?termId=${overview.termId}`}>Export CSV</a>
+          </Button>
         </div>
       </div>
 
