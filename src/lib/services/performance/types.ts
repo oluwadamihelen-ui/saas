@@ -153,6 +153,11 @@ export interface StudentPerformanceAnalysis {
   classArmId: string | null;
   className: string | null;
   metrics: StudentPerformanceMetrics;
+  /// The same periods trend/risk were computed from (current + whatever
+  /// prior periods had data, per periods.ts), oldest-first — for the
+  /// term-by-term performance chart. Never padded with invented periods:
+  /// a student with only one period on record has a one-point history.
+  history: StudentPerformanceMetrics[];
   trend: StudentPerformanceTrend;
   subjectAnalysis: SubjectPerformanceAnalysis;
   attendance: AttendancePerformanceAnalysis;

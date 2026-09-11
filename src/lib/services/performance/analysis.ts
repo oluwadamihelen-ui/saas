@@ -109,6 +109,10 @@ function buildStudentAnalysis(
   const risk = assessStudentRisk(trend, subjectAnalysis, attendance, cbtPractice, thresholds);
   const success = computeStudentSuccessSignals(trend, subjectAnalysis, attendance, thresholds);
 
+  // priorMetrics is nearest-first (periods.ts convention); reverse to
+  // oldest-first and append the current period, for the chart.
+  const history = [...priorMetrics].reverse().concat(currentMetrics);
+
   return {
     studentId: student.id,
     studentName: `${student.firstName} ${student.lastName}`,
@@ -116,6 +120,7 @@ function buildStudentAnalysis(
     classArmId: currentMetrics.classArmId ?? student.classArmId,
     className: student.className,
     metrics: currentMetrics,
+    history,
     trend,
     subjectAnalysis,
     attendance,

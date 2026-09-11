@@ -53,6 +53,7 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
   const canManageGuardians = perms.has(PERMISSIONS.GUARDIANS_MANAGE);
   const canManagePortalAccess = canEdit || canManageGuardians;
   const canViewTranscript = perms.has(PERMISSIONS.TRANSCRIPTS_VIEW);
+  const canViewPerformance = perms.has(PERMISSIONS.RESULTS_VIEW);
 
   const studentInvites = canEdit ? await listPortalInvitesForStudent(user.schoolId, student.id) : [];
   const guardianInvites = canManageGuardians
@@ -112,6 +113,7 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
           <TabsTrigger value="guardians">Guardians</TabsTrigger>
           {attendance && <TabsTrigger value="attendance">Attendance</TabsTrigger>}
           {currentReportCard && <TabsTrigger value="results">Results</TabsTrigger>}
+          {canViewPerformance && <TabsTrigger value="performance">Performance Analysis</TabsTrigger>}
           {canViewTranscript && <TabsTrigger value="transcript">Academic Transcript</TabsTrigger>}
           {invoices && <TabsTrigger value="finance">Finance</TabsTrigger>}
           <TabsTrigger value="health">Health</TabsTrigger>
@@ -221,6 +223,22 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
                     ))}
                   </ul>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {canViewPerformance && (
+          <TabsContent value="performance">
+            <Card>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted">
+                  See this student&apos;s performance trend, subject-level analysis, attendance, and an explainable
+                  academic risk assessment — calculated from their own recorded data.
+                </p>
+                <Button asChild variant="secondary" size="sm">
+                  <Link href={`/dashboard/students/${student.id}/performance`}>View Performance Analysis</Link>
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>
