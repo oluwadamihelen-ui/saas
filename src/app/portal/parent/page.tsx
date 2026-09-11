@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSchoolUser } from "@/lib/auth/require";
 import { getGuardianForUser } from "@/lib/services/portal";
+import { NeedsAttentionCard } from "@/components/notifications/needs-attention-card";
 
 export default async function ParentChildrenPage() {
   const user = await requireSchoolUser();
@@ -17,6 +18,8 @@ export default async function ParentChildrenPage() {
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">My children</h1>
         <p className="text-sm text-muted">Tap a child to see attendance, results, assignments and fees.</p>
       </div>
+
+      <NeedsAttentionCard schoolId={user.schoolId} userId={user.id} viewAllHref="/portal/parent/notifications" />
 
       {children.length === 0 ? (
         <EmptyState title="No children linked to this account yet" description="Contact the school office if this looks wrong." />

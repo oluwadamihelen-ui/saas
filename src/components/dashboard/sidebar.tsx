@@ -45,6 +45,7 @@ import {
   FileSpreadsheet,
   Cake,
   Activity,
+  Bell,
 } from "lucide-react";
 import { SchoolLogo } from "@/components/brand/school-logo";
 import { PERMISSIONS, type PermissionKey } from "@/lib/permissions";
@@ -77,6 +78,7 @@ interface DashboardNavItem extends NavItem {
 /// filtered out — see visibleNavFor below.
 const NAV: DashboardNavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
   {
     href: "/dashboard/school-health",
     label: "School Health",

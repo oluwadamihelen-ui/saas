@@ -56,14 +56,14 @@ model School {
   /// A subject/term average at or above this is "passing" — used both to
   /// count a student's failed subjects and to flag an overall average as
   /// below the school's pass mark.
-  performancePassMark Int @default(50)
+  performancePassMark                      Int @default(50)
   /// A term-over-term change whose magnitude is at least this many
   /// percentage points counts as "significant" — the same threshold drives
   /// both "significant decline" (risk factor) and "significant
   /// improvement" (success signal); only the sign differs.
-  performanceSignificantChangePoints Int @default(10)
+  performanceSignificantChangePoints       Int @default(10)
   /// An attendance rate below this percentage is a risk factor.
-  attendanceConcernThreshold Int @default(80)
+  attendanceConcernThreshold               Int @default(80)
   /// A student failing at least this many subjects in a term is a risk
   /// factor on its own, before considering their overall average.
   performanceFailedSubjectConcernThreshold Int @default(2)
@@ -77,10 +77,23 @@ model School {
   /// flat-scalar-on-School convention as the Performance Analysis
   /// thresholds above; no settings UI yet, but these are already editable
   /// without a schema change whenever one is built.
-  healthScoreWeightAcademic Int @default(30)
-  healthScoreWeightAttendance Int @default(25)
-  healthScoreWeightFinancial Int @default(25)
+  healthScoreWeightAcademic    Int @default(30)
+  healthScoreWeightAttendance  Int @default(25)
+  healthScoreWeightFinancial   Int @default(25)
   healthScoreWeightOperational Int @default(20)
+
+  /// Throttle for src/lib/services/notification-rules.ts's lazy,
+  /// dashboard/portal-load-triggered rule scan (no cron/scheduled-job
+  /// infrastructure exists anywhere in this app — see AGENTS.md/this
+  /// model's own doc history — so rules run opportunistically instead of
+  /// on a schedule). A request only re-runs the full rule scan when this
+  /// is null or older than the throttle window; every other request just
+  /// reads already-persisted Notification rows. Not itself a lock — two
+  /// concurrent requests racing past a stale timestamp both running the
+  /// scan is harmless, since every rule-generated row carries a
+  /// dedupeKey and createMany({ skipDuplicates: true }) makes a repeat
+  /// run a no-op.
+  notificationRulesLastRunAt DateTime?
 
   /// Shown on the public pay page for the bank-transfer option. Null/empty
   /// simply hides that option rather than showing placeholder text.
@@ -170,6 +183,7 @@ model School {
   expenses                       Expense[]
   portalInvites                  PortalInvite[]
   notifications                  Notification[]
+  notificationPreferences        NotificationPreference[]
   announcements                  Announcement[]
   conversations                  Conversation[]
   messages                       Message[]
@@ -289,7 +303,7 @@ model User {
   updatedAt DateTime @updatedAt
 
   auditLogs                   AuditLog[]
-  importBatches                ImportBatch[]
+  importBatches               ImportBatch[]
   classArmsLed                ClassArm[]                     @relation("ClassArmTeacher")
   invitesSent                 StaffInvite[]                  @relation("InviteSentBy")
   /// Password-setup invites issued for this account specifically (see
@@ -320,12 +334,13 @@ model User {
   guardianProfile Guardian? @relation("GuardianUser")
   studentProfile  Student?  @relation("StudentUser")
 
-  portalInvitesSent      PortalInvite[]   @relation("PortalInviteSentBy")
-  notifications          Notification[]   @relation("UserNotifications")
-  announcementsCreated   Announcement[]   @relation("AnnouncementCreatedBy")
-  conversationsInitiated Conversation[]   @relation("ConversationInitiatedBy")
-  messagesSent           Message[]        @relation("MessageSender")
-  aiConversations        AiConversation[] @relation("AiConversationUser")
+  portalInvitesSent       PortalInvite[]           @relation("PortalInviteSentBy")
+  notifications           Notification[]           @relation("UserNotifications")
+  notificationPreferences NotificationPreference[] @relation("NotificationPreferenceUser")
+  announcementsCreated    Announcement[]           @relation("AnnouncementCreatedBy")
+  conversationsInitiated  Conversation[]           @relation("ConversationInitiatedBy")
+  messagesSent            Message[]                @relation("MessageSender")
+  aiConversations         AiConversation[]         @relation("AiConversationUser")
 
   /// Set only for staff — a portal (PARENT/STUDENT) user never has a salary
   /// structure or payslips of their own.
@@ -1751,11 +1766,11 @@ model ImportBatch {
   classArmId        String?
   classArm          ClassArm?        @relation(fields: [classArmId], references: [id], onDelete: SetNull)
 
-  fileName       String
-  totalRows      Int
-  successCount   Int
-  failedCount    Int
-  rowErrors      Json?
+  fileName     String
+  totalRows    Int
+  successCount Int
+  failedCount  Int
+  rowErrors    Json?
 
   importedById String
   importedBy   User   @relation(fields: [importedById], references: [id])
@@ -1848,6 +1863,68 @@ enum NotificationType {
   LIVE_CLASS_RECORDING_AVAILABLE
   PRESCHOOL_REPORT_PUBLISHED
   FEEDBACK_SUBMITTED
+
+  /// Intelligent School Notification Center additions — event-triggered
+  /// (ASSIGNMENT_CREATED/ASSIGNMENT_GRADED, hooked directly into
+  /// assignments.ts) and rule-engine-generated (everything else below,
+  /// produced by src/lib/services/notification-rules.ts from real,
+  /// already-computed data — School Health's Action Center, the
+  /// Performance Analysis risk engine, and the Birthdays service — never
+  /// a second, independently-invented analytics pass).
+  ASSIGNMENT_CREATED
+  ASSIGNMENT_GRADED
+  ASSIGNMENT_GRADING_PENDING
+  ASSIGNMENT_DUE_SOON
+  TEACHER_SCORES_PENDING
+  ADMIN_ACTION_ITEM
+  BIRTHDAY_UPCOMING
+  FEES_OUTSTANDING
+  ATTENDANCE_CONCERN
+  AI_DAILY_SUMMARY
+}
+
+/// Brief section 6's category system — deliberately broader than the rules
+/// actually implemented today (HR/PAYROLL/LIBRARY/TRANSPORT/HOSTEL/
+/// INVENTORY have no generator yet, same "reserved for a future phase"
+/// precedent as the unused CBT_EXAM_SCHEDULED/CBT_EXAM_STARTING_SOON/
+/// CBT_EXAM_AVAILABLE/CBT_EXAM_ENDING_SOON NotificationType values above),
+/// so a future rule can be added under the right category without a
+/// schema migration.
+enum NotificationCategory {
+  ACADEMIC
+  ATTENDANCE
+  ASSIGNMENT
+  EXAM
+  RESULT
+  FEES
+  PAYMENT
+  ADMISSION
+  TIMETABLE
+  ONLINE_CLASS
+  ANNOUNCEMENT
+  EVENT
+  MESSAGING
+  BIRTHDAY
+  STAFF
+  HR
+  PAYROLL
+  LIBRARY
+  TRANSPORT
+  HOSTEL
+  INVENTORY
+  SYSTEM
+  AI_INSIGHT
+}
+
+/// Brief section 7's 5-level priority system. Ordering (for sorting the
+/// bell/notifications page, most urgent first) lives in code
+/// (src/lib/services/notifications.ts's PRIORITY_ORDER), not here.
+enum NotificationPriority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
 }
 
 model Notification {
@@ -1863,11 +1940,89 @@ model Notification {
   link   String?
   readAt DateTime?
 
+  /// Defaults preserve every pre-existing row (and every one of the ~30
+  /// original event-based call sites, which now pass an explicit category)
+  /// as SYSTEM/MEDIUM rather than leaving them uncategorized.
+  category NotificationCategory @default(SYSTEM)
+  priority NotificationPriority @default(MEDIUM)
+
+  /// Button label for `link`, e.g. "View invoice" — null renders the
+  /// notification as informational only (no CTA), same "unset means not
+  /// configured" pattern used elsewhere in this schema.
+  actionLabel String?
+  /// What real record this notification is about, e.g. entityType
+  /// "Invoice" / entityId the invoice's id — for drill-down and for a
+  /// future "clear all notifications about this record" action. Never
+  /// used for authorization; every access check re-derives its own scope
+  /// server-side from schoolId/userId, never from these.
+  entityType  String?
+  entityId    String?
+  /// Small structured extras a specific notification type wants to carry
+  /// (e.g. a digest's underlying record ids) without a schema change per
+  /// type. Never a substitute for entityType/entityId, and never trusted
+  /// as an authorization input.
+  metadata    Json?
+
+  /// Set only by the rule engine and the announcement broadcaster (never
+  /// by the ~30 original one-shot event notifications, which stay NULL) —
+  /// a deterministic key like "assignment-created:{assignmentId}" or
+  /// "teacher-scores-pending:{teacherId}:{termId}" that the same rule
+  /// re-derives on every run. Paired with @@unique([userId, dedupeKey])
+  /// below and createMany({ skipDuplicates: true }), this makes
+  /// "generate once per meaningful event/time window" (brief section 14)
+  /// a database constraint rather than application logic that could be
+  /// bypassed by a second call site — while NULL stays exempt from the
+  /// constraint (Postgres treats every NULL as distinct), so it never
+  /// affects the original always-fresh notifications.
+  dedupeKey String?
+
+  /// When set, a notification the rule engine and UI should stop
+  /// surfacing once passed (brief section 15) — e.g. a live-class
+  /// reminder expires at class end, a birthday-tomorrow notice expires
+  /// after the birthday. NULL means it never auto-expires (the original
+  /// notifications' behavior, unchanged).
+  expiresAt DateTime?
+
   createdAt DateTime @default(now())
 
+  @@unique([userId, dedupeKey])
   @@index([schoolId])
   @@index([userId, readAt])
   @@index([userId, createdAt])
+  @@index([userId, category])
+  @@index([expiresAt])
+}
+
+/// Per-user, per-category in-app notification toggle (brief section 21) —
+/// schema-ready for emailEnabled/smsEnabled/whatsappEnabled even though no
+/// email/SMS/WhatsApp provider is wired up yet (same forward-compatible
+/// shape as CalendarEvent.notifyAudience), so turning one on later is a
+/// delivery-channel change, not a schema change. Rows are opt-in-to-mute:
+/// a missing row for (userId, category) means every channel defaults to
+/// its column default below. isCategorySuppressible() in notifications.ts
+/// decides which categories honor inAppEnabled=false at all — some
+/// system-critical notifications are never suppressible (brief section
+/// 22: "Some critical school/system notifications may not be
+/// suppressible").
+model NotificationPreference {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation("NotificationPreferenceUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  category NotificationCategory
+
+  inAppEnabled    Boolean @default(true)
+  emailEnabled    Boolean @default(false)
+  smsEnabled      Boolean @default(false)
+  whatsappEnabled Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, category])
+  @@index([schoolId])
 }
 
 /// classArmId is set only when audience is CLASS; ignored otherwise. Only a

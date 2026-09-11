@@ -11,6 +11,7 @@ import { prisma } from "@/lib/db";
 import { formatMoney } from "@/lib/money";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { UpcomingBirthdaysWidget } from "@/components/dashboard/upcoming-birthdays-widget";
+import { NeedsAttentionCard } from "@/components/notifications/needs-attention-card";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -74,6 +75,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </Button>
         )}
       </div>
+
+      <NeedsAttentionCard schoolId={user.schoolId} userId={user.id} viewAllHref="/dashboard/notifications" />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total students" value={stats.totalStudents} hint={`${stats.activeStudents} active`} />

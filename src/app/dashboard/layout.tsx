@@ -4,6 +4,7 @@ import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { prisma } from "@/lib/db";
 import { getSchool, nextOnboardingStep } from "@/lib/services/school";
 import { listNotifications, unreadNotificationCount } from "@/lib/services/notifications";
+import { maybeRunNotificationRules } from "@/lib/services/notification-rules";
 import { Sidebar, DashboardMobileNav } from "@/components/dashboard/sidebar";
 import { DashboardTopbar } from "@/components/dashboard/topbar";
 import { BrandStyle } from "@/components/brand/brand-style";
@@ -30,6 +31,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (nextOnboardingStep(school) !== "done") {
     redirect("/onboarding");
   }
+
+  // Lazy, throttled rule scan — see notification-rules.ts's doc comment
+  // for why this runs on page load rather than a cron job. Awaited so a
+  // freshly-generated notification is visible in this same request's
+  // bell/list below, not just from the next navigation onward.
+  await maybeRunNotificationRules(sessionUser.schoolId);
 
   const [user, notifications, unreadCount, perms, effectiveSubscription] = await Promise.all([
     prisma.user.findUniqueOrThrow({ where: { id: sessionUser.id }, include: { role: true } }),

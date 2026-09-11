@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { notifyAssignmentCreated, notifyAssignmentGraded } from "@/lib/services/notifications";
 
 const PAGE_SIZE = 20;
 
@@ -74,8 +75,8 @@ export async function createAssignment(schoolId: string, teacherId: string, inpu
     select: { id: true },
   });
 
-  return prisma.$transaction(async (tx) => {
-    const assignment = await tx.assignment.create({
+  const assignment = await prisma.$transaction(async (tx) => {
+    const created = await tx.assignment.create({
       data: {
         schoolId,
         classArmId: input.classArmId,
@@ -90,12 +91,15 @@ export async function createAssignment(schoolId: string, teacherId: string, inpu
 
     if (students.length > 0) {
       await tx.assignmentSubmission.createMany({
-        data: students.map((s) => ({ assignmentId: assignment.id, studentId: s.id })),
+        data: students.map((s) => ({ assignmentId: created.id, studentId: s.id })),
       });
     }
 
-    return assignment;
+    return created;
   });
+
+  await notifyAssignmentCreated(schoolId, assignment.id);
+  return assignment;
 }
 
 export async function gradeSubmission(
@@ -109,7 +113,7 @@ export async function gradeSubmission(
   });
   if (!submission) throw new Error("Submission not found");
 
-  return prisma.assignmentSubmission.update({
+  const updated = await prisma.assignmentSubmission.update({
     where: { id: submissionId },
     data: {
       status: input.status,
@@ -119,4 +123,10 @@ export async function gradeSubmission(
       gradedById: input.status === "GRADED" ? gradedById : undefined,
     },
   });
+
+  if (input.status === "GRADED") {
+    await notifyAssignmentGraded(schoolId, submissionId);
+  }
+
+  return updated;
 }

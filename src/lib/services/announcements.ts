@@ -199,8 +199,14 @@ async function notifyAnnouncementRecipients(announcementId: string) {
       title: announcement.title,
       body: announcement.body.slice(0, 140),
       link: group.link,
+      category: "ANNOUNCEMENT" as const,
+      priority: "MEDIUM" as const,
+      actionLabel: "View announcement",
+      entityType: "Announcement",
+      entityId: announcement.id,
+      dedupeKey: `announcement:${announcement.id}`,
     }))
   );
   if (data.length === 0) return;
-  await prisma.notification.createMany({ data });
+  await prisma.notification.createMany({ data, skipDuplicates: true });
 }

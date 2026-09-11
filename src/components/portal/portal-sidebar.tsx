@@ -17,6 +17,7 @@ import {
   ScrollText,
   Video,
   CheckCircle2,
+  Bell,
 } from "lucide-react";
 import { SchoolLogo } from "@/components/brand/school-logo";
 import { NavDrawer } from "@/components/ui/nav-drawer";
@@ -24,6 +25,7 @@ import { NavTree, type NavItem } from "@/components/ui/nav-tree";
 
 const PARENT_NAV: NavItem[] = [
   { href: "/portal/parent", label: "My children", icon: Users, exact: true },
+  { href: "/portal/parent/notifications", label: "Notifications", icon: Bell },
   { href: "/portal/parent/announcements", label: "Announcements", icon: Megaphone },
   { href: "/portal/parent/messages", label: "Messages", icon: MessageSquare },
   { href: "/portal/parent/feedback", label: "Feedback", icon: MessageCircle },
@@ -31,6 +33,7 @@ const PARENT_NAV: NavItem[] = [
 
 const STUDENT_NAV: NavItem[] = [
   { href: "/portal/student", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { href: "/portal/student/notifications", label: "Notifications", icon: Bell },
   {
     label: "Online Learning",
     icon: PlayCircle,

@@ -3,6 +3,7 @@ import { requireSchoolUser } from "@/lib/auth/require";
 import { prisma } from "@/lib/db";
 import { getSchool } from "@/lib/services/school";
 import { listNotifications, unreadNotificationCount } from "@/lib/services/notifications";
+import { maybeRunNotificationRules } from "@/lib/services/notification-rules";
 import { PortalSidebar, PortalMobileNav } from "@/components/portal/portal-sidebar";
 import { DashboardTopbar } from "@/components/dashboard/topbar";
 import { BrandStyle } from "@/components/brand/brand-style";
@@ -13,6 +14,8 @@ export default async function StudentPortalLayout({ children }: { children: Reac
   if (sessionUser.role !== "STUDENT") {
     redirect(sessionUser.role === "PARENT" ? "/portal/parent" : "/dashboard");
   }
+
+  await maybeRunNotificationRules(sessionUser.schoolId);
 
   const [user, school, notifications, unreadCount] = await Promise.all([
     prisma.user.findUniqueOrThrow({ where: { id: sessionUser.id } }),
@@ -33,6 +36,7 @@ export default async function StudentPortalLayout({ children }: { children: Reac
           roleName="Student"
           notifications={notifications}
           unreadCount={unreadCount}
+          notificationsHref="/portal/student/notifications"
           mobileNav={<PortalMobileNav role="student" school={schoolBrief} />}
         />
         <main className="container-shell min-w-0 flex-1 py-6 sm:py-8">{children}</main>

@@ -6,6 +6,7 @@ import { requireSchoolUser } from "@/lib/auth/require";
 import { getStudentForUser } from "@/lib/services/portal";
 import { listAssignmentsForStudent } from "@/lib/services/assignments";
 import { formatDate } from "@/lib/utils";
+import { NeedsAttentionCard } from "@/components/notifications/needs-attention-card";
 
 export default async function StudentDashboardPage() {
   const user = await requireSchoolUser();
@@ -25,6 +26,8 @@ export default async function StudentDashboardPage() {
           {student.classArm ? `${student.classArm.classGroup.name} ${student.classArm.name}` : "Unassigned"}
         </p>
       </div>
+
+      <NeedsAttentionCard schoolId={user.schoolId} userId={user.id} viewAllHref="/portal/student/notifications" />
 
       <Card>
         <CardContent className="space-y-3">
