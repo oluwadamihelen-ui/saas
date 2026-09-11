@@ -47,6 +47,27 @@ model School {
   /// require owner approval").
   expenseApprovalThresholdMinor Int @default(50000000)
 
+  /// Student Performance Analysis thresholds (all percentages, 0-100
+  /// unless noted) — read by src/lib/services/performance/risk-engine.ts.
+  /// Same flat-scalar-on-School convention as the fields above, not a
+  /// separate settings table: each is independently defaulted so a school
+  /// gets sensible behavior with zero configuration, and each can later be
+  /// edited from a settings page without a schema change.
+  /// A subject/term average at or above this is "passing" — used both to
+  /// count a student's failed subjects and to flag an overall average as
+  /// below the school's pass mark.
+  performancePassMark Int @default(50)
+  /// A term-over-term change whose magnitude is at least this many
+  /// percentage points counts as "significant" — the same threshold drives
+  /// both "significant decline" (risk factor) and "significant
+  /// improvement" (success signal); only the sign differs.
+  performanceSignificantChangePoints Int @default(10)
+  /// An attendance rate below this percentage is a risk factor.
+  attendanceConcernThreshold Int @default(80)
+  /// A student failing at least this many subjects in a term is a risk
+  /// factor on its own, before considering their overall average.
+  performanceFailedSubjectConcernThreshold Int @default(2)
+
   /// Shown on the public pay page for the bank-transfer option. Null/empty
   /// simply hides that option rather than showing placeholder text.
   bankName          String?

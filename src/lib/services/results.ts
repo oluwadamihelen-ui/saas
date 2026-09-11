@@ -113,7 +113,7 @@ export async function saveScores(
 /// rare, but "most" rather than "first" handles it without special-casing.
 /// Null rows (pre-migration, or entered before this field existed) are
 /// ignored rather than counted as their own bucket.
-function resolveDominantClassArmId(scores: { classArmId: string | null }[]): string | null {
+export function resolveDominantClassArmId(scores: { classArmId: string | null }[]): string | null {
   const counts = new Map<string, number>();
   for (const s of scores) {
     if (!s.classArmId) continue;
