@@ -17,7 +17,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Pagination } from "@/components/ui/pagination";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const user = await requireSchoolUser();
@@ -86,46 +86,48 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recently enrolled</CardTitle>
-          <CardDescription>The most recently added students — {recentlyEnrolled.total} enrolled in total.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {recentlyEnrolled.students.length === 0 ? (
-            <EmptyState
-              title="No students yet"
-              description={canEnroll ? "Enroll your first student to see them here." : "No students enrolled yet."}
-              action={
-                canEnroll ? (
-                  <Button asChild size="sm">
-                    <Link href="/dashboard/students/new">Enroll a student</Link>
-                  </Button>
-                ) : undefined
-              }
-            />
-          ) : (
-            <>
-              <ul className="divide-y divide-border">
-                {recentlyEnrolled.students.map((s) => (
-                  <li key={s.id} className="flex items-center justify-between py-3 text-sm">
-                    <Link href={`/dashboard/students/${s.id}`} className="font-medium text-foreground hover:text-accent">
-                      {s.firstName} {s.lastName}
-                    </Link>
-                    <div className="flex items-center gap-3 text-muted">
-                      <span>{s.classArm ? `${s.classArm.classGroup.name} ${s.classArm.name}` : "Unassigned"}</span>
-                      <Badge variant={s.status === "ACTIVE" ? "success" : "neutral"}>{s.status}</Badge>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              <Pagination page={recentlyEnrolled.page} pageCount={recentlyEnrolled.pageCount} basePath="/dashboard" />
-            </>
-          )}
-        </CardContent>
-      </Card>
+      <div className={cn("grid grid-cols-1 gap-4 sm:gap-6", canViewBirthdays && "lg:grid-cols-2")}>
+        <Card>
+          <CardHeader>
+            <CardTitle>Recently enrolled</CardTitle>
+            <CardDescription>The most recently added students — {recentlyEnrolled.total} enrolled in total.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {recentlyEnrolled.students.length === 0 ? (
+              <EmptyState
+                title="No students yet"
+                description={canEnroll ? "Enroll your first student to see them here." : "No students enrolled yet."}
+                action={
+                  canEnroll ? (
+                    <Button asChild size="sm">
+                      <Link href="/dashboard/students/new">Enroll a student</Link>
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ) : (
+              <>
+                <ul className="divide-y divide-border">
+                  {recentlyEnrolled.students.map((s) => (
+                    <li key={s.id} className="flex items-center justify-between py-3 text-sm">
+                      <Link href={`/dashboard/students/${s.id}`} className="font-medium text-foreground hover:text-accent">
+                        {s.firstName} {s.lastName}
+                      </Link>
+                      <div className="flex items-center gap-3 text-muted">
+                        <span>{s.classArm ? `${s.classArm.classGroup.name} ${s.classArm.name}` : "Unassigned"}</span>
+                        <Badge variant={s.status === "ACTIVE" ? "success" : "neutral"}>{s.status}</Badge>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <Pagination page={recentlyEnrolled.page} pageCount={recentlyEnrolled.pageCount} basePath="/dashboard" />
+              </>
+            )}
+          </CardContent>
+        </Card>
 
-      {canViewBirthdays && <UpcomingBirthdaysWidget people={upcomingBirthdays} />}
+        {canViewBirthdays && <UpcomingBirthdaysWidget people={upcomingBirthdays} />}
+      </div>
 
       {tabs.length > 0 && (
         <Tabs defaultValue={tabs[0].value}>
