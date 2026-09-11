@@ -51,7 +51,7 @@ export default async function StudentPerformanceAnalysisPage({
         </div>
       );
     }
-    if (error instanceof Error && error.message === "Student not found") notFound();
+    if (error instanceof Error && error.message === "Student not found.") notFound();
     throw error;
   }
 

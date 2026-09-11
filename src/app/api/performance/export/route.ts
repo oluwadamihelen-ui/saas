@@ -72,7 +72,7 @@ export async function GET(request: Request) {
     }
   } catch (error) {
     if (error instanceof PerformanceAccessDeniedError) return NextResponse.json({ error: error.message }, { status: 403 });
-    if (error instanceof Error && (error.message === "Class not found" || error.message === "Term not found." || error.message === "No academic term available for analysis.")) {
+    if (error instanceof Error && (error.message === "Class not found." || error.message === "Term not found." || error.message === "No academic term available for analysis.")) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     throw error;

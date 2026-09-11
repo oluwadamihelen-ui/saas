@@ -41,7 +41,7 @@ export default async function ClassPerformancePage({
         </div>
       );
     }
-    if (error instanceof Error && error.message === "Class not found") notFound();
+    if (error instanceof Error && error.message === "Class not found.") notFound();
     throw error;
   }
 

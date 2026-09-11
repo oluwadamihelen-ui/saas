@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,10 @@ export default async function SubjectPerformanceIntelligencePage({
         </div>
       );
     }
+    // subjectId is user-suppliable via the query string — a foreign or
+    // stale id correctly 404s rather than throwing unhandled, the same
+    // as every other performance page's not-found handling.
+    if (error instanceof Error && error.message === "Subject not found.") notFound();
     throw error;
   }
 
