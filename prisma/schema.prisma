@@ -68,6 +68,20 @@ model School {
   /// factor on its own, before considering their overall average.
   performanceFailedSubjectConcernThreshold Int @default(2)
 
+  /// School Health Score component weights (must conceptually sum to 100,
+  /// not DB-enforced) — read by src/lib/services/school-health/health-score.ts.
+  /// When one or more components have no reliable data for the selected
+  /// period, the score is normalized over only the available components'
+  /// weights rather than counting the missing one as zero — see
+  /// health-score.ts's doc comment for the exact calculation. Same
+  /// flat-scalar-on-School convention as the Performance Analysis
+  /// thresholds above; no settings UI yet, but these are already editable
+  /// without a schema change whenever one is built.
+  healthScoreWeightAcademic Int @default(30)
+  healthScoreWeightAttendance Int @default(25)
+  healthScoreWeightFinancial Int @default(25)
+  healthScoreWeightOperational Int @default(20)
+
   /// Shown on the public pay page for the bank-transfer option. Null/empty
   /// simply hides that option rather than showing placeholder text.
   bankName          String?

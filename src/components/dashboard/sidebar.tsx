@@ -44,6 +44,7 @@ import {
   History,
   FileSpreadsheet,
   Cake,
+  Activity,
 } from "lucide-react";
 import { SchoolLogo } from "@/components/brand/school-logo";
 import { PERMISSIONS, type PermissionKey } from "@/lib/permissions";
@@ -57,6 +58,13 @@ interface DashboardNavItem extends NavItem {
   /// subject-only teachers can open). Checked in addition to
   /// requiredPermission, not instead of it — an item can use either or both.
   requiredAnyPermission?: PermissionKey[];
+  /// Visible only if the user holds EVERY one of these — for an item that
+  /// genuinely needs more than one permission together (the School Health
+  /// Dashboard needs both academic AND financial oversight; either one
+  /// alone isn't enough). This is UX-only, same as every other filter
+  /// here — the page itself independently re-enforces the same
+  /// requirement server-side.
+  requiredAllPermissions?: PermissionKey[];
   children?: DashboardNavItem[];
 }
 
@@ -69,6 +77,12 @@ interface DashboardNavItem extends NavItem {
 /// filtered out — see visibleNavFor below.
 const NAV: DashboardNavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  {
+    href: "/dashboard/school-health",
+    label: "School Health",
+    icon: Activity,
+    requiredAllPermissions: [PERMISSIONS.ACADEMICS_MANAGE, PERMISSIONS.FINANCE_VIEW],
+  },
   { href: "/dashboard/students", label: "Students", icon: GraduationCap },
   { href: "/dashboard/birthdays", label: "Birthdays", icon: Cake, requiredPermission: PERMISSIONS.BIRTHDAYS_VIEW },
   {
@@ -216,6 +230,7 @@ function filterNav(items: DashboardNavItem[], permSet: Set<string>): DashboardNa
   return items.reduce<DashboardNavItem[]>((acc, item) => {
     if (item.requiredPermission && !permSet.has(item.requiredPermission)) return acc;
     if (item.requiredAnyPermission && !item.requiredAnyPermission.some((p) => permSet.has(p))) return acc;
+    if (item.requiredAllPermissions && !item.requiredAllPermissions.every((p) => permSet.has(p))) return acc;
 
     if (item.children) {
       const children = filterNav(item.children, permSet);
