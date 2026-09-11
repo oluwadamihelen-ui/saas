@@ -2,7 +2,6 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,11 +33,25 @@ export function NotificationBell({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  function handleOpenNotification(id: string, readAt: Date | null) {
-    if (readAt) return;
+  /// Marking read and navigating both need to happen from the same click.
+  /// Two earlier shapes of this both raced router.push against
+  /// router.refresh (issuing a competing fetch for the *current* route
+  /// segment tree right as the push to a new route was starting) and the
+  /// refresh would win, silently discarding the pending navigation — so
+  /// clicking a notification just stayed on the same page. Only refresh
+  /// when we're NOT navigating away: /dashboard and
+  /// /dashboard/administration/feedback (etc.) share DashboardLayout, so
+  /// push() alone already gets the destination page fresh data; the
+  /// shared layout's own bell count simply catches up on its next normal
+  /// navigation rather than needing a forced refresh right here.
+  function handleOpenNotification(id: string, readAt: Date | null, link: string | null) {
     startTransition(async () => {
-      await markNotificationReadAction(id);
-      router.refresh();
+      if (!readAt) await markNotificationReadAction(id);
+      if (link) {
+        router.push(link);
+      } else {
+        router.refresh();
+      }
     });
   }
 
@@ -79,8 +92,8 @@ export function NotificationBell({
         {notifications.length === 0 ? (
           <p className="px-3 py-4 text-sm text-muted">You&apos;re all caught up.</p>
         ) : (
-          notifications.map((n) => {
-            const content = (
+          notifications.map((n) => (
+            <DropdownMenuItem key={n.id} onSelect={() => handleOpenNotification(n.id, n.readAt, n.link)}>
               <div className="flex items-start gap-2">
                 {!n.readAt && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
                 <div className={n.readAt ? "opacity-70" : ""}>
@@ -88,13 +101,8 @@ export function NotificationBell({
                   {n.body && <p className="text-xs text-muted">{n.body}</p>}
                 </div>
               </div>
-            );
-            return (
-              <DropdownMenuItem key={n.id} asChild onSelect={() => handleOpenNotification(n.id, n.readAt)}>
-                {n.link ? <Link href={n.link}>{content}</Link> : <div>{content}</div>}
-              </DropdownMenuItem>
-            );
-          })
+            </DropdownMenuItem>
+          ))
         )}
       </DropdownMenuContent>
     </DropdownMenu>
