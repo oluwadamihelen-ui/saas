@@ -6,34 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Select, Label } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PerformanceTrendChart } from "@/components/dashboard/performance-trend-chart";
+import { RiskBadge, TrendBadge } from "@/components/dashboard/performance-badges";
 import { requirePermission } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getStudentPerformanceAnalysis } from "@/lib/services/performance/analysis";
 import { PerformanceAccessDeniedError } from "@/lib/services/performance/authorization";
 import { listOrderedPeriods } from "@/lib/services/performance/periods";
-import type { RiskLevel, TrendStatus } from "@/lib/services/performance/types";
-
-const RISK_VARIANT: Record<RiskLevel, "success" | "warning" | "danger"> = {
-  LOW: "success",
-  MODERATE: "warning",
-  HIGH: "danger",
-  CRITICAL: "danger",
-};
-const RISK_LABEL: Record<RiskLevel, string> = { LOW: "Low", MODERATE: "Moderate", HIGH: "High", CRITICAL: "Critical" };
-
-const TREND_VARIANT: Record<TrendStatus, "success" | "warning" | "danger" | "neutral"> = {
-  IMPROVING: "success",
-  STABLE: "neutral",
-  DECLINING: "danger",
-  INSUFFICIENT_DATA: "neutral",
-};
-const TREND_LABEL: Record<TrendStatus, string> = {
-  IMPROVING: "Improving",
-  STABLE: "Stable",
-  DECLINING: "Declining",
-  INSUFFICIENT_DATA: "Insufficient data",
-};
 
 function pct(v: number | null): string {
   return v === null ? "—" : `${v}%`;
@@ -126,8 +105,8 @@ export default async function StudentPerformanceAnalysisPage({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Badge variant={TREND_VARIANT[analysis.trend.status]}>{TREND_LABEL[analysis.trend.status]}</Badge>
-        <Badge variant={RISK_VARIANT[analysis.risk.riskLevel]}>Risk: {RISK_LABEL[analysis.risk.riskLevel]}</Badge>
+        <TrendBadge status={analysis.trend.status} />
+        <RiskBadge level={analysis.risk.riskLevel} />
         {analysis.success.significantImprovement && <Badge variant="success">Significant improvement</Badge>}
         {analysis.success.consistentHighPerformance && <Badge variant="success">Consistent high performance</Badge>}
         {analysis.success.improvedAttendance && <Badge variant="success">Improved attendance</Badge>}

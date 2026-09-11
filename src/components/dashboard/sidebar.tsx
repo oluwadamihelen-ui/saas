@@ -130,6 +130,7 @@ const NAV: DashboardNavItem[] = [
           { href: "/dashboard/results", label: "Grader's Results", icon: Award, requiredPermission: PERMISSIONS.RESULTS_VIEW },
           { href: "/dashboard/results/preschool", label: "Pre-School Results", icon: Sparkles, requiredPermission: PERMISSIONS.RESULTS_VIEW },
           { href: "/dashboard/results/transcripts", label: "Transcripts", icon: ScrollText, requiredPermission: PERMISSIONS.TRANSCRIPTS_VIEW },
+          { href: "/dashboard/performance", label: "Student Success", icon: TrendingUp, requiredPermission: PERMISSIONS.RESULTS_VIEW },
         ],
       },
       {
