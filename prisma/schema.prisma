@@ -225,6 +225,13 @@ model User {
   avatarUrl    String?
   status       UserStatus @default(ACTIVE)
 
+  /// Self-reported by the staff member on their own profile (Settings ->
+  /// My profile) — there's no admin-side staff editor in this phase, so
+  /// this is set the same way a portal user's own details would be, not
+  /// entered by an administrator. Null until they set it. Used only for
+  /// the Upcoming Birthdays feature; month/day matter, the year does not.
+  dateOfBirth DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
