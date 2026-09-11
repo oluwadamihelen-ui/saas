@@ -274,6 +274,13 @@ model User {
   avatarUrl    String?
   status       UserStatus @default(ACTIVE)
 
+  /// Brute-force login protection (src/auth.ts's authorize callback) — not
+  /// suspending the account (status stays ACTIVE, an admin never has to
+  /// intervene), just a short cooldown after repeated failed password
+  /// attempts. Reset to 0/null on the next successful login.
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+
   /// Self-reported by the staff member on their own profile (Settings ->
   /// My profile) — there's no admin-side staff editor in this phase, so
   /// this is set the same way a portal user's own details would be, not

@@ -257,7 +257,10 @@ export default async function StudentTranscriptPage({ params }: { params: Promis
                           </a>
                         </Button>
                         <Button asChild variant="ghost" size="sm">
-                          <Link href={`/verify-transcript?ref=${encodeURIComponent(t.referenceNumber)}`} target="_blank">
+                          <Link
+                            href={`/verify-transcript?ref=${encodeURIComponent(t.referenceNumber)}&code=${encodeURIComponent(t.verificationCode)}`}
+                            target="_blank"
+                          >
                             Verify
                           </Link>
                         </Button>

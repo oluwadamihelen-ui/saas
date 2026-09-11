@@ -171,13 +171,13 @@ describe("revocation and public verification", () => {
     const { school, staff, student } = await makeSchoolWithHistory();
     const transcript = await generateTranscript(school.id, student.id, staff.id);
 
-    const beforeRevoke = await verifyTranscriptPublic(transcript.referenceNumber);
+    const beforeRevoke = await verifyTranscriptPublic(transcript.referenceNumber, transcript.verificationCode);
     expect(beforeRevoke?.status).toBe("ACTIVE");
     expect(beforeRevoke?.studentName).toBe(`${student.firstName} ${student.lastName}`);
 
     await revokeTranscript(school.id, transcript.id, staff.id, "Issued in error");
 
-    const afterRevoke = await verifyTranscriptPublic(transcript.referenceNumber);
+    const afterRevoke = await verifyTranscriptPublic(transcript.referenceNumber, transcript.verificationCode);
     expect(afterRevoke?.status).toBe("REVOKED");
 
     const stillOnFile = await getTranscript(school.id, transcript.id);
@@ -187,8 +187,23 @@ describe("revocation and public verification", () => {
   });
 
   it("returns null for an unknown reference number rather than throwing", async () => {
-    const result = await verifyTranscriptPublic("WIN-TR-0000-000000");
+    const result = await verifyTranscriptPublic("WIN-TR-0000-000000", "any-code");
     expect(result).toBeNull();
+  });
+
+  it("requires the verification code, not just the (predictable, sequential) reference number", async () => {
+    const { school, staff, student } = await makeSchoolWithHistory();
+    const transcript = await generateTranscript(school.id, student.id, staff.id);
+
+    // The reference number alone (WIN-TR-{year}-{sequence}) is a guessable,
+    // globally-sequential counter — without also matching the random
+    // verificationCode, anyone could script through every issued
+    // transcript across every school and read out student names.
+    const withoutCode = await verifyTranscriptPublic(transcript.referenceNumber, "wrong-code");
+    expect(withoutCode).toBeNull();
+
+    const withCode = await verifyTranscriptPublic(transcript.referenceNumber, transcript.verificationCode);
+    expect(withCode).not.toBeNull();
   });
 });
 
@@ -203,9 +218,11 @@ describe("multi-school tenant isolation", () => {
     const listForOtherSchoolStudent = await listTranscriptsForStudent(b.school.id, a.student.id);
     expect(listForOtherSchoolStudent).toHaveLength(0);
 
-    // Public verification is intentionally cross-school (a reference number
-    // alone is enough), but still only ever exposes the minimal fields.
-    const publicResult = await verifyTranscriptPublic(transcript.referenceNumber);
+    // Public verification is intentionally cross-school (any valid
+    // reference number + verification code pair is enough — no school
+    // context is required up front), but still only ever exposes the
+    // minimal fields.
+    const publicResult = await verifyTranscriptPublic(transcript.referenceNumber, transcript.verificationCode);
     expect(publicResult?.schoolName).toBe(a.school.name);
     expect(Object.keys(publicResult ?? {})).toEqual(
       expect.arrayContaining(["status", "referenceNumber", "schoolName", "schoolLogoUrl", "studentName", "generatedAt"])

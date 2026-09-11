@@ -314,10 +314,20 @@ export async function recordTranscriptEvent(
 /// /verify-transcript page — deliberately returns only the minimal fields
 /// the spec allows on that page (status, student name, school name, date
 /// issued), never academic records, and never requires knowing the school
-/// up front since a reference number alone must be enough to verify.
-export async function verifyTranscriptPublic(referenceNumber: string) {
-  const transcript = await prisma.transcript.findUnique({
-    where: { referenceNumber },
+/// up front.
+///
+/// Requires the verificationCode alongside referenceNumber — the
+/// reference number alone (`WIN-TR-{year}-{sequence}`) is a predictable,
+/// globally-sequential counter across every school on the platform, so
+/// checking it alone would let anyone script through every issued
+/// transcript and read out a student's name + school with no rate limit.
+/// verificationCode is a separate crypto.randomBytes(16) secret, printed
+/// on the transcript itself (and embedded in its QR code) — this makes
+/// "have you actually seen this document" the real access check, the same
+/// property a physical certificate's serial number alone can't provide.
+export async function verifyTranscriptPublic(referenceNumber: string, verificationCode: string) {
+  const transcript = await prisma.transcript.findFirst({
+    where: { referenceNumber, verificationCode },
     include: {
       school: { select: { name: true, logoUrl: true } },
       student: { select: { firstName: true, lastName: true } },

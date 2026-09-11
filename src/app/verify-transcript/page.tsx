@@ -7,17 +7,20 @@ import { formatDate } from "@/lib/utils";
 
 export const metadata = { title: "Verify a Transcript — Schoolum" };
 
-export default async function VerifyTranscriptPage({ searchParams }: { searchParams: Promise<{ ref?: string }> }) {
-  const { ref } = await searchParams;
+export default async function VerifyTranscriptPage({ searchParams }: { searchParams: Promise<{ ref?: string; code?: string }> }) {
+  const { ref, code } = await searchParams;
   const trimmedRef = ref?.trim();
-  const result = trimmedRef ? await verifyTranscriptPublic(trimmedRef) : null;
+  const trimmedCode = code?.trim();
+  const submitted = Boolean(trimmedRef && trimmedCode);
+  const result = submitted ? await verifyTranscriptPublic(trimmedRef!, trimmedCode!) : null;
 
   return (
     <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Verify an academic transcript</h1>
         <p className="text-sm text-muted">
-          Enter the reference number printed on a Schoolum academic transcript to confirm it&apos;s genuine.
+          Enter the reference number and verification code printed on a Schoolum academic transcript (or scan its QR
+          code) to confirm it&apos;s genuine.
         </p>
       </div>
 
@@ -26,16 +29,22 @@ export default async function VerifyTranscriptPage({ searchParams }: { searchPar
           <form className="flex flex-col gap-3 sm:flex-row sm:items-end" method="get">
             <div className="flex-1 space-y-1.5">
               <label className="text-sm font-medium text-foreground" htmlFor="ref">
-                Transcript reference number
+                Reference number
               </label>
               <Input id="ref" name="ref" defaultValue={trimmedRef ?? ""} placeholder="WIN-TR-2026-000123" />
+            </div>
+            <div className="flex-1 space-y-1.5">
+              <label className="text-sm font-medium text-foreground" htmlFor="code">
+                Verification code
+              </label>
+              <Input id="code" name="code" defaultValue={trimmedCode ?? ""} placeholder="Printed below the reference number" />
             </div>
             <Button type="submit">Verify</Button>
           </form>
         </CardContent>
       </Card>
 
-      {trimmedRef && (
+      {submitted && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
@@ -46,7 +55,7 @@ export default async function VerifyTranscriptPage({ searchParams }: { searchPar
                 </Badge>
               )}
             </div>
-            {!result && <CardDescription>No transcript was found for this reference number. It may be invalid or mistyped.</CardDescription>}
+            {!result && <CardDescription>No transcript matches that reference number and verification code. Check both are typed exactly as printed.</CardDescription>}
           </CardHeader>
           {result && (
             <CardContent className="space-y-2 text-sm">

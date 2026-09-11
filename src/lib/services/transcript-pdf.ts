@@ -79,7 +79,7 @@ export async function generateTranscriptPdfBuffer(schoolId: string, transcriptId
   const { sessions, isIncomplete } = await getStudentAcademicHistory(schoolId, student.id);
   const summary = await computeTranscriptSummary(schoolId, student, sessions);
 
-  const verifyUrl = `${baseUrl()}/verify-transcript?ref=${encodeURIComponent(t.referenceNumber)}`;
+  const verifyUrl = `${baseUrl()}/verify-transcript?ref=${encodeURIComponent(t.referenceNumber)}&code=${encodeURIComponent(t.verificationCode)}`;
   const qrBuffer = await QRCode.toBuffer(verifyUrl, { width: 90, margin: 0 }).catch(() => null);
 
   const accentColor = school.brandColor || COLORS.accent;
@@ -124,7 +124,8 @@ export async function generateTranscriptPdfBuffer(schoolId: string, transcriptId
       if (contact) doc.text(contact, textX, doc.y, { width: 300 - (textX - l) });
 
       doc.fontSize(8).font("Helvetica").fillColor(COLORS.muted).text(`Ref: ${t.referenceNumber}`, r - 200, top, { width: 200, align: "right" });
-      doc.text(`Generated: ${t.generatedAt.toLocaleDateString()}`, r - 200, top + 12, { width: 200, align: "right" });
+      doc.text(`Verification code: ${t.verificationCode}`, r - 200, top + 12, { width: 200, align: "right" });
+      doc.text(`Generated: ${t.generatedAt.toLocaleDateString()}`, r - 200, top + 24, { width: 200, align: "right" });
 
       const titleY = top + 46;
       doc.fontSize(12).font("Helvetica-Bold").fillColor(accentColor).text("OFFICIAL ACADEMIC TRANSCRIPT", l, titleY, { width: r - l, align: "center" });

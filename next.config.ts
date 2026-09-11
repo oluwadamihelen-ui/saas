@@ -1,13 +1,6 @@
 import type { NextConfig } from "next";
-import path from "path";
 
 const nextConfig: NextConfig = {
-  // This is an npm-workspaces monorepo with Vercel's Root Directory set to
-  // apps/school — Next's docs call out that in a monorepo, only files
-  // under the Next.js project root are traced by default, and recommend
-  // explicitly setting outputFileTracingRoot (to the monorepo root, where
-  // the shared node_modules actually lives) alongside outputFileTracingIncludes.
-  outputFileTracingRoot: path.join(__dirname, "../../"),
   // Prisma's generated client lives at a custom `output` path
   // (src/generated/prisma) rather than the default node_modules/.prisma
   // location. Next.js's serverless file tracer doesn't reliably detect
@@ -18,6 +11,26 @@ const nextConfig: NextConfig = {
   // Forcing the whole generated directory into every route's trace fixes it.
   outputFileTracingIncludes: {
     "/**/*": ["./src/generated/prisma/**/*"],
+  },
+
+  // Baseline security headers — none of this app's pages are meant to be
+  // framed by another site, and there's no legitimate cross-origin embed
+  // use case (confirmed: no <iframe> anywhere in src). HSTS is safe to
+  // always send: browsers only act on it over an actual HTTPS connection,
+  // so it's a no-op in local http dev.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(self), microphone=(self), geolocation=()" },
+          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+        ],
+      },
+    ];
   },
 };
 

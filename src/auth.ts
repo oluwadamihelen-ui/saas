@@ -1,8 +1,8 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { authConfig } from "@/lib/auth/config";
+import { checkPasswordWithLockout } from "@/lib/auth/login-lockout";
 
 function toSessionUser(user: { id: string; email: string; name: string; schoolId: string | null; role: { key: string } }) {
   return { id: user.id, email: user.email, name: user.name, role: user.role.key, schoolId: user.schoolId };
@@ -41,7 +41,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           });
           if (!student?.user || student.user.status !== "ACTIVE") return null;
 
-          const valid = await bcrypt.compare(password, student.user.passwordHash);
+          const valid = await checkPasswordWithLockout(student.user, password);
           if (!valid) return null;
 
           return toSessionUser(student.user);
@@ -56,7 +56,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
         if (!user || user.status !== "ACTIVE") return null;
 
-        const valid = await bcrypt.compare(password, user.passwordHash);
+        const valid = await checkPasswordWithLockout(user, password);
         if (!valid) return null;
 
         return toSessionUser(user);
