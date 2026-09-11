@@ -63,7 +63,7 @@ export const FEATURE_CATALOG = [
   { key: "ai_report_comments", category: "AI", label: "AI report-card comments", implemented: false },
   { key: "ai_question_generation", category: "AI", label: "AI question generation", implemented: false },
   { key: "ai_assignment_generation", category: "AI", label: "AI assignment generation", implemented: false },
-  { key: "ai_performance_analysis", category: "AI", label: "AI performance analysis", implemented: false },
+  { key: "ai_performance_analysis", category: "AI", label: "AI performance analysis", implemented: true },
   { key: "ai_school_insights", category: "AI", label: "AI school insights", implemented: false },
   { key: "ai_timetable_assistant", category: "AI", label: "AI timetable assistant", implemented: false },
   { key: "advanced_ai", category: "AI", label: "Advanced AI assistant", implemented: false },

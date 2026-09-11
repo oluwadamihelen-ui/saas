@@ -13,6 +13,8 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { getStudentPerformanceAnalysis } from "@/lib/services/performance/analysis";
 import { PerformanceAccessDeniedError } from "@/lib/services/performance/authorization";
 import { listOrderedPeriods } from "@/lib/services/performance/periods";
+import { isPerformanceAiConfigured } from "@/lib/services/performance/ai-summary";
+import { AiSummaryCard } from "./ai-summary-card";
 
 function pct(v: number | null): string {
   return v === null ? "—" : `${v}%`;
@@ -143,6 +145,8 @@ export default async function StudentPerformanceAnalysisPage({
           )}
         </CardContent>
       </Card>
+
+      {isPerformanceAiConfigured() && <AiSummaryCard studentId={analysis.studentId} termId={analysis.metrics.period.termId} />}
 
       <Card>
         <CardHeader>
