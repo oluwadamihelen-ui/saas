@@ -11,7 +11,13 @@ export interface BirthdayPerson {
   type: BirthdayPersonType;
   name: string;
   photoUrl: string | null;
-  /// Class ("JSS 2 A") for a student, role name ("Teacher") for staff.
+  /// Class ("JSS 2 A") for a student. For staff, their role ("Teacher")
+  /// plus the class they're the class/form teacher for, when they lead
+  /// one — there's no separate staff "department" field anywhere in the
+  /// schema (Department only groups ClassGroups, and is never populated
+  /// by any school), so a led class arm is the one real per-staff-member
+  /// group association available; nothing is fabricated to fill a
+  /// department label that doesn't exist.
   secondaryLabel: string | null;
   classArmId: string | null;
   /// The next occurrence's calendar month/day — already adjusted for the
@@ -144,7 +150,7 @@ export async function listBirthdays(
             classArm: { select: { name: true, classGroup: { select: { name: true } } } },
           },
         }),
-    filters.type === "STUDENT" || filters.classArmId
+    filters.type === "STUDENT"
       ? Promise.resolve([])
       : prisma.user.findMany({
           where: {
@@ -152,9 +158,17 @@ export async function listBirthdays(
             status: "ACTIVE",
             dateOfBirth: { not: null },
             role: { key: { notIn: ["PARENT", "STUDENT"] } },
+            ...(filters.classArmId ? { classArmsLed: { some: { id: filters.classArmId } } } : {}),
             ...(search ? { name: { contains: search, mode: "insensitive" } } : {}),
           },
-          select: { id: true, name: true, avatarUrl: true, dateOfBirth: true, role: { select: { name: true } } },
+          select: {
+            id: true,
+            name: true,
+            avatarUrl: true,
+            dateOfBirth: true,
+            role: { select: { name: true } },
+            classArmsLed: { select: { id: true, name: true, classGroup: { select: { name: true } } }, take: 1 },
+          },
         }),
   ]);
 
@@ -176,13 +190,14 @@ export async function listBirthdays(
     ...staff.map((u) => {
       const dob = u.dateOfBirth!;
       const occurrence = nextOccurrence({ month: dob.getUTCMonth() + 1, day: dob.getUTCDate() }, today);
+      const classLed = u.classArmsLed[0];
       return {
         id: u.id,
         type: "STAFF" as const,
         name: u.name,
         photoUrl: u.avatarUrl,
-        secondaryLabel: u.role.name,
-        classArmId: null,
+        secondaryLabel: classLed ? `${u.role.name} · Class Teacher, ${classLed.classGroup.name} ${classLed.name}` : u.role.name,
+        classArmId: classLed?.id ?? null,
         ...occurrence,
         isToday: occurrence.daysUntil === 0,
       };

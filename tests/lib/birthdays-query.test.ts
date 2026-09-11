@@ -40,8 +40,12 @@ async function makeStudent(schoolId: string, classArmId: string, opts: { name: s
   });
 }
 
-async function makeStaff(schoolId: string, roleId: string, opts: { name: string; month: number; day: number; status?: "ACTIVE" | "SUSPENDED" | "INVITED" }) {
-  return prisma.user.create({
+async function makeStaff(
+  schoolId: string,
+  roleId: string,
+  opts: { name: string; month: number; day: number; status?: "ACTIVE" | "SUSPENDED" | "INVITED"; classArmLedId?: string }
+) {
+  const user = await prisma.user.create({
     data: {
       schoolId,
       roleId,
@@ -52,6 +56,10 @@ async function makeStaff(schoolId: string, roleId: string, opts: { name: string;
       status: opts.status ?? "ACTIVE",
     },
   });
+  if (opts.classArmLedId) {
+    await prisma.classArm.update({ where: { id: opts.classArmLedId }, data: { classTeacherId: user.id } });
+  }
+  return user;
 }
 
 describe("listBirthdays / listUpcomingBirthdays", () => {
@@ -193,5 +201,26 @@ describe("listBirthdays / listUpcomingBirthdays", () => {
 
     const bySearch = await listBirthdays(school.id, "Africa/Lagos", { search: "staffer" }, today);
     expect(bySearch.map((p) => p.name)).toEqual(["Some Staffer"]);
+  });
+
+  it("shows a staff member's led class (their only real 'department'-like grouping) when they have one", async () => {
+    const { school, classArm, role } = await makeSchool();
+    const today = new Date(Date.UTC(2026, 8, 10));
+    await makeStaff(school.id, role.id, { name: "Plain Teacher", month: 9, day: 11 });
+    await makeStaff(school.id, role.id, { name: "Form Teacher", month: 9, day: 12, classArmLedId: classArm.id });
+
+    const result = await listBirthdays(school.id, "Africa/Lagos", { type: "STAFF" }, today);
+    const plain = result.find((p) => p.name === "Plain Teacher")!;
+    const formTeacher = result.find((p) => p.name === "Form Teacher")!;
+
+    expect(plain.secondaryLabel).toBe("Teacher");
+    expect(plain.classArmId).toBeNull();
+    expect(formTeacher.secondaryLabel).toBe("Teacher · Class Teacher, JSS 2 A");
+    expect(formTeacher.classArmId).toBe(classArm.id);
+
+    // The class filter now also matches the staff member leading that
+    // class, alongside its students — not just students.
+    const byClass = await listBirthdays(school.id, "Africa/Lagos", { classArmId: classArm.id }, today);
+    expect(byClass.map((p) => p.name)).toEqual(["Form Teacher"]);
   });
 });
