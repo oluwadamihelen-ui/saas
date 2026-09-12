@@ -126,7 +126,14 @@ export async function createTestStudents(schoolId: string, count: number) {
 
 /// Deletes every school this test run (or a prior crashed one) created —
 /// cascades to Subscription/Student/PlatformInvoice/Notification/etc. via
-/// each model's onDelete: Cascade back to School.
+/// each model's onDelete: Cascade back to School. Also deletes any
+/// ad-hoc SubscriptionPlan rows a test created directly (e.g.
+/// entitlements.test.ts, student-import.test.ts) with a vitest-prefixed
+/// slug — plans aren't owned by a School, so they'd otherwise survive
+/// forever in whatever database the suite runs against. Run after the
+/// school deletion above so any Subscription still referencing one of
+/// these plans is already gone.
 export async function cleanupTestSchools() {
   await prisma.school.deleteMany({ where: { slug: { startsWith: TEST_SLUG_PREFIX } } });
+  await prisma.subscriptionPlan.deleteMany({ where: { slug: { startsWith: TEST_SLUG_PREFIX } } });
 }

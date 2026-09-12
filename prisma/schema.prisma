@@ -5,8 +5,21 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // The running app should point this at a pooled connection string
+  // (e.g. Neon's `-pooler` endpoint) — serverless deployments like Vercel
+  // can run many function instances at once, each opening its own
+  // connection, and an unpooled connection exhausts Postgres's connection
+  // limit under real concurrent traffic.
+  url       = env("DATABASE_URL")
+  // Migrations (prisma migrate deploy, run automatically by `npm run
+  // build` on every Vercel deploy — see package.json) need a direct,
+  // unpooled connection: Prisma's migration engine takes a session-level
+  // advisory lock, which a transaction-mode pooler (like the one behind
+  // Neon's pooled endpoint) doesn't reliably support. Set to the same
+  // value as DATABASE_URL wherever there's no pooler in front of Postgres
+  // at all (local dev, a plain self-hosted Postgres) — see .env.example.
+  directUrl = env("DIRECT_URL")
 }
 
 // ---------------------------------------------------------------------------

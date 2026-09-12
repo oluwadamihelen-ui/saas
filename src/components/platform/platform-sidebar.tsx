@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LayoutDashboard, Building2, Package, LineChart, Inbox } from "lucide-react";
+import { LayoutDashboard, Building2, Package, LineChart, Inbox, Calculator } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { NavDrawer } from "@/components/ui/nav-drawer";
 import { NavTree, type NavItem } from "@/components/ui/nav-tree";
@@ -11,6 +11,7 @@ const NAV: NavItem[] = [
   { href: "/platform/schools", label: "Schools", icon: Building2 },
   { href: "/platform/plans", label: "Plans", icon: Package },
   { href: "/platform/billing", label: "Billing", icon: LineChart },
+  { href: "/platform/costs", label: "Unit economics", icon: Calculator },
   { href: "/platform/inquiries", label: "Enterprise inquiries", icon: Inbox },
 ];
 

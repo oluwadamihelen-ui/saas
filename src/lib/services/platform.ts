@@ -359,5 +359,31 @@ export async function setPlanActive(planId: string, isActive: boolean) {
   return prisma.subscriptionPlan.update({ where: { id: planId }, data: { isActive } });
 }
 
+/// Real starting numbers for the Unit Economics calculator (/platform/costs)
+/// — every school currently paying (ACTIVE or PAST_DUE, same "still
+/// billing" convention as MRR above) grouped by the plan's *current*
+/// database price, never a hardcoded catalog snapshot (a Super Admin may
+/// have already edited a plan's price from Settings). The calculator
+/// itself is a client-side what-if tool; this only supplies its defaults.
+export async function getCostCalculatorData() {
+  const [plans, subscriptionCounts] = await Promise.all([
+    listPlans(),
+    prisma.subscription.groupBy({ by: ["planId"], where: { status: { in: ["ACTIVE", "PAST_DUE"] } }, _count: true }),
+  ]);
+  const countByPlanId = new Map(subscriptionCounts.map((s) => [s.planId, s._count]));
+
+  return plans
+    .filter((p) => p.isActive)
+    .map((plan) => ({
+      id: plan.id,
+      name: plan.name,
+      priceMonthlyMinor: plan.priceMonthlyMinor,
+      priceAnnualMinor: plan.priceAnnualMinor,
+      currency: plan.currency,
+      isCustomPricing: plan.isCustomPricing,
+      activeSchoolCount: countByPlanId.get(plan.id) ?? 0,
+    }));
+}
+
 export { SCHOOL_STATUS_KEYS, SUBSCRIPTION_STATUS_KEYS };
 export type { PlatformInvoiceStatus, SubscriptionStatus };
