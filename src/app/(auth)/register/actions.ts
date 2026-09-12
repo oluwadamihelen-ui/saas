@@ -1,15 +1,13 @@
 "use server";
 
-import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { prisma } from "@/lib/db";
-import { logger } from "@/lib/security/logger";
+import { createSchoolWithOwner } from "@/lib/school-provisioning";
 
 const registerSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(120),
+  schoolName: z.string().trim().min(2, "School name is required").max(200),
+  ownerName: z.string().trim().min(1, "Your name is required").max(120),
   email: z.string().trim().toLowerCase().email("Enter a valid email"),
   password: z.string().min(8, "Password must be at least 8 characters").max(200),
-  company: z.string().trim().max(200).optional(),
 });
 
 export interface RegisterState {
@@ -17,38 +15,29 @@ export interface RegisterState {
   message?: string;
 }
 
-export async function registerCustomer(_prev: RegisterState, formData: FormData): Promise<RegisterState> {
+export async function registerSchool(_prev: RegisterState, formData: FormData): Promise<RegisterState> {
   const parsed = registerSchema.safeParse({
-    name: formData.get("name"),
+    schoolName: formData.get("schoolName"),
+    ownerName: formData.get("ownerName"),
     email: formData.get("email"),
     password: formData.get("password"),
-    company: formData.get("company") || undefined,
   });
 
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
   }
 
-  const { name, email, password, company } = parsed.data;
-
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
-    return { status: "error", message: "An account with this email already exists." };
+  try {
+    await createSchoolWithOwner({
+      schoolName: parsed.data.schoolName,
+      ownerName: parsed.data.ownerName,
+      ownerEmail: parsed.data.email,
+      password: parsed.data.password,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to create your school right now.";
+    return { status: "error", message };
   }
-
-  const customerRole = await prisma.role.findUnique({ where: { key: "CUSTOMER" } });
-  if (!customerRole) {
-    logger.error("register.missing_role", { role: "CUSTOMER" });
-    return { status: "error", message: "Unable to create account right now. Please try again shortly." };
-  }
-
-  const passwordHash = await bcrypt.hash(password, 12);
-
-  await prisma.user.create({
-    data: { name, email, passwordHash, company, roleId: customerRole.id, status: "ACTIVE" },
-  });
-
-  logger.info("register.success", { email });
 
   return { status: "success" };
 }

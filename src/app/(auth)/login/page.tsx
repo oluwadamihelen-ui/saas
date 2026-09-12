@@ -10,24 +10,19 @@ export default function LoginPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Welcome back</CardTitle>
-        <CardDescription>Sign in to manage your applications, deployments, and orders.</CardDescription>
+        <CardTitle>Welcome to Schoolum</CardTitle>
+        <CardDescription>The intelligent operating system for your school.</CardDescription>
       </CardHeader>
       <CardContent>
         <Suspense fallback={null}>
           <LoginForm />
         </Suspense>
         <p className="mt-6 text-center text-sm text-muted">
-          Don&apos;t have an account?{" "}
+          Setting up a new school?{" "}
           <Link href="/register" className="font-medium text-accent">
-            Create one
+            Create an account
           </Link>
         </p>
-        <div className="mt-6 rounded-md bg-muted-surface p-3 text-xs text-muted">
-          <p className="font-medium text-foreground">Demo accounts</p>
-          <p>Admin: admin@bridgecodes.example / Passw0rd!</p>
-          <p>Customer: sarah@brightretail.com / Passw0rd!</p>
-        </div>
       </CardContent>
     </Card>
   );
