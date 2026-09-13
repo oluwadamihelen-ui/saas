@@ -47,6 +47,8 @@ import {
   Cake,
   Activity,
   Bell,
+  Receipt,
+  FileStack,
 } from "lucide-react";
 import { SchoolLogo } from "@/components/brand/school-logo";
 import { PERMISSIONS, type PermissionKey } from "@/lib/permissions";
@@ -189,6 +191,9 @@ const NAV: DashboardNavItem[] = [
     icon: Wallet,
     children: [
       { href: "/dashboard/finance", label: "Overview", icon: Wallet, requiredPermission: PERMISSIONS.FINANCE_VIEW },
+      { href: "/dashboard/finance/expenses", label: "Expenses", icon: Receipt, requiredPermission: PERMISSIONS.EXPENSES_VIEW },
+      { href: "/dashboard/finance/fee-structures", label: "Fee Structures", icon: ListChecks, requiredPermission: PERMISSIONS.FINANCE_MANAGE },
+      { href: "/dashboard/finance/invoices", label: "Invoices", icon: FileStack, requiredPermission: PERMISSIONS.FINANCE_VIEW },
       { href: "/dashboard/payroll", label: "Payroll", icon: Banknote, requiredPermission: PERMISSIONS.PAYROLL_VIEW },
     ],
   },
