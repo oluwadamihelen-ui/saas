@@ -3,12 +3,18 @@
 import { z } from "zod";
 import { createSchoolWithOwner } from "@/lib/school-provisioning";
 
-const registerSchema = z.object({
-  schoolName: z.string().trim().min(2, "School name is required").max(200),
-  ownerName: z.string().trim().min(1, "Your name is required").max(120),
-  email: z.string().trim().toLowerCase().email("Enter a valid email"),
-  password: z.string().min(8, "Password must be at least 8 characters").max(200),
-});
+const registerSchema = z
+  .object({
+    schoolName: z.string().trim().min(2, "School name is required").max(200),
+    ownerName: z.string().trim().min(1, "Your name is required").max(120),
+    email: z.string().trim().toLowerCase().email("Enter a valid email"),
+    password: z.string().min(8, "Password must be at least 8 characters").max(200),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
 
 export interface RegisterState {
   status: "idle" | "error" | "success";
@@ -21,6 +27,7 @@ export async function registerSchool(_prev: RegisterState, formData: FormData): 
     ownerName: formData.get("ownerName"),
     email: formData.get("email"),
     password: formData.get("password"),
+    confirmPassword: formData.get("confirmPassword"),
   });
 
   if (!parsed.success) {

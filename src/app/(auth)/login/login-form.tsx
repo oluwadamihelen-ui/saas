@@ -4,12 +4,12 @@ import * as React from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { Input, Label } from "@/components/ui/input";
+import { Input, Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 type Mode = "email" | "student";
 
-export function LoginForm() {
+export function LoginForm({ schools }: { schools: { slug: string; name: string }[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mode, setMode] = React.useState<Mode>("email");
@@ -69,8 +69,17 @@ export function LoginForm() {
           <>
             <div className="space-y-1.5">
               <Label htmlFor="schoolSlug">School</Label>
-              <Input id="schoolSlug" name="schoolSlug" type="text" required placeholder="e.g. horizon-academy" />
-              <p className="text-xs text-muted">Ask your teacher if you don&apos;t know this.</p>
+              <Select id="schoolSlug" name="schoolSlug" required defaultValue="">
+                <option value="" disabled>
+                  Select your school
+                </option>
+                {schools.map((school) => (
+                  <option key={school.slug} value={school.slug}>
+                    {school.name}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-xs text-muted">Don&apos;t see your school? Ask your teacher.</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="admissionNumber">Admission Number</Label>
