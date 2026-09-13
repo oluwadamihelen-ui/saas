@@ -232,6 +232,11 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
     PERMISSIONS.STUDENTS_EDIT,
     PERMISSIONS.GUARDIANS_MANAGE,
     PERMISSIONS.STAFF_VIEW,
+    // Alongside SCHOOL_OWNER, the Head of School is the other role a
+    // school can designate to decide what every other role is allowed to
+    // do (e.g. keeping SCHOOL_SETTINGS_MANAGE away from TEACHER) — see
+    // role-permissions.ts.
+    PERMISSIONS.ROLES_MANAGE,
     PERMISSIONS.ACADEMICS_MANAGE,
     PERMISSIONS.AUDIT_VIEW,
     PERMISSIONS.ATTENDANCE_VIEW,

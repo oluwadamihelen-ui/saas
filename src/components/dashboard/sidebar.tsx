@@ -22,6 +22,7 @@ import {
   CreditCard,
   IdCard,
   KeyRound,
+  ShieldCheck,
   UserPlus,
   Contact,
   ClipboardList,
@@ -99,6 +100,7 @@ const NAV: DashboardNavItem[] = [
           { href: "/dashboard/administration/users/reset-password", label: "Reset Password", icon: KeyRound, requiredPermission: PERMISSIONS.USERS_MANAGE },
           { href: "/dashboard/academics", label: "Assign Subject & Class", icon: BookOpen, requiredPermission: PERMISSIONS.ACADEMICS_MANAGE },
           { href: "/dashboard/administration/users", label: "All Users", icon: Users, requiredPermission: PERMISSIONS.USERS_MANAGE },
+          { href: "/dashboard/administration/roles", label: "Manage Roles", icon: ShieldCheck, requiredPermission: PERMISSIONS.ROLES_MANAGE },
         ],
       },
       {

@@ -19,9 +19,23 @@ import { PERMISSION_CATALOG, ROLE_DEFAULT_PERMISSIONS, SYSTEM_ROLE_KEYS } from "
 // leaves a role short a permission it should have (a "Missing permission"
 // error on a page that role should now reach); the second leaves a role
 // holding a permission it shouldn't have anymore. Syncing in both
-// directions is safe only because there's no role-editing UI yet
-// (ARCHITECTURE.md) — there's no intentional per-school customization this
-// could ever clobber.
+// directions was safe only because there was no role-editing UI yet
+// (ARCHITECTURE.md) — there was no intentional per-school customization
+// this could ever clobber.
+//
+// THAT STOPPED BEING TRUE the moment /dashboard/administration/roles
+// (role-permissions.ts) shipped — a school's owner/principal can now
+// deliberately grant or revoke anything, including going narrower than
+// ROLE_DEFAULT_PERMISSIONS on purpose. Running this script again would
+// silently overwrite every school's real customization back to the
+// hardcoded defaults, which is exactly the kind of clobbering the comment
+// above used to say couldn't happen. It was run one last time when
+// ROLES_MANAGE was added to PRINCIPAL's defaults (the change that shipped
+// alongside the editing UI itself), specifically because at that instant
+// no school could yet have customized anything. Do not run it again after
+// this — a future new default permission needs a narrower, one-off script
+// that only grants the new key (and only where a role hasn't already been
+// deliberately configured), never a blanket resync in both directions.
 //
 // Run with: npm run db:backfill-permissions
 

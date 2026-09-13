@@ -58,9 +58,9 @@ nothing in Phase 1's UI creates or uses such a user yet.
   `STUDENT`) and copies the default permission matrix
   (`ROLE_DEFAULT_PERMISSIONS`) into that school's own `RolePermission` rows.
   This means a school's role → permission matrix is real, editable data —
-  changing what a `TEACHER` can do at School A never touches School B — even
-  though Phase 1 doesn't yet expose a UI to edit it (roles are fixed at
-  creation time until that UI lands).
+  changing what a `TEACHER` can do at School A never touches School B.
+  `/dashboard/administration/roles` (`src/lib/services/role-permissions.ts`)
+  is that editing UI — see the dedicated bullet below.
 - **`ROLE_DEFAULT_PERMISSIONS` is only ever applied once, at that
   school-creation moment — which means a school provisioned before a later
   phase added a new default permission to one of its roles doesn't
@@ -124,9 +124,32 @@ nothing in Phase 1's UI creates or uses such a user yet.
   from `SCHOOL_ADMIN` needed the reverse too — revoking a permission a
   role used to default to but no longer does — so the script now diffs a
   role's current grants against `ROLE_DEFAULT_PERMISSIONS` and both grants
-  what's missing and revokes what's no longer there. Still safe for the
-  same reason as before: no role-editing UI exists yet, so there's no
-  intentional per-school customization to lose.
+  what's missing and revokes what's no longer there. That two-way sync
+  was safe only because no role-editing UI existed yet — see the next
+  bullet for why the script must not be run again now that one does.
+- **`/dashboard/administration/roles` lets a school's `SCHOOL_OWNER` or
+  `PRINCIPAL` (both hold `roles.manage` by default — see
+  `ROLE_DEFAULT_PERMISSIONS`) decide what every other role can do**, e.g.
+  keeping `school_settings.manage` away from `TEACHER`.
+  `src/lib/services/role-permissions.ts` is the single write path
+  (`updateRolePermissions`) — every UI/action funnels through it, same
+  "one central function" convention as `generateAdmissionNumber`. Two
+  guardrails live in that function, not the UI, so they hold even against
+  a hand-crafted request: `SCHOOL_OWNER`'s permission set can never be
+  edited (it must always be able to undo any other role's
+  misconfiguration), and no one can remove `roles.manage` from the role
+  they themselves currently hold (prevents locking yourself out of this
+  page — `SCHOOL_OWNER` would still have it, but that's a support ticket
+  this check avoids). Changes take effect immediately, same as every
+  other permission check (`getUserPermissions` never caches), and are
+  logged via the existing `logAudit()` helper
+  (`roles.permissions_changed`), not a separate audit system. **This is
+  also why `backfill-permissions.ts` above must not be run again**: it
+  would silently overwrite a school's deliberate customization back to
+  the hardcoded defaults. `ROLES_MANAGE` was added to `PRINCIPAL`'s
+  defaults in the same change that shipped this UI, and the backfill was
+  run one last time at that exact moment — safe only because no school
+  could yet have customized anything.
 
 ## Data model
 
