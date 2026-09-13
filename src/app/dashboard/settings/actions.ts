@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { updateSchoolInfo } from "@/lib/services/school";
 import { prisma } from "@/lib/db";
+import { logAudit } from "@/lib/audit";
 
 const schema = z.object({
   name: z.string().trim().min(2, "School name is required"),
@@ -21,6 +22,13 @@ const schema = z.object({
   bankName: z.string().trim().max(100).optional().or(z.literal("")),
   bankAccountName: z.string().trim().max(150).optional().or(z.literal("")),
   bankAccountNumber: z.string().trim().max(30).optional().or(z.literal("")),
+  admissionNumberPrefix: z
+    .string()
+    .trim()
+    .transform((v) => v.toUpperCase())
+    .refine((v) => v.length === 0 || /^[A-Z0-9]{2,10}$/.test(v), {
+      message: "School abbreviation must be 2-10 letters/numbers, with no spaces or symbols.",
+    }),
 });
 
 export interface SettingsState {
@@ -45,11 +53,18 @@ export async function saveSchoolSettings(_prev: SettingsState, formData: FormDat
     bankName: formData.get("bankName") ?? "",
     bankAccountName: formData.get("bankAccountName") ?? "",
     bankAccountNumber: formData.get("bankAccountNumber") ?? "",
+    admissionNumberPrefix: formData.get("admissionNumberPrefix") ?? "",
   });
 
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
   }
+
+  const before = await prisma.school.findUniqueOrThrow({
+    where: { id: user.schoolId },
+    select: { admissionNumberPrefix: true },
+  });
+  const newPrefix = parsed.data.admissionNumberPrefix || null;
 
   await prisma.school.update({
     where: { id: user.schoolId },
@@ -58,8 +73,21 @@ export async function saveSchoolSettings(_prev: SettingsState, formData: FormDat
       bankName: parsed.data.bankName || null,
       bankAccountName: parsed.data.bankAccountName || null,
       bankAccountNumber: parsed.data.bankAccountNumber || null,
+      admissionNumberPrefix: newPrefix,
     },
   });
+
+  if (before.admissionNumberPrefix !== newPrefix) {
+    await logAudit({
+      schoolId: user.schoolId,
+      userId: user.id,
+      action: "school.admission_number_prefix_changed",
+      resourceType: "School",
+      resourceId: user.schoolId,
+      previousValue: { admissionNumberPrefix: before.admissionNumberPrefix },
+      newValue: { admissionNumberPrefix: newPrefix },
+    });
+  }
   await updateSchoolInfo(user.schoolId, {
     email: parsed.data.email || null,
     phone: parsed.data.phone || null,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Input, Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { saveSchoolInfo, type SchoolInfoState } from "./actions";
@@ -10,11 +10,40 @@ const initialState: SchoolInfoState = { status: "idle" };
 const CURRENCIES = ["NGN", "GHS", "KES", "ZAR", "USD"];
 const TIMEZONES = ["Africa/Lagos", "Africa/Accra", "Africa/Nairobi", "Africa/Johannesburg", "UTC"];
 
-export function SchoolInfoForm() {
+// A starting point only — pre-filled into an editable field, never saved
+// without the school seeing and (implicitly, by submitting) confirming it.
+function suggestAbbreviation(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 10);
+}
+
+export function SchoolInfoForm({ schoolName, currentPrefix }: { schoolName: string; currentPrefix: string | null }) {
   const [state, formAction, isPending] = useActionState(saveSchoolInfo, initialState);
+  const [prefix, setPrefix] = useState(currentPrefix ?? suggestAbbreviation(schoolName));
 
   return (
     <form action={formAction} className="space-y-4">
+      <div className="space-y-1.5">
+        <Label htmlFor="admissionNumberPrefix">School abbreviation</Label>
+        <Input
+          id="admissionNumberPrefix"
+          name="admissionNumberPrefix"
+          value={prefix}
+          onChange={(e) => setPrefix(e.target.value)}
+          placeholder="e.g. WMS"
+          maxLength={10}
+          className="uppercase"
+        />
+        <p className="text-xs text-muted">
+          Suggested from your school name — used as the prefix for admission numbers, e.g.{" "}
+          <span className="font-mono">{(prefix.trim() || "WMS").toUpperCase()}-2026-0001</span>. Feel free to change it before continuing.
+        </p>
+      </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label htmlFor="email">School email</Label>

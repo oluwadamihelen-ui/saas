@@ -1,7 +1,8 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { requireStudentCapacity } from "@/lib/billing/entitlements";
-import type { Gender, GuardianRelationship, Prisma, StudentStatus } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
+import type { Gender, GuardianRelationship, StudentStatus } from "@/generated/prisma/client";
 
 const PAGE_SIZE = 20;
 
@@ -115,10 +116,44 @@ export async function getStudent(schoolId: string, id: string) {
   });
 }
 
-async function generateAdmissionNumber(schoolId: string) {
+/// Prefixes with the school's configured admissionNumberPrefix when set
+/// (e.g. "WMS" → "WMS-2026-0192"); unset schools keep the original bare
+/// "YYYY-NNNN" format unchanged. The sequence itself is a running
+/// count-of-all-students-so-far — not reset per year or session — which
+/// predates this prefix feature and is left as-is.
+///
+/// Takes the transaction client, not the bare prisma client: the count
+/// read and the student insert must happen inside the SAME Serializable
+/// transaction (see createStudent) for Postgres to actually detect two
+/// concurrent requests computing the same "next" number — reading the
+/// count outside the transaction (as an earlier version of this function
+/// did) can't be protected by isolation level at all, since the read and
+/// write are then in two unrelated transactions.
+async function generateAdmissionNumber(tx: Tx, schoolId: string) {
+  const [school, count] = await Promise.all([
+    tx.school.findUnique({ where: { id: schoolId }, select: { admissionNumberPrefix: true } }),
+    tx.student.count({ where: { schoolId } }),
+  ]);
   const year = new Date().getFullYear();
-  const count = await prisma.student.count({ where: { schoolId } });
-  return `${year}-${String(count + 1).padStart(4, "0")}`;
+  const sequence = String(count + 1).padStart(4, "0");
+  return school?.admissionNumberPrefix ? `${school.admissionNumberPrefix}-${year}-${sequence}` : `${year}-${sequence}`;
+}
+
+// Only an auto-generated number is safe to silently retry on collision — a
+// caller-supplied one (CSV import's admissionNumber column) colliding is a
+// real duplicate the caller must see and fix, not something to paper over.
+const MAX_ADMISSION_NUMBER_ATTEMPTS = 8;
+
+// P2002: the @@unique([schoolId, admissionNumber]) backstop was hit anyway
+// (e.g. racing against a row inserted just before this transaction began).
+// P2034: Postgres aborted this transaction under Serializable isolation
+// because it overlapped with a concurrent one — Prisma's documented
+// pattern for this exact "two transactions computed the same counter
+// value" race is to catch P2034 and simply retry.
+function isRetryableAdmissionNumberError(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  if (error.code === "P2034") return true;
+  return error.code === "P2002" && Array.isArray(error.meta?.target) && (error.meta.target as string[]).includes("admissionNumber");
 }
 
 export interface StudentInput {
@@ -158,58 +193,89 @@ export interface StudentInput {
 /// needs to be called in this one place to cover both (spec section 10).
 export async function createStudent(schoolId: string, input: StudentInput) {
   await requireStudentCapacity(schoolId);
-  const admissionNumber = input.admissionNumber?.trim() || (await generateAdmissionNumber(schoolId));
+  const explicitAdmissionNumber = input.admissionNumber?.trim() || undefined;
 
-  return prisma.$transaction(async (tx) => {
-    const student = await tx.student.create({
-      data: {
-        schoolId,
-        admissionNumber,
-        firstName: input.firstName,
-        lastName: input.lastName,
-        otherNames: input.otherNames || null,
-        photoUrl: input.photoUrl || null,
-        dateOfBirth: input.dateOfBirth ?? null,
-        gender: input.gender ?? null,
-        bloodGroup: input.bloodGroup || null,
-        nationality: input.nationality || "Nigeria",
-        addressLine: input.addressLine || null,
-        city: input.city || null,
-        state: input.state || null,
-        medicalNotes: input.medicalNotes || null,
-        allergies: input.allergies || null,
-        emergencyContact: input.emergencyContact || null,
-        classArmId: input.classArmId || null,
-        campusId: input.campusId || null,
-      },
-    });
+  // A caller-supplied number (CSV import) gets exactly one attempt — a
+  // collision there is a real duplicate the caller must see, not something
+  // to retry past. An auto-generated one is safe to regenerate and retry:
+  // the count-based generator can race under concurrent creates, and the
+  // @@unique([schoolId, admissionNumber]) constraint is the backstop that
+  // catches it.
+  const maxAttempts = explicitAdmissionNumber ? 1 : MAX_ADMISSION_NUMBER_ATTEMPTS;
 
-    if (input.guardian) {
-      const guardian = await tx.guardian.create({
-        data: {
-          schoolId,
-          firstName: input.guardian.firstName,
-          lastName: input.guardian.lastName,
-          phone: input.guardian.phone,
-          email: input.guardian.email || null,
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await prisma.$transaction(
+        async (tx) => {
+          const admissionNumber = explicitAdmissionNumber ?? (await generateAdmissionNumber(tx, schoolId));
+          const student = await tx.student.create({
+            data: {
+              schoolId,
+              admissionNumber,
+              firstName: input.firstName,
+              lastName: input.lastName,
+              otherNames: input.otherNames || null,
+              photoUrl: input.photoUrl || null,
+              dateOfBirth: input.dateOfBirth ?? null,
+              gender: input.gender ?? null,
+              bloodGroup: input.bloodGroup || null,
+              nationality: input.nationality || "Nigeria",
+              addressLine: input.addressLine || null,
+              city: input.city || null,
+              state: input.state || null,
+              medicalNotes: input.medicalNotes || null,
+              allergies: input.allergies || null,
+              emergencyContact: input.emergencyContact || null,
+              classArmId: input.classArmId || null,
+              campusId: input.campusId || null,
+            },
+          });
+
+          if (input.guardian) {
+            const guardian = await tx.guardian.create({
+              data: {
+                schoolId,
+                firstName: input.guardian.firstName,
+                lastName: input.guardian.lastName,
+                phone: input.guardian.phone,
+                email: input.guardian.email || null,
+              },
+            });
+            await tx.studentGuardian.create({
+              data: {
+                studentId: student.id,
+                guardianId: guardian.id,
+                relationship: input.guardian.relationship,
+                isPrimary: true,
+              },
+            });
+          }
+
+          if (input.classArmId) {
+            await recordClassHistory(tx, schoolId, student.id, input.classArmId);
+          }
+
+          return student;
         },
-      });
-      await tx.studentGuardian.create({
-        data: {
-          studentId: student.id,
-          guardianId: guardian.id,
-          relationship: input.guardian.relationship,
-          isPrimary: true,
-        },
-      });
+        // Serializable only matters for the racy count()-based generator —
+        // an explicit (import-supplied) number has nothing to race against
+        // and the extra isolation would only cost throughput for no benefit.
+        explicitAdmissionNumber ? undefined : { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+      );
+    } catch (error) {
+      const isLastAttempt = attempt === maxAttempts;
+      if (explicitAdmissionNumber || !isRetryableAdmissionNumberError(error) || isLastAttempt) {
+        throw error;
+      }
+      // Another request generated (P2002) or overlapped with (P2034) this
+      // attempt — loop back and generate a fresh number in a fresh
+      // transaction.
     }
+  }
 
-    if (input.classArmId) {
-      await recordClassHistory(tx, schoolId, student.id, input.classArmId);
-    }
-
-    return student;
-  });
+  // Unreachable — the loop always returns or throws — but keeps TypeScript
+  // happy about a guaranteed return type.
+  throw new Error("Could not generate a unique admission number.");
 }
 
 export async function updateStudent(schoolId: string, id: string, input: Partial<StudentInput>) {

@@ -39,6 +39,16 @@ model School {
   id     String       @id @default(cuid())
   name   String
   slug   String       @unique
+
+  /// Prefix prepended to every NEW automatically-generated admission
+  /// number (e.g. "WMS" → "WMS-2026-0192") — read by
+  /// generateAdmissionNumber() in students.ts. Null means no prefix is
+  /// configured yet: existing behavior (bare "YYYY-NNNN") continues
+  /// unchanged for that school. Changing this NEVER rewrites admission
+  /// numbers already issued — only numbers generated after the change use
+  /// the new value. 2-10 chars, uppercase letters/digits only, enforced in
+  /// the settings action.
+  admissionNumberPrefix String?
   status SchoolStatus @default(TRIAL)
 
   logoUrl String?

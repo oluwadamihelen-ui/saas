@@ -4,6 +4,7 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { requireSchoolUser } from "@/lib/auth/require";
 import { updateSchoolInfo } from "@/lib/services/school";
+import { prisma } from "@/lib/db";
 
 const schema = z.object({
   email: z.string().trim().email().optional().or(z.literal("")),
@@ -15,6 +16,13 @@ const schema = z.object({
   country: z.string().trim().min(1),
   currency: z.string().trim().min(1),
   timezone: z.string().trim().min(1),
+  admissionNumberPrefix: z
+    .string()
+    .trim()
+    .transform((v) => v.toUpperCase())
+    .refine((v) => v.length === 0 || /^[A-Z0-9]{2,10}$/.test(v), {
+      message: "School abbreviation must be 2-10 letters/numbers, with no spaces or symbols.",
+    }),
 });
 
 export interface SchoolInfoState {
@@ -35,6 +43,7 @@ export async function saveSchoolInfo(_prev: SchoolInfoState, formData: FormData)
     country: formData.get("country"),
     currency: formData.get("currency"),
     timezone: formData.get("timezone"),
+    admissionNumberPrefix: formData.get("admissionNumberPrefix") ?? "",
   });
 
   if (!parsed.success) {
@@ -51,6 +60,10 @@ export async function saveSchoolInfo(_prev: SchoolInfoState, formData: FormData)
     country: parsed.data.country,
     currency: parsed.data.currency,
     timezone: parsed.data.timezone,
+  });
+  await prisma.school.update({
+    where: { id: user.schoolId },
+    data: { admissionNumberPrefix: parsed.data.admissionNumberPrefix || null },
   });
 
   redirect("/onboarding/academic-structure");

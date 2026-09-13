@@ -18,10 +18,11 @@ export default async function SettingsPage() {
   const perms = await getUserPermissions(user.id);
   const canManageGateways = perms.has(PERMISSIONS.PAYMENT_GATEWAYS_MANAGE);
 
-  const [school, credentials, me] = await Promise.all([
+  const [school, credentials, me, studentCount] = await Promise.all([
     getSchool(user.schoolId),
     canManageGateways ? listGatewayCredentials(user.schoolId) : Promise.resolve([]),
     prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { dateOfBirth: true } }),
+    prisma.student.count({ where: { schoolId: user.schoolId } }),
   ]);
   const credentialByProvider = new Map(credentials.map((c) => [c.provider, c]));
 
@@ -48,7 +49,7 @@ export default async function SettingsPage() {
           <CardDescription>Shown on report cards, invoices and parent communication.</CardDescription>
         </CardHeader>
         <CardContent>
-          <SettingsForm school={school} />
+          <SettingsForm school={school} studentCount={studentCount} />
         </CardContent>
       </Card>
 
