@@ -2,7 +2,14 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { deleteOnlineLearningFile } from "@/lib/storage/blob";
 import { notifyLecturePublished } from "@/lib/services/notifications";
+import { assertTeacherAssignment } from "@/lib/services/teacher-scope";
 import type { LectureResourceType, Prisma } from "@/generated/prisma/client";
+
+// Re-exported so existing imports of these two from this module (they used
+// to be defined here) keep working unchanged — they're general-purpose now
+// and live in teacher-scope.ts since Results, Assignments and CBT need them
+// too, not just Lectures/Live Classes.
+export { assertTeacherAssignment, listTeachableAssignments } from "@/lib/services/teacher-scope";
 
 /// Every write below scopes its WHERE clause to schoolId AND (for a
 /// teacher-authored row) teacherId — the same "no path to a bare unscoped
@@ -35,28 +42,6 @@ export interface LectureInput {
   instructions?: string | null;
   dueDate?: Date | null;
   resources: LectureResourceInput[];
-}
-
-/// The one gate every lecture/live-class create or edit must pass: a
-/// teacher may only act on a subject+classArm pair they are actually
-/// assigned to (TeacherAssignment), never merely because they hold
-/// lectures.manage generally. Never trust a subjectId/classArmId that
-/// arrives from a client without re-checking this server-side.
-export async function assertTeacherAssignment(schoolId: string, teacherId: string, subjectId: string, classArmId: string) {
-  const assignment = await prisma.teacherAssignment.findFirst({
-    where: { schoolId, teacherId, subjectId, classArmId },
-  });
-  if (!assignment) {
-    throw new Error("You are not assigned to teach this subject for this class.");
-  }
-}
-
-export async function listTeachableAssignments(schoolId: string, teacherId: string) {
-  return prisma.teacherAssignment.findMany({
-    where: { schoolId, teacherId },
-    include: { subject: true, classArm: { include: { classGroup: true } } },
-    orderBy: [{ classArm: { classGroup: { order: "asc" } } }, { subject: { name: "asc" } }],
-  });
 }
 
 async function replaceLectureResources(tx: Prisma.TransactionClient, lectureId: string, resources: LectureResourceInput[]) {

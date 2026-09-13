@@ -2,6 +2,7 @@ import { requirePermission } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { listSubjects } from "@/lib/services/academics";
+import { getAccessibleSubjectIds } from "@/lib/services/teacher-scope";
 import { isCbtAiConfigured } from "@/lib/services/cbt-ai";
 import { hasFeature, getCbtAiMonthlyUsage, getCbtAiMonthlyLimit } from "@/lib/billing/entitlements";
 import { FeatureLocked } from "@/components/billing/feature-locked";
@@ -12,9 +13,9 @@ import { GenerateForm } from "./generate-form";
 
 export default async function GenerateQuestionsPage() {
   const user = await requirePermission(PERMISSIONS.CBT_GENERATE_AI_QUESTIONS);
+  const perms = await getUserPermissions(user.id);
 
   if (!(await hasFeature(user.schoolId, "cbt_ai_generation"))) {
-    const perms = await getUserPermissions(user.id);
     return (
       <FeatureLocked
         description="AI question generation isn't included in your current plan."
@@ -36,11 +37,13 @@ export default async function GenerateQuestionsPage() {
     );
   }
 
-  const [subjects, aiUsage, aiLimit] = await Promise.all([
+  const [allSubjects, aiUsage, aiLimit] = await Promise.all([
     listSubjects(user.schoolId),
     getCbtAiMonthlyUsage(user.schoolId),
     getCbtAiMonthlyLimit(user.schoolId),
   ]);
+  const subjectAccess = await getAccessibleSubjectIds(user.schoolId, user.id, perms);
+  const subjects = subjectAccess === "ALL" ? allSubjects : allSubjects.filter((s) => subjectAccess.has(s.id));
 
   return (
     <div className="space-y-4 sm:space-y-6">

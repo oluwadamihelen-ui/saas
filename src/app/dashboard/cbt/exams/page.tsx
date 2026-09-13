@@ -11,6 +11,7 @@ import { requirePermission } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { listExams } from "@/lib/services/cbt-exams";
+import { getAccessibleSubjectIds } from "@/lib/services/teacher-scope";
 import { listSubjects, listTerms } from "@/lib/services/academics";
 import { hasFeature, getCbtActiveExamCount, getCbtActiveExamLimit } from "@/lib/billing/entitlements";
 import { FeatureLocked } from "@/components/billing/feature-locked";
@@ -47,19 +48,28 @@ export default async function ExamsPage({
     );
   }
 
-  const [{ exams, total, page, pageCount }, subjects, terms, activeExamCount, activeExamLimit] = await Promise.all([
-    listExams(user.schoolId, {
-      search: params.q,
-      subjectId: params.subjectId,
-      termId: params.termId,
-      status: (params.status as CBTExamStatus) || undefined,
-      page: params.page ? Number(params.page) : 1,
-    }),
+  // A teacher (no ACADEMICS_MANAGE) only sees exams for subjects they hold
+  // a TeacherAssignment for — same "no access to another class's records"
+  // rule as Results/Assignments/Timetable.
+  const subjectAccess = await getAccessibleSubjectIds(user.schoolId, user.id, perms);
+  const [{ exams, total, page, pageCount }, allSubjects, terms, activeExamCount, activeExamLimit] = await Promise.all([
+    listExams(
+      user.schoolId,
+      {
+        search: params.q,
+        subjectId: params.subjectId,
+        termId: params.termId,
+        status: (params.status as CBTExamStatus) || undefined,
+        page: params.page ? Number(params.page) : 1,
+      },
+      subjectAccess
+    ),
     listSubjects(user.schoolId),
     listTerms(user.schoolId),
     getCbtActiveExamCount(user.schoolId),
     getCbtActiveExamLimit(user.schoolId),
   ]);
+  const subjects = subjectAccess === "ALL" ? allSubjects : allSubjects.filter((s) => subjectAccess.has(s.id));
 
   return (
     <div className="space-y-4 sm:space-y-6">

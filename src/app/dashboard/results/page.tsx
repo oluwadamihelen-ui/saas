@@ -8,6 +8,7 @@ import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { listClassArms, listSubjects, listTerms, getCurrentTerm } from "@/lib/services/academics";
 import { getScoreEntryGrid } from "@/lib/services/results";
+import { getAccessibleAssignments, canActOnAssignment } from "@/lib/services/teacher-scope";
 import { ScoreGridForm } from "./score-grid-form";
 import { ScoreGridReadOnly } from "./score-grid-readonly";
 
@@ -23,7 +24,7 @@ export default async function ResultsPage({
   const canViewTranscripts = perms.has(PERMISSIONS.TRANSCRIPTS_VIEW);
 
   const params = await searchParams;
-  const [classArms, subjects, terms, currentTerm] = await Promise.all([
+  const [allClassArms, allSubjects, terms, currentTerm] = await Promise.all([
     listClassArms(user.schoolId),
     listSubjects(user.schoolId),
     listTerms(user.schoolId),
@@ -31,8 +32,27 @@ export default async function ResultsPage({
   ]);
   const sessions = Array.from(new Map(terms.map((t) => [t.academicSessionId, t.academicSession])).values());
 
-  const classArmId = params.classArmId || classArms[0]?.id;
-  const subjectId = params.subjectId || subjects[0]?.id;
+  // A teacher (no ACADEMICS_MANAGE) only enters/sees scores for a
+  // subject+class pair they hold a TeacherAssignment for — same reasoning
+  // as Attendance: the class/subject pickers only offer combinations
+  // they're actually assigned to, and a requested pair outside that set
+  // silently falls back to one of their real assignments rather than
+  // exposing another class's scores.
+  const access = await getAccessibleAssignments(user.schoolId, user.id, perms);
+  const classArms = access === "ALL" ? allClassArms : allClassArms.filter((a) => access.some((p) => p.classArmId === a.id));
+  const subjects = access === "ALL" ? allSubjects : allSubjects.filter((s) => access.some((p) => p.subjectId === s.id));
+
+  let classArmId: string | undefined;
+  let subjectId: string | undefined;
+  if (access === "ALL") {
+    classArmId = params.classArmId || classArms[0]?.id;
+    subjectId = params.subjectId || subjects[0]?.id;
+  } else {
+    const requestedValid =
+      params.classArmId && params.subjectId && canActOnAssignment(access, params.classArmId, params.subjectId);
+    classArmId = requestedValid ? params.classArmId : access[0]?.classArmId;
+    subjectId = requestedValid ? params.subjectId : access[0]?.subjectId;
+  }
 
   const grid = classArmId && subjectId && currentTerm
     ? await getScoreEntryGrid(user.schoolId, classArmId, subjectId, currentTerm.id)
@@ -96,7 +116,12 @@ export default async function ResultsPage({
             <Button type="submit" variant="secondary">Load</Button>
           </form>
 
-          {!currentTerm ? (
+          {access !== "ALL" && access.length === 0 ? (
+            <EmptyState
+              title="No subjects assigned to you"
+              description="You aren't assigned to teach any subject/class yet — ask your school administrator to assign you to one."
+            />
+          ) : !currentTerm ? (
             <EmptyState title="No active term" description="Set a current term before entering scores." />
           ) : !grid || grid.rows.length === 0 ? (
             <EmptyState title="No active students in this class" />

@@ -4,8 +4,10 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/auth/require";
+import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
-import { gradeAnswer } from "@/lib/services/cbt-grading";
+import { gradeAnswer, getAnswerExamSubjectId } from "@/lib/services/cbt-grading";
+import { assertCanActOnSubject } from "@/lib/services/teacher-scope";
 import { suggestGrade, type GradingSuggestion } from "@/lib/services/cbt-ai";
 import { logAudit } from "@/lib/audit";
 
@@ -38,6 +40,14 @@ export async function gradeAnswerAction(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check the marks entered." };
   }
 
+  const perms = await getUserPermissions(user.id);
+  try {
+    const subjectId = await getAnswerExamSubjectId(user.schoolId, answerId);
+    if (subjectId) await assertCanActOnSubject(user.schoolId, user.id, perms, subjectId);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "You are not assigned to this subject." };
+  }
+
   try {
     await gradeAnswer(
       user.schoolId,
@@ -65,7 +75,10 @@ export interface GetGradingSuggestionResult {
 
 export async function getGradingSuggestionAction(answerId: string): Promise<GetGradingSuggestionResult> {
   const user = await requirePermission(PERMISSIONS.CBT_GRADE);
+  const perms = await getUserPermissions(user.id);
   try {
+    const subjectId = await getAnswerExamSubjectId(user.schoolId, answerId);
+    if (subjectId) await assertCanActOnSubject(user.schoolId, user.id, perms, subjectId);
     const suggestion = await suggestGrade(user.schoolId, answerId);
     return { status: "ok", suggestion };
   } catch (error) {

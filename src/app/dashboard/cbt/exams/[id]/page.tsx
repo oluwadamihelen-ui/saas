@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getExam } from "@/lib/services/cbt-exams";
+import { getAccessibleSubjectIds, canActOnSubject } from "@/lib/services/teacher-scope";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,11 @@ export default async function ExamDetailPage({ params }: { params: Promise<{ id:
 
   const exam = await getExam(user.schoolId, id);
   if (!exam) notFound();
+
+  // Not found, not forbidden — same reasoning as the assignment detail
+  // page: this shouldn't confirm that an exam for another subject exists.
+  const subjectAccess = await getAccessibleSubjectIds(user.schoolId, user.id, perms);
+  if (!canActOnSubject(subjectAccess, exam.subjectId)) notFound();
 
   return (
     <div className="space-y-4 sm:space-y-6">

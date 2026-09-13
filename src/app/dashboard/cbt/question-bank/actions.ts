@@ -4,6 +4,7 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/auth/require";
+import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import {
   createQuestion,
@@ -14,10 +15,12 @@ import {
   approveQuestion,
   parseImportCsv,
   commitImportRows,
+  getQuestionSubjectId,
   type QuestionInput,
   type QuestionOptionInput,
 } from "@/lib/services/cbt-questions";
 import { generateQuestionsWithAI, GENERATABLE_TYPES, type GenerateQuestionsInput } from "@/lib/services/cbt-ai";
+import { assertCanActOnSubject } from "@/lib/services/teacher-scope";
 import { logAudit } from "@/lib/audit";
 import { recordImportBatch } from "@/lib/services/import-history";
 import type { CBTQuestionType, CBTDifficulty } from "@/generated/prisma/client";
@@ -118,6 +121,13 @@ export async function createQuestionAction(
     return { status: "error", message: error instanceof Error ? error.message : "Invalid input." };
   }
 
+  const perms = await getUserPermissions(user.id);
+  try {
+    await assertCanActOnSubject(user.schoolId, user.id, perms, input.subjectId);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "You are not assigned to this subject." };
+  }
+
   let questionId: string;
   try {
     const question = await createQuestion(user.schoolId, user.id, input);
@@ -152,6 +162,17 @@ export async function updateQuestionAction(
     return { status: "error", message: error instanceof Error ? error.message : "Invalid input." };
   }
 
+  const perms = await getUserPermissions(user.id);
+  try {
+    // Check the question's existing subject too, not just the incoming
+    // payload's — same reasoning as CBT exam updates.
+    const existingSubjectId = await getQuestionSubjectId(user.schoolId, questionId);
+    if (existingSubjectId) await assertCanActOnSubject(user.schoolId, user.id, perms, existingSubjectId);
+    await assertCanActOnSubject(user.schoolId, user.id, perms, input.subjectId);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "You are not assigned to this subject." };
+  }
+
   try {
     await updateQuestion(user.schoolId, questionId, input);
   } catch (error) {
@@ -173,6 +194,9 @@ export async function updateQuestionAction(
 
 export async function archiveQuestionAction(questionId: string) {
   const user = await requirePermission(PERMISSIONS.CBT_MANAGE_QUESTION_BANK);
+  const perms = await getUserPermissions(user.id);
+  const subjectId = await getQuestionSubjectId(user.schoolId, questionId);
+  if (subjectId) await assertCanActOnSubject(user.schoolId, user.id, perms, subjectId);
   await archiveQuestion(user.schoolId, questionId);
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "cbt_question.archived", resourceType: "CBTQuestion", resourceId: questionId });
   revalidatePath("/dashboard/cbt/question-bank");
@@ -180,6 +204,9 @@ export async function archiveQuestionAction(questionId: string) {
 
 export async function restoreQuestionAction(questionId: string) {
   const user = await requirePermission(PERMISSIONS.CBT_MANAGE_QUESTION_BANK);
+  const perms = await getUserPermissions(user.id);
+  const subjectId = await getQuestionSubjectId(user.schoolId, questionId);
+  if (subjectId) await assertCanActOnSubject(user.schoolId, user.id, perms, subjectId);
   await restoreQuestion(user.schoolId, questionId);
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "cbt_question.restored", resourceType: "CBTQuestion", resourceId: questionId });
   revalidatePath("/dashboard/cbt/question-bank");
@@ -187,6 +214,9 @@ export async function restoreQuestionAction(questionId: string) {
 
 export async function deleteQuestionAction(questionId: string) {
   const user = await requirePermission(PERMISSIONS.CBT_MANAGE_QUESTION_BANK);
+  const perms = await getUserPermissions(user.id);
+  const subjectId = await getQuestionSubjectId(user.schoolId, questionId);
+  if (subjectId) await assertCanActOnSubject(user.schoolId, user.id, perms, subjectId);
   await deleteQuestion(user.schoolId, questionId);
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "cbt_question.deleted", resourceType: "CBTQuestion", resourceId: questionId });
   revalidatePath("/dashboard/cbt/question-bank");
@@ -263,6 +293,15 @@ export async function confirmImportAction(
     return { status: "error", message: "There are no valid rows to import." };
   }
 
+  const perms = await getUserPermissions(user.id);
+  for (const row of rows) {
+    try {
+      await assertCanActOnSubject(user.schoolId, user.id, perms, row.subjectId);
+    } catch {
+      return { status: "error", message: "One or more rows are for a subject you aren't assigned to teach." };
+    }
+  }
+
   let created: number;
   try {
     created = await commitImportRows(user.schoolId, user.id, rows);
@@ -294,6 +333,9 @@ export async function confirmImportAction(
 
 export async function approveQuestionAction(questionId: string) {
   const user = await requirePermission(PERMISSIONS.CBT_MANAGE_QUESTION_BANK);
+  const perms = await getUserPermissions(user.id);
+  const subjectId = await getQuestionSubjectId(user.schoolId, questionId);
+  if (subjectId) await assertCanActOnSubject(user.schoolId, user.id, perms, subjectId);
   await approveQuestion(user.schoolId, user.id, questionId);
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "cbt_question.ai_approved", resourceType: "CBTQuestion", resourceId: questionId });
   revalidatePath("/dashboard/cbt/question-bank");
@@ -329,6 +371,13 @@ export async function generateQuestionsAction(
   });
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check the details." };
+  }
+
+  const perms = await getUserPermissions(user.id);
+  try {
+    await assertCanActOnSubject(user.schoolId, user.id, perms, parsed.data.subjectId);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "You are not assigned to this subject." };
   }
 
   let result;

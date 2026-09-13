@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/auth/require";
+import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { listSubjects, listTerms } from "@/lib/services/academics";
 import { listAssessmentComponents } from "@/lib/services/results";
 import { getExam, listExamTypes, listClassArmsForCandidates } from "@/lib/services/cbt-exams";
+import { getAccessibleAssignments, getAccessibleSubjectIds, canActOnSubject } from "@/lib/services/teacher-scope";
 import { ExamWizard, type ExamWizardInitial } from "../../exam-wizard";
 
 function toLocalInputValue(date: Date): string {
@@ -14,10 +16,15 @@ function toLocalInputValue(date: Date): string {
 
 export default async function EditExamPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requirePermission(PERMISSIONS.CBT_EDIT);
+  const perms = await getUserPermissions(user.id);
   const { id } = await params;
 
   const exam = await getExam(user.schoolId, id);
   if (!exam) notFound();
+
+  const subjectAccess = await getAccessibleSubjectIds(user.schoolId, user.id, perms);
+  if (!canActOnSubject(subjectAccess, exam.subjectId)) notFound();
+
   if (exam.status !== "DRAFT") {
     return (
       <div className="space-y-4">
@@ -29,13 +36,18 @@ export default async function EditExamPage({ params }: { params: Promise<{ id: s
     );
   }
 
-  const [examTypes, subjects, terms, assessmentComponents, classArms] = await Promise.all([
+  const [examTypes, allSubjects, terms, assessmentComponents, allClassArms] = await Promise.all([
     listExamTypes(user.schoolId),
     listSubjects(user.schoolId),
     listTerms(user.schoolId),
     listAssessmentComponents(user.schoolId),
     listClassArmsForCandidates(user.schoolId),
   ]);
+
+  const assignmentAccess = await getAccessibleAssignments(user.schoolId, user.id, perms);
+  const subjects = subjectAccess === "ALL" ? allSubjects : allSubjects.filter((s) => subjectAccess.has(s.id));
+  const classArms =
+    assignmentAccess === "ALL" ? allClassArms : allClassArms.filter((a) => assignmentAccess.some((p) => p.classArmId === a.id));
 
   const initial: ExamWizardInitial = {
     title: exam.title,

@@ -1,22 +1,29 @@
 import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/auth/require";
+import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getQuestion } from "@/lib/services/cbt-questions";
 import { listSubjects, listClassGroups } from "@/lib/services/academics";
+import { getAccessibleSubjectIds, canActOnSubject } from "@/lib/services/teacher-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QuestionForm } from "../../question-form";
 import { updateQuestionAction } from "../../actions";
 
 export default async function EditQuestionPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requirePermission(PERMISSIONS.CBT_MANAGE_QUESTION_BANK);
+  const perms = await getUserPermissions(user.id);
   const { id } = await params;
 
-  const [question, subjects, classGroups] = await Promise.all([
+  const [question, allSubjects, classGroups] = await Promise.all([
     getQuestion(user.schoolId, id),
     listSubjects(user.schoolId),
     listClassGroups(user.schoolId),
   ]);
   if (!question) notFound();
+
+  const subjectAccess = await getAccessibleSubjectIds(user.schoolId, user.id, perms);
+  if (!canActOnSubject(subjectAccess, question.subjectId)) notFound();
+  const subjects = subjectAccess === "ALL" ? allSubjects : allSubjects.filter((s) => subjectAccess.has(s.id));
 
   const action = updateQuestionAction.bind(null, id);
 

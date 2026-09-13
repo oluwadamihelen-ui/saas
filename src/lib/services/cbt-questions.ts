@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import { requireFeature, requireCbtQuestionBankCapacity } from "@/lib/billing/entitlements";
 import { parseCsvRecords } from "@/lib/csv";
+import type { SubjectAccess } from "@/lib/services/teacher-scope";
 import type { CBTQuestionType, CBTDifficulty, CBTQuestionStatus } from "@/generated/prisma/client";
 
 const PAGE_SIZE = 20;
@@ -35,12 +36,22 @@ export interface QuestionListFilters {
 /// questions are hidden by default (status filter defaults to "not
 /// ARCHIVED") so the bank's day-to-day view doesn't fill up with retired
 /// questions; pass status: "ARCHIVED" explicitly to see them.
-export async function listQuestions(schoolId: string, filters: QuestionListFilters = {}) {
+/// subjectAccess narrows the listing to a teacher's own subjects (see
+/// getAccessibleSubjectIds) — "ALL" for admin-tier roles, otherwise every
+/// question outside that subject set is excluded regardless of what
+/// filters.subjectId asks for, same reasoning as listExams.
+export async function listQuestions(schoolId: string, filters: QuestionListFilters = {}, subjectAccess: SubjectAccess = "ALL") {
   const page = Math.max(1, filters.page ?? 1);
+  if (subjectAccess !== "ALL") {
+    if (subjectAccess.size === 0) return { questions: [], total: 0, page, pageCount: 1 };
+    if (filters.subjectId && !subjectAccess.has(filters.subjectId)) {
+      return { questions: [], total: 0, page, pageCount: 1 };
+    }
+  }
 
   const where: Prisma.CBTQuestionWhereInput = {
     schoolId,
-    ...(filters.subjectId ? { subjectId: filters.subjectId } : {}),
+    subjectId: filters.subjectId ?? (subjectAccess !== "ALL" ? { in: Array.from(subjectAccess) } : undefined),
     ...(filters.classGroupId ? { classGroupId: filters.classGroupId } : {}),
     ...(filters.type ? { type: filters.type } : {}),
     ...(filters.difficulty ? { difficulty: filters.difficulty } : {}),
@@ -75,6 +86,14 @@ export async function listQuestions(schoolId: string, filters: QuestionListFilte
   ]);
 
   return { questions, total, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+}
+
+/// A cheap pre-check lookup for actions that only receive a questionId
+/// (archive/restore/delete/approve) — lets the caller verify subject
+/// scoping before touching the question.
+export async function getQuestionSubjectId(schoolId: string, id: string) {
+  const question = await prisma.cBTQuestion.findFirst({ where: { schoolId, id }, select: { subjectId: true } });
+  return question?.subjectId ?? null;
 }
 
 export async function getQuestion(schoolId: string, id: string) {

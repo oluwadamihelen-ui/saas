@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import { requireFeature, requireCbtActiveExamCapacity, requireCbtCandidateCapacity } from "@/lib/billing/entitlements";
+import type { SubjectAccess } from "@/lib/services/teacher-scope";
 import type {
   CBTExamStatus,
   CBTQuestionSelectionMode,
@@ -87,11 +88,25 @@ export interface ExamListFilters {
   page?: number;
 }
 
-export async function listExams(schoolId: string, filters: ExamListFilters = {}) {
+/// subjectAccess narrows the listing to a teacher's own subjects (see
+/// getAccessibleSubjectIds) — "ALL" for admin-tier roles, otherwise every
+/// exam outside that subject set is excluded regardless of what filters.
+/// subjectId asks for, same reasoning as Results/Assignments: a teacher's
+/// list should never include another teacher's subject.
+export async function listExams(schoolId: string, filters: ExamListFilters = {}, subjectAccess: SubjectAccess = "ALL") {
   const page = Math.max(1, filters.page ?? 1);
+  if (subjectAccess !== "ALL") {
+    if (subjectAccess.size === 0) return { exams: [], total: 0, page, pageCount: 1 };
+    // A requested subjectId outside the teacher's own set must not fall
+    // back to "all of their subjects" — it should just return nothing,
+    // never leak another subject's exams via a crafted query param.
+    if (filters.subjectId && !subjectAccess.has(filters.subjectId)) {
+      return { exams: [], total: 0, page, pageCount: 1 };
+    }
+  }
   const where: Prisma.CBTExamWhereInput = {
     schoolId,
-    ...(filters.subjectId ? { subjectId: filters.subjectId } : {}),
+    subjectId: filters.subjectId ?? (subjectAccess !== "ALL" ? { in: Array.from(subjectAccess) } : undefined),
     ...(filters.termId ? { termId: filters.termId } : {}),
     ...(filters.status ? { status: filters.status } : { status: { not: "ARCHIVED" } }),
     ...(filters.search ? { title: { contains: filters.search, mode: "insensitive" } } : {}),
@@ -110,6 +125,25 @@ export async function listExams(schoolId: string, filters: ExamListFilters = {})
 
   const exams = await Promise.all(rows.map((exam) => reconcileExamStatus(exam)));
   return { exams, total, page, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+}
+
+/// A cheap pre-check lookup for actions that only receive an examId (publish/
+/// unpublish/archive/delete/release-results) — lets the caller verify
+/// teacher scoping before touching the exam, without pulling the full
+/// getExam() include set.
+export async function getExamSubjectId(schoolId: string, id: string) {
+  const exam = await prisma.cBTExam.findFirst({ where: { schoolId, id }, select: { subjectId: true } });
+  return exam?.subjectId ?? null;
+}
+
+/// Same idea as getExamSubjectId, but for actions that only receive a
+/// candidateId (extension grants).
+export async function getCandidateExamSubjectId(schoolId: string, candidateId: string) {
+  const candidate = await prisma.cBTExamCandidate.findFirst({
+    where: { schoolId, id: candidateId },
+    select: { exam: { select: { subjectId: true } } },
+  });
+  return candidate?.exam.subjectId ?? null;
 }
 
 export async function getExam(schoolId: string, id: string) {

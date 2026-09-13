@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/auth/require";
+import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import {
   createExam,
@@ -14,9 +15,12 @@ import {
   createExamType,
   listApprovedQuestionsForSubject,
   grantExamExtension,
+  getExamSubjectId,
+  getCandidateExamSubjectId,
   type ExamInput,
 } from "@/lib/services/cbt-exams";
 import { releaseExamResults } from "@/lib/services/cbt-results";
+import { assertCanActOnExamInput, assertCanActOnSubject } from "@/lib/services/teacher-scope";
 import { logAudit } from "@/lib/audit";
 
 const blueprintRuleSchema = z.object({
@@ -74,6 +78,13 @@ export async function createExamAction(payload: ExamPayload): Promise<ExamAction
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check the exam details." };
   }
 
+  const perms = await getUserPermissions(user.id);
+  try {
+    await assertCanActOnExamInput(user.schoolId, user.id, perms, parsed.data.subjectId, parsed.data.classArmIds);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "You are not assigned to this subject/class." };
+  }
+
   try {
     const exam = await createExam(user.schoolId, user.id, parsed.data as ExamInput);
     await logAudit({ schoolId: user.schoolId, userId: user.id, action: "cbt_exam.created", resourceType: "CBTExam", resourceId: exam.id });
@@ -92,6 +103,21 @@ export async function updateExamAction(examId: string, payload: ExamPayload): Pr
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check the exam details." };
   }
 
+  const perms = await getUserPermissions(user.id);
+  try {
+    // Check the exam's existing subject too, not just the incoming
+    // payload's — otherwise a teacher could "update" an exam that already
+    // belongs to a subject they don't teach, as long as the new payload's
+    // own subject/classes happen to be theirs.
+    const existingSubjectId = await getExamSubjectId(user.schoolId, examId);
+    if (existingSubjectId) {
+      await assertCanActOnSubject(user.schoolId, user.id, perms, existingSubjectId);
+    }
+    await assertCanActOnExamInput(user.schoolId, user.id, perms, parsed.data.subjectId, parsed.data.classArmIds);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "You are not assigned to this subject/class." };
+  }
+
   try {
     await updateExam(user.schoolId, examId, parsed.data as ExamInput);
     await logAudit({ schoolId: user.schoolId, userId: user.id, action: "cbt_exam.updated", resourceType: "CBTExam", resourceId: examId });
@@ -105,7 +131,10 @@ export async function updateExamAction(examId: string, payload: ExamPayload): Pr
 
 export async function publishExamAction(examId: string): Promise<ExamActionResult> {
   const user = await requirePermission(PERMISSIONS.CBT_PUBLISH);
+  const perms = await getUserPermissions(user.id);
   try {
+    const subjectId = await getExamSubjectId(user.schoolId, examId);
+    if (subjectId) await assertCanActOnSubject(user.schoolId, user.id, perms, subjectId);
     await publishExam(user.schoolId, user.id, examId);
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not publish exam." };
@@ -118,7 +147,10 @@ export async function publishExamAction(examId: string): Promise<ExamActionResul
 
 export async function unpublishExamAction(examId: string): Promise<ExamActionResult> {
   const user = await requirePermission(PERMISSIONS.CBT_PUBLISH);
+  const perms = await getUserPermissions(user.id);
   try {
+    const subjectId = await getExamSubjectId(user.schoolId, examId);
+    if (subjectId) await assertCanActOnSubject(user.schoolId, user.id, perms, subjectId);
     await unpublishExam(user.schoolId, examId);
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not unpublish exam." };
@@ -131,7 +163,10 @@ export async function unpublishExamAction(examId: string): Promise<ExamActionRes
 
 export async function archiveExamAction(examId: string): Promise<ExamActionResult> {
   const user = await requirePermission(PERMISSIONS.CBT_EDIT);
+  const perms = await getUserPermissions(user.id);
   try {
+    const subjectId = await getExamSubjectId(user.schoolId, examId);
+    if (subjectId) await assertCanActOnSubject(user.schoolId, user.id, perms, subjectId);
     await archiveExam(user.schoolId, examId);
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not archive exam." };
@@ -143,7 +178,10 @@ export async function archiveExamAction(examId: string): Promise<ExamActionResul
 
 export async function deleteExamAction(examId: string): Promise<ExamActionResult> {
   const user = await requirePermission(PERMISSIONS.CBT_EDIT);
+  const perms = await getUserPermissions(user.id);
   try {
+    const subjectId = await getExamSubjectId(user.schoolId, examId);
+    if (subjectId) await assertCanActOnSubject(user.schoolId, user.id, perms, subjectId);
     await deleteExam(user.schoolId, examId);
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not delete exam." };
@@ -165,12 +203,21 @@ export async function createExamTypeAction(label: string): Promise<{ id: string;
 
 export async function fetchSubjectQuestionsAction(subjectId: string) {
   const user = await requirePermission(PERMISSIONS.CBT_CREATE);
+  const perms = await getUserPermissions(user.id);
+  try {
+    await assertCanActOnSubject(user.schoolId, user.id, perms, subjectId);
+  } catch {
+    return [];
+  }
   return listApprovedQuestionsForSubject(user.schoolId, subjectId);
 }
 
 export async function releaseExamResultsAction(examId: string): Promise<ExamActionResult> {
   const user = await requirePermission(PERMISSIONS.CBT_PUBLISH);
+  const perms = await getUserPermissions(user.id);
   try {
+    const subjectId = await getExamSubjectId(user.schoolId, examId);
+    if (subjectId) await assertCanActOnSubject(user.schoolId, user.id, perms, subjectId);
     await releaseExamResults(user.schoolId, examId);
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not release results." };
@@ -192,8 +239,11 @@ export async function grantExtensionAction(
   reason: string | null
 ): Promise<ExtensionActionResult> {
   const user = await requirePermission(PERMISSIONS.CBT_START);
+  const perms = await getUserPermissions(user.id);
   let examId: string;
   try {
+    const subjectId = await getCandidateExamSubjectId(user.schoolId, candidateId);
+    if (subjectId) await assertCanActOnSubject(user.schoolId, user.id, perms, subjectId);
     const updated = await grantExamExtension(user.schoolId, user.id, candidateId, extraTimeMinutes, reason);
     examId = updated.examId;
   } catch (error) {

@@ -4,8 +4,10 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/auth/require";
+import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
-import { createAssignment, gradeSubmission } from "@/lib/services/assignments";
+import { createAssignment, gradeSubmission, getSubmissionScope } from "@/lib/services/assignments";
+import { assertCanActOnAssignment } from "@/lib/services/teacher-scope";
 import { logAudit } from "@/lib/audit";
 
 const createSchema = z.object({
@@ -36,6 +38,16 @@ export async function createAssignmentAction(
   });
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
+  }
+
+  // classArmId/subjectId come straight from the submitted form — re-check
+  // here even though the new-assignment picker only offers a teacher's own
+  // assignments, since the field values are still client-controllable.
+  const perms = await getUserPermissions(user.id);
+  try {
+    await assertCanActOnAssignment(user.schoolId, user.id, perms, parsed.data.subjectId, parsed.data.classArmId);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "You are not assigned to this class." };
   }
 
   let assignmentId: string;
@@ -92,6 +104,17 @@ export async function gradeSubmissionAction(
   });
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check the grade." };
+  }
+
+  const scope = await getSubmissionScope(user.schoolId, parsed.data.submissionId);
+  if (!scope) {
+    return { status: "error", message: "Submission not found." };
+  }
+  const perms = await getUserPermissions(user.id);
+  try {
+    await assertCanActOnAssignment(user.schoolId, user.id, perms, scope.subjectId, scope.classArmId);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "You are not assigned to this class." };
   }
 
   try {

@@ -11,6 +11,7 @@ import { requirePermission } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { listQuestions } from "@/lib/services/cbt-questions";
+import { getAccessibleSubjectIds } from "@/lib/services/teacher-scope";
 import { listSubjects, listClassGroups } from "@/lib/services/academics";
 import { hasFeature, getCbtQuestionBankCount, getCbtQuestionBankLimit } from "@/lib/billing/entitlements";
 import { FeatureLocked } from "@/components/billing/feature-locked";
@@ -68,16 +69,23 @@ export default async function QuestionBankPage({
     );
   }
 
-  const [{ questions, total, page, pageCount }, subjects, classGroups, canImport, canGenerateAi, bankCount, bankLimit] = await Promise.all([
-    listQuestions(user.schoolId, {
-      search: params.q,
-      subjectId: params.subjectId,
-      classGroupId: params.classGroupId,
-      type: (params.type as CBTQuestionType) || undefined,
-      difficulty: (params.difficulty as CBTDifficulty) || undefined,
-      status: (params.status as CBTQuestionStatus) || undefined,
-      page: params.page ? Number(params.page) : 1,
-    }),
+  // A teacher (no ACADEMICS_MANAGE) only sees questions for subjects they
+  // hold a TeacherAssignment for — same reasoning as the exams list.
+  const subjectAccess = await getAccessibleSubjectIds(user.schoolId, user.id, perms);
+  const [{ questions, total, page, pageCount }, allSubjects, classGroups, canImport, canGenerateAi, bankCount, bankLimit] = await Promise.all([
+    listQuestions(
+      user.schoolId,
+      {
+        search: params.q,
+        subjectId: params.subjectId,
+        classGroupId: params.classGroupId,
+        type: (params.type as CBTQuestionType) || undefined,
+        difficulty: (params.difficulty as CBTDifficulty) || undefined,
+        status: (params.status as CBTQuestionStatus) || undefined,
+        page: params.page ? Number(params.page) : 1,
+      },
+      subjectAccess
+    ),
     listSubjects(user.schoolId),
     listClassGroups(user.schoolId),
     hasFeature(user.schoolId, "cbt_question_bank"),
@@ -85,6 +93,7 @@ export default async function QuestionBankPage({
     getCbtQuestionBankCount(user.schoolId),
     getCbtQuestionBankLimit(user.schoolId),
   ]);
+  const subjects = subjectAccess === "ALL" ? allSubjects : allSubjects.filter((s) => subjectAccess.has(s.id));
 
   return (
     <div className="space-y-4 sm:space-y-6">

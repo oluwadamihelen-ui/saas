@@ -1,14 +1,27 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { notifyAssignmentCreated, notifyAssignmentGraded } from "@/lib/services/notifications";
+import type { AssignmentAccess } from "@/lib/services/teacher-scope";
+import type { Prisma } from "@/generated/prisma/client";
 
 const PAGE_SIZE = 20;
 
-export async function listAssignments(schoolId: string, page = 1) {
+/// access="ALL" (an admin) sees every assignment in the school; a
+/// teacher-scoped access array restricts the list to subject+class pairs
+/// they actually hold a TeacherAssignment for — same reasoning as
+/// Attendance/Results: a teacher's list should never include another
+/// teacher's class.
+export async function listAssignments(schoolId: string, page = 1, access: AssignmentAccess) {
   const currentPage = Math.max(1, page);
+  const where: Prisma.AssignmentWhereInput = { schoolId };
+  if (access !== "ALL") {
+    if (access.length === 0) return { assignments: [], total: 0, page: currentPage, pageCount: 1 };
+    where.OR = access.map((a) => ({ classArmId: a.classArmId, subjectId: a.subjectId }));
+  }
+
   const [assignments, total] = await Promise.all([
     prisma.assignment.findMany({
-      where: { schoolId },
+      where,
       include: {
         classArm: { include: { classGroup: true } },
         subject: true,
@@ -19,7 +32,7 @@ export async function listAssignments(schoolId: string, page = 1) {
       skip: (currentPage - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
     }),
-    prisma.assignment.count({ where: { schoolId } }),
+    prisma.assignment.count({ where }),
   ]);
   return {
     assignments: assignments.map((a) => ({
@@ -100,6 +113,17 @@ export async function createAssignment(schoolId: string, teacherId: string, inpu
 
   await notifyAssignmentCreated(schoolId, assignment.id);
   return assignment;
+}
+
+/// Resolves the classArmId/subjectId a submission belongs to, so a caller
+/// can run assertCanActOnAssignment before grading — gradeSubmission only
+/// receives a submissionId, not the assignment's own scoping fields.
+export async function getSubmissionScope(schoolId: string, submissionId: string) {
+  const submission = await prisma.assignmentSubmission.findFirst({
+    where: { id: submissionId, assignment: { schoolId } },
+    select: { assignment: { select: { classArmId: true, subjectId: true } } },
+  });
+  return submission?.assignment ?? null;
 }
 
 export async function gradeSubmission(

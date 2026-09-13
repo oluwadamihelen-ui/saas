@@ -1,13 +1,18 @@
 import { requirePermission } from "@/lib/auth/require";
+import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { listSubjects, listClassGroups } from "@/lib/services/academics";
+import { getAccessibleSubjectIds } from "@/lib/services/teacher-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QuestionForm } from "../question-form";
 import { createQuestionAction } from "../actions";
 
 export default async function NewQuestionPage() {
   const user = await requirePermission(PERMISSIONS.CBT_MANAGE_QUESTION_BANK);
-  const [subjects, classGroups] = await Promise.all([listSubjects(user.schoolId), listClassGroups(user.schoolId)]);
+  const perms = await getUserPermissions(user.id);
+  const [allSubjects, classGroups] = await Promise.all([listSubjects(user.schoolId), listClassGroups(user.schoolId)]);
+  const subjectAccess = await getAccessibleSubjectIds(user.schoolId, user.id, perms);
+  const subjects = subjectAccess === "ALL" ? allSubjects : allSubjects.filter((s) => subjectAccess.has(s.id));
 
   return (
     <div className="space-y-4 sm:space-y-6">

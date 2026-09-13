@@ -15,6 +15,7 @@ import {
   approveReportCard,
   publishReportCard,
 } from "@/lib/services/results";
+import { assertCanActOnAssignment } from "@/lib/services/teacher-scope";
 import { logAudit } from "@/lib/audit";
 
 export interface ScoreGridState {
@@ -30,6 +31,16 @@ export async function saveScoreGridAction(
   formData: FormData
 ): Promise<ScoreGridState> {
   const user = await requirePermission(PERMISSIONS.RESULTS_ENTER);
+
+  // classArmId/subjectId are bound into this action from the page's URL
+  // query string — client-controllable — so re-check here even though the
+  // page's own pickers already only offer a teacher's own assignments.
+  const perms = await getUserPermissions(user.id);
+  try {
+    await assertCanActOnAssignment(user.schoolId, user.id, perms, subjectId, classArmId);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "You are not assigned to this class." };
+  }
 
   const entries: { studentId: string; componentId: string; value: number }[] = [];
   for (const [key, raw] of formData.entries()) {

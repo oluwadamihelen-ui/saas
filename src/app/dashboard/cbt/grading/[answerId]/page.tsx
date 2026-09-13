@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/auth/require";
+import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getAnswerForGrading } from "@/lib/services/cbt-grading";
+import { getAccessibleSubjectIds, canActOnSubject } from "@/lib/services/teacher-scope";
 import { isCbtAiConfigured } from "@/lib/services/cbt-ai";
 import { hasFeature } from "@/lib/billing/entitlements";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -9,6 +11,7 @@ import { GradeForm } from "./grade-form";
 
 export default async function GradeAnswerPage({ params }: { params: Promise<{ answerId: string }> }) {
   const user = await requirePermission(PERMISSIONS.CBT_GRADE);
+  const perms = await getUserPermissions(user.id);
   const { answerId } = await params;
 
   const [answer, canGenerateAi] = await Promise.all([
@@ -16,6 +19,9 @@ export default async function GradeAnswerPage({ params }: { params: Promise<{ an
     hasFeature(user.schoolId, "cbt_ai_generation"),
   ]);
   if (!answer) notFound();
+
+  const subjectAccess = await getAccessibleSubjectIds(user.schoolId, user.id, perms);
+  if (!canActOnSubject(subjectAccess, answer.attempt.exam.subjectId)) notFound();
 
   const response = typeof answer.response === "string" ? answer.response : JSON.stringify(answer.response);
 

@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth/require";
+import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { rowsToCsv } from "@/lib/csv";
+import { getAccessibleAssignments, canActOnAssignment } from "@/lib/services/teacher-scope";
 import type { Prisma } from "@/generated/prisma/client";
 
 const HEADER = ["sessionName", "termName", "className", "admissionNumber", "subjectCode", "componentName", "score"];
@@ -67,6 +69,22 @@ export async function GET(request: Request) {
     if (!subject) return NextResponse.json({ error: "Subject not found." }, { status: 400 });
     where.subjectId = subject.id;
     filenameParts.push(subject.name);
+  }
+
+  // A teacher (no ACADEMICS_MANAGE) can only export scores for
+  // subject+class pairs they're actually assigned to — without this, an
+  // unfiltered export (or one filtered by only classArmId or only
+  // subjectId) would otherwise return every other teacher's scores too.
+  const perms = await getUserPermissions(user.id);
+  const access = await getAccessibleAssignments(user.schoolId, user.id, perms);
+  if (access !== "ALL") {
+    if (access.length === 0) {
+      return NextResponse.json({ error: "You are not assigned to teach any subject/class." }, { status: 403 });
+    }
+    if (classArmId && subjectId && !canActOnAssignment(access, classArmId, subjectId)) {
+      return NextResponse.json({ error: "You are not assigned to this class/subject." }, { status: 403 });
+    }
+    where.OR = access.map((a) => ({ classArmId: a.classArmId, subjectId: a.subjectId }));
   }
 
   const scores = await prisma.score.findMany({

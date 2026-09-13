@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { saveScores } from "@/lib/services/results";
 import { notifyCbtManualGradingRequired, notifyCbtResultAvailable } from "@/lib/services/notifications";
+import type { SubjectAccess } from "@/lib/services/teacher-scope";
 import type { CBTQuestionType } from "@/generated/prisma/client";
 
 /// ESSAY is the only type that always needs a human — every other type
@@ -261,8 +262,12 @@ export interface GradingQueueFilters {
 
 /// One row per (attempt, ESSAY question) still awaiting a human — the
 /// manual-grading queue's whole source of truth. Ordered oldest-submitted
-/// first so a grader naturally works through a FIFO backlog.
-export async function listGradingQueue(schoolId: string, filters: GradingQueueFilters = {}) {
+/// first so a grader naturally works through a FIFO backlog. subjectAccess
+/// narrows the queue to a teacher's own subjects (see
+/// getAccessibleSubjectIds) — "ALL" for admin-tier roles, otherwise a
+/// teacher never even sees another teacher's essay answers to grade.
+export async function listGradingQueue(schoolId: string, filters: GradingQueueFilters = {}, subjectAccess: SubjectAccess = "ALL") {
+  if (subjectAccess !== "ALL" && subjectAccess.size === 0) return [];
   return prisma.cBTAnswer.findMany({
     where: {
       gradingStatus: "NEEDS_MANUAL_GRADING",
@@ -270,6 +275,7 @@ export async function listGradingQueue(schoolId: string, filters: GradingQueueFi
         schoolId,
         status: { in: ["SUBMITTED", "AUTO_SUBMITTED"] },
         ...(filters.examId ? { examId: filters.examId } : {}),
+        ...(subjectAccess !== "ALL" ? { exam: { subjectId: { in: Array.from(subjectAccess) } } } : {}),
       },
     },
     include: {
@@ -285,10 +291,20 @@ export async function getAnswerForGrading(schoolId: string, answerId: string) {
     where: { id: answerId, attempt: { schoolId } },
     include: {
       question: { select: { prompt: true, marks: true, rubric: true } },
-      attempt: { include: { exam: { select: { title: true } }, student: { select: { firstName: true, lastName: true, admissionNumber: true } } } },
+      attempt: { include: { exam: { select: { title: true, subjectId: true } }, student: { select: { firstName: true, lastName: true, admissionNumber: true } } } },
       manualGrade: true,
     },
   });
+}
+
+/// A cheap pre-check lookup for gradeAnswerAction, which only receives an
+/// answerId — lets the caller verify subject scoping before grading.
+export async function getAnswerExamSubjectId(schoolId: string, answerId: string) {
+  const answer = await prisma.cBTAnswer.findFirst({
+    where: { id: answerId, attempt: { schoolId } },
+    select: { attempt: { select: { exam: { select: { subjectId: true } } } } },
+  });
+  return answer?.attempt.exam.subjectId ?? null;
 }
 
 /// The human decision is always what's written — aiSuggested* (Phase 7)

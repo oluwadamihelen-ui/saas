@@ -8,6 +8,7 @@ import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { listAssignments } from "@/lib/services/assignments";
+import { getAccessibleAssignments } from "@/lib/services/teacher-scope";
 import { formatDate } from "@/lib/utils";
 
 export default async function AssignmentsPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
@@ -16,7 +17,8 @@ export default async function AssignmentsPage({ searchParams }: { searchParams: 
   const canManage = perms.has(PERMISSIONS.ASSIGNMENTS_MANAGE);
 
   const params = await searchParams;
-  const { assignments, total, page, pageCount } = await listAssignments(user.schoolId, params.page ? Number(params.page) : 1);
+  const access = await getAccessibleAssignments(user.schoolId, user.id, perms);
+  const { assignments, total, page, pageCount } = await listAssignments(user.schoolId, params.page ? Number(params.page) : 1, access);
 
   return (
     <div className="space-y-4 sm:space-y-6">

@@ -5,6 +5,7 @@ import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getAssignment } from "@/lib/services/assignments";
+import { getAccessibleAssignments, canActOnAssignment } from "@/lib/services/teacher-scope";
 import { formatDate } from "@/lib/utils";
 import { SubmissionRow } from "./submission-row";
 
@@ -18,6 +19,15 @@ export default async function AssignmentDetailPage({ params }: { params: Promise
 
   const assignment = await getAssignment(user.schoolId, id);
   if (!assignment) notFound();
+
+  // A teacher (no ACADEMICS_MANAGE) can only open an assignment for a
+  // subject+class pair they hold a TeacherAssignment for — treated as not
+  // found rather than "forbidden" so it doesn't confirm another class's
+  // assignment exists.
+  const access = await getAccessibleAssignments(user.schoolId, user.id, perms);
+  if (access !== "ALL" && !canActOnAssignment(access, assignment.classArmId, assignment.subjectId)) {
+    notFound();
+  }
 
   return (
     <div className="max-w-3xl space-y-4 sm:space-y-6">

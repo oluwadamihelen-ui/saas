@@ -9,6 +9,7 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { listClassArms, listSubjects } from "@/lib/services/academics";
 import { listTeachers } from "@/lib/services/teacher-assignments";
 import { listSlotsForClassArm, listSlotsForTeacher, DAYS_OF_WEEK } from "@/lib/services/timetable";
+import { getAccessibleAssignments } from "@/lib/services/teacher-scope";
 import { SlotForm } from "./slot-form";
 import { DeleteSlotButton } from "./delete-slot-button";
 
@@ -26,16 +27,27 @@ export default async function TimetablePage({
   const canManage = perms.has(PERMISSIONS.TIMETABLE_MANAGE);
 
   const params = await searchParams;
-  const [classArms, subjects, teachers] = await Promise.all([
+  const [allClassArms, subjects, allTeachers] = await Promise.all([
     listClassArms(user.schoolId),
     listSubjects(user.schoolId),
     listTeachers(user.schoolId),
   ]);
 
-  const classArmId = params.classArmId || classArms[0]?.id;
+  // A teacher (no ACADEMICS_MANAGE) only sees the class schedule for
+  // classes they're assigned to, and can only look up their own teacher
+  // timetable — same "no access to another class's records" rule as
+  // Attendance/Results/Assignments.
+  const access = await getAccessibleAssignments(user.schoolId, user.id, perms);
+  const classArms = access === "ALL" ? allClassArms : allClassArms.filter((a) => access.some((p) => p.classArmId === a.id));
+  const teachers = access === "ALL" ? allTeachers : allTeachers.filter((t) => t.id === user.id);
+
+  const classArmId = params.classArmId && (access === "ALL" || classArms.some((a) => a.id === params.classArmId))
+    ? params.classArmId
+    : classArms[0]?.id;
   const classSlots = classArmId ? await listSlotsForClassArm(user.schoolId, classArmId) : [];
 
-  const teacherId = params.teacherId;
+  const requestedTeacherId = params.teacherId;
+  const teacherId = access === "ALL" ? requestedTeacherId : requestedTeacherId ? user.id : undefined;
   const teacherSlots = teacherId ? await listSlotsForTeacher(user.schoolId, teacherId) : null;
 
   return (
@@ -64,7 +76,12 @@ export default async function TimetablePage({
 
           {canManage && classArmId && <SlotForm classArmId={classArmId} subjects={subjects} teachers={teachers} />}
 
-          {classSlots.length === 0 ? (
+          {access !== "ALL" && access.length === 0 ? (
+            <EmptyState
+              title="No classes assigned to you"
+              description="You aren't assigned to teach any subject/class yet — ask your school administrator to assign you to one."
+            />
+          ) : classSlots.length === 0 ? (
             <EmptyState title="No periods scheduled" description="Add a period above to build this class's timetable." />
           ) : (
             <div className="space-y-4">

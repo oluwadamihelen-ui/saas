@@ -8,15 +8,16 @@ import { requirePermission } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { listGradingQueue } from "@/lib/services/cbt-grading";
+import { getAccessibleSubjectIds } from "@/lib/services/teacher-scope";
 import { hasFeature } from "@/lib/billing/entitlements";
 import { FeatureLocked } from "@/components/billing/feature-locked";
 
 export default async function GradingQueuePage({ searchParams }: { searchParams: Promise<{ examId?: string }> }) {
   const user = await requirePermission(PERMISSIONS.CBT_GRADE);
+  const perms = await getUserPermissions(user.id);
   const params = await searchParams;
 
   if (!(await hasFeature(user.schoolId, "cbt"))) {
-    const perms = await getUserPermissions(user.id);
     return (
       <FeatureLocked
         description="Online examinations (CBT) aren't included in your current plan."
@@ -25,7 +26,10 @@ export default async function GradingQueuePage({ searchParams }: { searchParams:
     );
   }
 
-  const queue = await listGradingQueue(user.schoolId, { examId: params.examId });
+  // A teacher (no ACADEMICS_MANAGE) only sees essay answers waiting to be
+  // graded for subjects they hold a TeacherAssignment for.
+  const subjectAccess = await getAccessibleSubjectIds(user.schoolId, user.id, perms);
+  const queue = await listGradingQueue(user.schoolId, { examId: params.examId }, subjectAccess);
 
   return (
     <div className="space-y-4 sm:space-y-6">
