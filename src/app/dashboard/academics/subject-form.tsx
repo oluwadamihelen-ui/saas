@@ -5,10 +5,13 @@ import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createSubjectAction, type SubjectFormState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: SubjectFormState = { status: "idle" };
 
 export function SubjectForm() {
   const [state, formAction, isPending] = useActionState(createSubjectAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

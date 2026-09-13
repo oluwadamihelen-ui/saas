@@ -7,6 +7,8 @@ import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { acceptPortalInviteAction, type AcceptPortalInviteState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: AcceptPortalInviteState = { status: "idle" };
 
 export function AcceptPortalInviteForm({
@@ -20,6 +22,7 @@ export function AcceptPortalInviteForm({
 }) {
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(acceptPortalInviteAction, initialState);
+  useActionToast(state);
   // React resets uncontrolled fields once the action succeeds, so capture
   // the password in state as the user types rather than reading the DOM.
   const [password, setPassword] = useState("");

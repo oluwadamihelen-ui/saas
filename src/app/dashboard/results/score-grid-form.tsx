@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { saveScoreGridAction, type ScoreGridState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: ScoreGridState = { status: "idle" };
 
 export function ScoreGridForm({
@@ -23,6 +25,7 @@ export function ScoreGridForm({
 }) {
   const action = saveScoreGridAction.bind(null, classArmId, subjectId, termId);
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="space-y-4">

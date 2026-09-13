@@ -4,11 +4,14 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { payOnlineAction, notifyBankTransferAction, type PayActionState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: PayActionState = { status: "idle" };
 
 export function PayOnlineButton({ token }: { token: string }) {
   const action = payOnlineAction.bind(null, token);
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction}>
@@ -21,6 +24,7 @@ export function PayOnlineButton({ token }: { token: string }) {
 export function NotifyBankTransferButton({ token }: { token: string }) {
   const action = notifyBankTransferAction.bind(null, token);
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction}>

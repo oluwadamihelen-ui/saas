@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { saveMilestoneGridAction, type MilestoneGridState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: MilestoneGridState = { status: "idle" };
 
 export interface MilestoneColumn {
@@ -39,6 +41,7 @@ export function MilestoneGridForm({
 }) {
   const action = saveMilestoneGridAction.bind(null, classArmId, subjectId, termId, assessmentPeriodId);
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="space-y-4">

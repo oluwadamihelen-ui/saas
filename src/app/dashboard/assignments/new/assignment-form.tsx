@@ -5,6 +5,8 @@ import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createAssignmentAction, type AssignmentFormState } from "../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: AssignmentFormState = { status: "idle" };
 
 export function AssignmentForm({
@@ -15,6 +17,7 @@ export function AssignmentForm({
   subjects: { id: string; name: string }[];
 }) {
   const [state, formAction, isPending] = useActionState(createAssignmentAction, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="space-y-4">

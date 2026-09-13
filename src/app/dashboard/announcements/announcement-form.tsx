@@ -5,10 +5,13 @@ import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createAnnouncementAction, type AnnouncementFormState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: AnnouncementFormState = { status: "idle" };
 
 export function AnnouncementForm({ classArms }: { classArms: { id: string; name: string; classGroup: { name: string } }[] }) {
   const [state, formAction, isPending] = useActionState(createAnnouncementAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
   const [audience, setAudience] = useState("SCHOOL_WIDE");
 

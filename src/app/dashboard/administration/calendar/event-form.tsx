@@ -7,6 +7,8 @@ import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createEventAction, updateEventAction, type CalendarFormState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: CalendarFormState = { status: "idle" };
 
 function toLocalInputValue(date: Date): string {
@@ -34,6 +36,7 @@ export function EventForm({
 }) {
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(event ? updateEventAction : createEventAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

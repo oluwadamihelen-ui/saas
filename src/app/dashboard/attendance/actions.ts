@@ -3,8 +3,10 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/auth/require";
+import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { markAttendance } from "@/lib/services/attendance";
+import { getAccessibleClassArmIds, canAccessClassArm } from "@/lib/services/performance/authorization";
 import { logAudit } from "@/lib/audit";
 
 const statusEnum = z.enum(["PRESENT", "ABSENT", "LATE", "EXCUSED"]);
@@ -21,6 +23,17 @@ export async function markAttendanceAction(
   formData: FormData
 ): Promise<MarkAttendanceState> {
   const user = await requirePermission(PERMISSIONS.ATTENDANCE_MARK);
+
+  // classArmId is bound into this action from the page's URL query string —
+  // fully client-controllable — so it must be re-checked here even though
+  // the page's own class picker already only lists a teacher's assigned
+  // classes; a hand-crafted request could otherwise mark attendance for
+  // any class in the school.
+  const perms = await getUserPermissions(user.id);
+  const access = await getAccessibleClassArmIds(user.schoolId, user.id, perms);
+  if (!canAccessClassArm(access, classArmId)) {
+    return { status: "error", message: "You are not assigned to this class." };
+  }
 
   const entries: { studentId: string; status: z.infer<typeof statusEnum> }[] = [];
   for (const [key, value] of formData.entries()) {

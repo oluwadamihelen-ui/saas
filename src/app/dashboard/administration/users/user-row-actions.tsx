@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/dialog";
 import { changeRoleAction, setUserStatusAction, type ChangeRoleState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: ChangeRoleState = { status: "idle" };
 
 /// isSelf gets an extra confirmation step — this app has no general role-
@@ -39,6 +41,7 @@ export function ChangeRoleDialog({
   const [confirmed, setConfirmed] = useState(false);
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [state, formAction, isPending] = useActionState(changeRoleAction, initialState);
+  useActionToast(state);
   const router = useRouter();
 
   // Closing the dialog on success is a state adjustment reacting to a

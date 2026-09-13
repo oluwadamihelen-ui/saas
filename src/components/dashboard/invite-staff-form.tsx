@@ -4,6 +4,8 @@ import { useActionState, useEffect, useRef } from "react";
 import { Input, Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 export interface InviteStaffState {
   status: "idle" | "error" | "success";
   message?: string;
@@ -19,6 +21,7 @@ export function InviteStaffForm({
   action: (prevState: InviteStaffState, formData: FormData) => Promise<InviteStaffState>;
 }) {
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

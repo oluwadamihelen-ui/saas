@@ -6,12 +6,15 @@ import { Button } from "@/components/ui/button";
 import { saveSchoolSettings, type SettingsState } from "./actions";
 import type { School } from "@/generated/prisma/client";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: SettingsState = { status: "idle" };
 const CURRENCIES = ["NGN", "GHS", "KES", "ZAR", "USD"];
 const TIMEZONES = ["Africa/Lagos", "Africa/Accra", "Africa/Nairobi", "Africa/Johannesburg", "UTC"];
 
 export function SettingsForm({ school, studentCount }: { school: School; studentCount: number }) {
   const [state, formAction, isPending] = useActionState(saveSchoolSettings, initialState);
+  useActionToast(state);
   const [prefix, setPrefix] = useState(school.admissionNumberPrefix ?? "");
 
   const normalizedPreviewPrefix = prefix.trim().toUpperCase();

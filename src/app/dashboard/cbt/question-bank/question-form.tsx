@@ -7,6 +7,8 @@ import { Plus, X } from "lucide-react";
 import type { QuestionFormState } from "./actions";
 import type { CBTQuestionType, CBTDifficulty } from "@/generated/prisma/client";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const TYPE_OPTIONS: { value: CBTQuestionType; label: string; hint: string }[] = [
   { value: "MULTIPLE_CHOICE", label: "Multiple choice", hint: "One correct option" },
   { value: "MULTIPLE_SELECT", label: "Multiple select", hint: "One or more correct options" },
@@ -59,6 +61,7 @@ export function QuestionForm({
   initial?: QuestionFormInitial;
 }) {
   const [state, formAction, isPending] = useActionState(action, { status: "idle" } as QuestionFormState);
+  useActionToast(state);
   const [type, setType] = useState<CBTQuestionType>(initial?.type ?? "MULTIPLE_CHOICE");
   const [options, setOptions] = useState<QuestionOptionSeed[]>(
     initial?.options && initial.options.length > 0

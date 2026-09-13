@@ -5,6 +5,8 @@ import { Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { generateInvoicesAction, type GenerateInvoicesState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: GenerateInvoicesState = { status: "idle" };
 
 export function GenerateInvoicesForm({
@@ -15,6 +17,7 @@ export function GenerateInvoicesForm({
   terms: { id: string; name: string }[];
 }) {
   const [state, formAction, isPending] = useActionState(generateInvoicesAction, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3">

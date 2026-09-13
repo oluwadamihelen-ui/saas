@@ -5,10 +5,13 @@ import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { setAdmissionFeeAction, type AdmissionFeeFormState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: AdmissionFeeFormState = { status: "idle" };
 
 export function AdmissionFeeForm({ currentAmount, currency }: { currentAmount: number | null; currency: string }) {
   const [state, formAction, isPending] = useActionState(setAdmissionFeeAction, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="space-y-4">

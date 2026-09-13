@@ -6,10 +6,13 @@ import { Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { sendAiMessageAction, type AssistantMessageState } from "../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 export function ChatForm({ conversationId }: { conversationId: string }) {
   const router = useRouter();
   const action = sendAiMessageAction.bind(null, conversationId);
   const [state, formAction, isPending] = useActionState(action, { status: "idle" } as AssistantMessageState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

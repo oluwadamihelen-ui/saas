@@ -5,6 +5,8 @@ import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { saveMyDateOfBirth, type MyProfileState } from "./profile-actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: MyProfileState = { status: "idle" };
 
 /// dateOfBirth arrives already normalized to "YYYY-MM-DD" (or null) — see
@@ -12,6 +14,7 @@ const initialState: MyProfileState = { status: "idle" };
 /// student enrollment form.
 export function MyProfileForm({ dateOfBirth }: { dateOfBirth: string | null }) {
   const [state, formAction, isPending] = useActionState(saveMyDateOfBirth, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="space-y-4">

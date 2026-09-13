@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { updatePreschoolTogglesAction, type PreschoolSettingsState } from "./actions";
 import type { School } from "@/generated/prisma/client";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: PreschoolSettingsState = { status: "idle" };
 
 const FIELDS: { name: keyof Pick<School,
@@ -19,6 +21,7 @@ const FIELDS: { name: keyof Pick<School,
 
 export function TogglesForm({ school }: { school: School }) {
   const [state, formAction, isPending] = useActionState(updatePreschoolTogglesAction, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="space-y-4">

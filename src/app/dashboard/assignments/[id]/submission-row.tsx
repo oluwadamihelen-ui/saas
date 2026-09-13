@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { gradeSubmissionAction, type GradeState } from "../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: GradeState = { status: "idle" };
 
 export function SubmissionRow({
@@ -23,6 +25,7 @@ export function SubmissionRow({
 }) {
   const action = gradeSubmissionAction.bind(null, assignmentId);
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-3 border-b border-border p-3 last:border-b-0">

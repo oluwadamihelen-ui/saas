@@ -5,10 +5,13 @@ import { Input, Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { resetPasswordAction, type ResetPasswordState } from "../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: ResetPasswordState = { status: "idle" };
 
 export function ResetPasswordForm({ accounts }: { accounts: { id: string; name: string; email: string; role: { name: string } }[] }) {
   const [state, formAction, isPending] = useActionState(resetPasswordAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => { if (state.status === "success") formRef.current?.reset(); }, [state.status]);
 

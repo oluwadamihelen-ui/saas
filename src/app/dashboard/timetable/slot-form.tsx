@@ -5,6 +5,8 @@ import { Label, Select, Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createSlotAction, type SlotFormState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: SlotFormState = { status: "idle" };
 
 const DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
@@ -19,6 +21,7 @@ export function SlotForm({
   teachers: { id: string; name: string }[];
 }) {
   const [state, formAction, isPending] = useActionState(createSlotAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

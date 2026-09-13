@@ -7,6 +7,8 @@ import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { acceptStaffInvite, type AcceptInviteState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: AcceptInviteState = { status: "idle" };
 
 export function AcceptInviteForm({ token, email, name }: { token: string; email: string; name: string | null }) {
@@ -15,6 +17,7 @@ export function AcceptInviteForm({ token, email, name }: { token: string; email:
   const isPasswordSetup = name !== null;
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(acceptStaffInvite, initialState);
+  useActionToast(state);
   // React resets uncontrolled fields once the action succeeds, so capture
   // the password in state as the user types rather than reading the DOM.
   const [password, setPassword] = useState("");

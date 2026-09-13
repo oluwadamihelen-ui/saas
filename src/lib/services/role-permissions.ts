@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
-import { PERMISSIONS, PERMISSION_CATALOG, type PermissionKey } from "@/lib/permissions";
+import { PERMISSION_CATALOG, type PermissionKey } from "@/lib/permissions";
 
 const ALL_PERMISSION_KEYS = new Set<string>(PERMISSION_CATALOG.map((p) => p.key));
 
@@ -44,11 +44,17 @@ export class RolePermissionUpdateError extends Error {}
 ///
 /// 1. SCHOOL_OWNER's permission set can never be edited — it must always
 ///    be able to undo any other role's misconfiguration.
-/// 2. You can never remove ROLES_MANAGE from the role you yourself
-///    currently hold — otherwise a Head of School editing their own role
-///    could accidentally lock themselves out of this very page (the
-///    School Owner would still have it, but that's a support ticket this
-///    check avoids entirely).
+/// 2. No one can change the permission set of the role they themselves
+///    currently hold, at all — not just narrowly protecting ROLES_MANAGE
+///    from removal. Letting a Head of School grant themselves a new
+///    permission (e.g. billing.manage) is self-escalation with no one
+///    else's sign-off, the same class of problem as approving your own
+///    expense claim; only a DIFFERENT role's holder (ultimately always
+///    SCHOOL_OWNER, since it's the only other role with ROLES_MANAGE) can
+///    change what your role can do. SCHOOL_OWNER never hits this case in
+///    practice — its own role is already blocked by guardrail 1 above —
+///    but the check is written generally in case a school ever grants
+///    ROLES_MANAGE to a third role.
 export async function updateRolePermissions(
   schoolId: string,
   actingUserId: string,
@@ -64,12 +70,11 @@ export async function updateRolePermissions(
   if (role.key === "SCHOOL_OWNER") {
     throw new RolePermissionUpdateError("The School Owner role always has full access and can't be changed.");
   }
+  if (targetRoleId === actingRoleId) {
+    throw new RolePermissionUpdateError("You can't change the permissions of your own role — ask another role holder with Manage Roles access to do it.");
+  }
 
   const desired = new Set<string>(desiredPermissionKeys.filter((key) => ALL_PERMISSION_KEYS.has(key)));
-
-  if (targetRoleId === actingRoleId && !desired.has(PERMISSIONS.ROLES_MANAGE)) {
-    throw new RolePermissionUpdateError("You can't remove your own ability to manage roles.");
-  }
 
   const permissions = await prisma.permission.findMany({ where: { key: { in: [...desired] } } });
   const permissionIdByKey = new Map(permissions.map((p) => [p.key, p.id]));

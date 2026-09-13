@@ -5,9 +5,12 @@ import { Input, Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { addGuardianAction, type AddGuardianState } from "../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 export function AddGuardianForm({ studentId }: { studentId: string }) {
   const action = addGuardianAction.bind(null, studentId);
   const [state, formAction, isPending] = useActionState(action, { status: "idle" } as AddGuardianState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="space-y-3 rounded-md border border-dashed border-border p-4">

@@ -6,6 +6,8 @@ import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Trash2, Plus } from "lucide-react";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 export interface LectureFormState {
   status: "idle" | "error";
   message?: string;
@@ -64,6 +66,7 @@ export function LectureForm({
   submitLabel: string;
 }) {
   const [state, formAction, isPending] = useActionState(action, { status: "idle" } as LectureFormState);
+  useActionToast(state);
   const [resources, setResources] = useState<ResourceRow[]>(
     defaults?.resources?.map((r, i) => ({ key: `existing-${i}`, type: r.type, title: r.title, existingFileUrl: r.fileUrl ?? null })) ?? []
   );

@@ -7,12 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { updateSubjectAction, type SubjectFormState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: SubjectFormState = { status: "idle" };
 
 export function SubjectRow({ subject }: { subject: { id: string; name: string; code: string } }) {
   const [isEditing, setIsEditing] = useState(false);
   const action = updateSubjectAction.bind(null, subject.id);
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
   const [prevState, setPrevState] = useState(state);
 
   if (!isEditing) {

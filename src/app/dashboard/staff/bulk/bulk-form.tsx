@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { CopyLinkButton } from "@/components/dashboard/copy-link-button";
+import { useActionToast } from "@/hooks/use-action-toast";
+
 import {
   previewStaffBulkAction,
   confirmStaffBulkAction,
@@ -38,7 +40,9 @@ export function BulkStaffForm({ roles }: { roles: { id: string; name: string }[]
   const [rows, setRows] = useState<ManualRow[]>([emptyRow(), emptyRow(), emptyRow()]);
 
   const [previewState, previewAction, isPreviewing] = useActionState(previewStaffBulkAction, previewInitial);
+  useActionToast(previewState);
   const [confirmState, confirmAction, isConfirming] = useActionState(confirmStaffBulkAction, confirmInitial);
+  useActionToast(confirmState);
 
   function updateRow(index: number, field: keyof ManualRow, value: string) {
     setRows((prev) => prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)));

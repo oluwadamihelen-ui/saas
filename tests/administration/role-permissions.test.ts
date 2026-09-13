@@ -75,18 +75,24 @@ describe("updateRolePermissions", () => {
     expect(stillFull.permissionKeys.length).toBeGreaterThan(0);
   });
 
-  it("blocks a role from removing ROLES_MANAGE from itself, but allows removing it from a different role", async () => {
+  it("blocks a role from changing its own permissions at all — even just adding one — but allows changing a different role", async () => {
     const { school, roleByKey, ownerUserId } = await makeSchool();
     const principal = roleByKey.get("PRINCIPAL")!;
     const teacher = roleByKey.get("TEACHER")!;
 
     const principalBefore = (await listRolesForSchool(school.id)).find((r) => r.id === principal.id)!;
-    const withoutRolesManage = principalBefore.permissionKeys.filter((k) => k !== PERMISSIONS.ROLES_MANAGE);
 
-    // Acting as the Principal, editing the Principal's own role.
+    // Acting as the Principal, editing the Principal's own role — even a
+    // pure addition (self-escalation), not just removing ROLES_MANAGE.
     await expect(
-      updateRolePermissions(school.id, ownerUserId, principal.id, principal.id, withoutRolesManage as never)
-    ).rejects.toThrow("You can't remove your own ability to manage roles.");
+      updateRolePermissions(school.id, ownerUserId, principal.id, principal.id, [
+        ...principalBefore.permissionKeys,
+        PERMISSIONS.BILLING_MANAGE,
+      ] as never)
+    ).rejects.toThrow("You can't change the permissions of your own role");
+
+    const principalAfter = (await listRolesForSchool(school.id)).find((r) => r.id === principal.id)!;
+    expect(principalAfter.permissionKeys).toEqual(principalBefore.permissionKeys);
 
     // Granting ROLES_MANAGE to a different role (Teacher) is unrestricted.
     const teacherBefore = (await listRolesForSchool(school.id)).find((r) => r.id === teacher.id)!;

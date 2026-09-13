@@ -5,10 +5,13 @@ import { Input, Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createHostelAction, addHostelRoomAction, assignStudentToRoomAction, type HostelFormState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: HostelFormState = { status: "idle" };
 
 export function AddHostelForm() {
   const [state, formAction, isPending] = useActionState(createHostelAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => { if (state.status === "success") formRef.current?.reset(); }, [state.status]);
 
@@ -46,6 +49,7 @@ export function AddHostelForm() {
 
 export function AddRoomForm({ hostelId }: { hostelId: string }) {
   const [state, formAction, isPending] = useActionState(addHostelRoomAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => { if (state.status === "success") formRef.current?.reset(); }, [state.status]);
 
@@ -76,6 +80,7 @@ export function AssignStudentForm({
   students: { id: string; firstName: string; lastName: string; admissionNumber: string }[];
 }) {
   const [state, formAction, isPending] = useActionState(assignStudentToRoomAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => { if (state.status === "success") formRef.current?.reset(); }, [state.status]);
 

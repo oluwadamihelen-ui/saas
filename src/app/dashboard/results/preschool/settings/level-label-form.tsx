@@ -6,12 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { updateAssessmentLevelLabelAction, type PreschoolSettingsState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: PreschoolSettingsState = { status: "idle" };
 const VARIANTS = ["neutral", "accent", "secondary", "success", "warning", "danger"] as const;
 type BadgeVariant = (typeof VARIANTS)[number];
 
 export function LevelLabelForm({ level, label, colorVariant }: { level: string; label: string; colorVariant: string }) {
   const [state, formAction, isPending] = useActionState(updateAssessmentLevelLabelAction, initialState);
+  useActionToast(state);
   const variant = (VARIANTS.includes(colorVariant as BadgeVariant) ? colorVariant : "neutral") as BadgeVariant;
 
   return (

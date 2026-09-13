@@ -7,6 +7,7 @@ import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { listClassArms } from "@/lib/services/academics";
 import { getRosterForDate } from "@/lib/services/attendance";
+import { getAccessibleClassArmIds, canAccessClassArm } from "@/lib/services/performance/authorization";
 import { RosterForm } from "./roster-form";
 import { RosterReadOnly } from "./roster-readonly";
 
@@ -23,9 +24,20 @@ export default async function AttendancePage({
   const perms = await getUserPermissions(user.id);
   const canMark = perms.has(PERMISSIONS.ATTENDANCE_MARK);
   const params = await searchParams;
-  const classArms = await listClassArms(user.schoolId);
+  const allClassArms = await listClassArms(user.schoolId);
 
-  const classArmId = params.classArmId || classArms[0]?.id;
+  // A teacher (no ACADEMICS_MANAGE) only sees classes they're actually
+  // assigned to via TeacherAssignment — same access decision Performance
+  // Analysis already uses, reused here for attendance for the same reason:
+  // a class picker showing every class in the school would let a teacher
+  // load and mark attendance for a class that isn't theirs. Admin-tier
+  // roles (ACADEMICS_MANAGE) still see and can mark every class.
+  const access = await getAccessibleClassArmIds(user.schoolId, user.id, perms);
+  const classArms = access === "ALL" ? allClassArms : allClassArms.filter((arm) => canAccessClassArm(access, arm.id));
+
+  const requestedClassArmId = params.classArmId;
+  const classArmId =
+    requestedClassArmId && canAccessClassArm(access, requestedClassArmId) ? requestedClassArmId : classArms[0]?.id;
   const date = params.date || today();
 
   const roster = classArmId ? await getRosterForDate(user.schoolId, classArmId, date) : null;
@@ -55,7 +67,12 @@ export default async function AttendancePage({
             <Button type="submit" variant="secondary">Load roster</Button>
           </form>
 
-          {!roster || roster.students.length === 0 ? (
+          {classArms.length === 0 ? (
+            <EmptyState
+              title="No classes assigned to you"
+              description="You aren't assigned to teach any class yet — ask your school administrator to assign you to one."
+            />
+          ) : !roster || roster.students.length === 0 ? (
             <EmptyState
               title="No active students in this class"
               description="Enroll students into this class arm before marking attendance."

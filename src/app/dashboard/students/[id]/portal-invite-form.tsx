@@ -5,6 +5,8 @@ import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import type { PortalInviteState } from "../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 export function PortalInviteForm({
   action,
   defaultEmail,
@@ -19,6 +21,7 @@ export function PortalInviteForm({
   allowAdmissionNumberLogin?: boolean;
 }) {
   const [state, formAction, isPending] = useActionState(action, { status: "idle" } as PortalInviteState);
+  useActionToast(state);
   const [useAdmissionNumber, setUseAdmissionNumber] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 

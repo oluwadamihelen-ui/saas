@@ -5,10 +5,13 @@ import { Label, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { submitFeedbackAction, type FeedbackFormState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: FeedbackFormState = { status: "idle" };
 
 export function SubmitFeedbackForm() {
   const [state, formAction, isPending] = useActionState(submitFeedbackAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => { if (state.status === "success") formRef.current?.reset(); }, [state.status]);
 

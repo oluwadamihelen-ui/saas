@@ -4,11 +4,14 @@ import { useActionState } from "react";
 import { Select } from "@/components/ui/input";
 import { updateClassAssessmentModeAction, type PreschoolSettingsState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: PreschoolSettingsState = { status: "idle" };
 const MODES = ["NUMERICAL", "MILESTONE", "BOTH"] as const;
 
 export function ClassModeForm({ classGroupId, assessmentMode }: { classGroupId: string; assessmentMode: string }) {
   const [state, formAction, isPending] = useActionState(updateClassAssessmentModeAction, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="flex items-center gap-2">

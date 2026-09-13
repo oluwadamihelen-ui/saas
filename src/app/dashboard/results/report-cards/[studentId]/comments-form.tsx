@@ -5,6 +5,8 @@ import { Label, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { updateCommentsAction, type GradingConfigState } from "../../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: GradingConfigState = { status: "idle" };
 
 export function CommentsForm({
@@ -22,6 +24,7 @@ export function CommentsForm({
 }) {
   const action = updateCommentsAction.bind(null, studentId, termId);
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="space-y-4">

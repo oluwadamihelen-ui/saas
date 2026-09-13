@@ -7,10 +7,13 @@ import { Button } from "@/components/ui/button";
 import { SchoolLogo } from "@/components/brand/school-logo";
 import { saveBrandingAction, removeLogoAction, type BrandingFormState } from "./branding-actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: BrandingFormState = { status: "idle" };
 
 export function BrandingForm({ school }: { school: { name: string; logoUrl: string | null; brandColor: string | null } }) {
   const [state, formAction, isPending] = useActionState(saveBrandingAction, initialState);
+  useActionToast(state);
   const [isRemoving, startTransition] = useTransition();
   const [color, setColor] = useState(school.brandColor ?? "#1a6fba");
   const router = useRouter();

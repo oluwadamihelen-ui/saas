@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Label, Select } from "@/components/ui/input";
 import { admitApplicantAction, type AdmissionActionState } from "../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: AdmissionActionState = { status: "idle" };
 
 export function AdmitForm({
@@ -17,6 +19,7 @@ export function AdmitForm({
 }) {
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(admitApplicantAction, initialState);
+  useActionToast(state);
 
   useEffect(() => {
     if (state.status === "success") router.push("/dashboard/students");

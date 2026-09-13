@@ -8,11 +8,14 @@ import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { registerSchool, type RegisterState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: RegisterState = { status: "idle" };
 
 export function RegisterForm() {
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(registerSchool, initialState);
+  useActionToast(state);
   // React resets uncontrolled form fields once the action succeeds, so we
   // can't read email/password back off the DOM in the effect below — keep
   // them in state, captured as the user types instead.

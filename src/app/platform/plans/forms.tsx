@@ -9,6 +9,8 @@ import { formatMoney } from "@/lib/money";
 import { FEATURE_CATALOG, FEATURE_CATEGORIES } from "@/lib/billing/features";
 import { createPlanAction, updatePlanAction, setPlanActiveAction, togglePlanFeatureAction, type PlatformFormState } from "../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: PlatformFormState = { status: "idle" };
 
 export interface PlanBrief {
@@ -156,6 +158,7 @@ function PlanFields({ plan }: { plan?: PlanBrief }) {
 
 export function CreatePlanForm() {
   const [state, formAction, isPending] = useActionState(createPlanAction, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="space-y-4">
@@ -209,6 +212,7 @@ export function PlanRow({ plan }: { plan: PlanBrief }) {
 function EditPlanForm({ plan, onDone }: { plan: PlanBrief; onDone: () => void }) {
   const action = updatePlanAction.bind(null, plan.id);
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
 
   useEffect(() => {
     if (state.status === "success") onDone();

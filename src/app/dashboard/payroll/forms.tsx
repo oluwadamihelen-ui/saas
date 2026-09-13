@@ -5,10 +5,13 @@ import { Input, Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createSalaryComponentAction, generatePayrollRunAction, type PayrollFormState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: PayrollFormState = { status: "idle" };
 
 export function SalaryComponentForm() {
   const [state, formAction, isPending] = useActionState(createSalaryComponentAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => { if (state.status === "success") formRef.current?.reset(); }, [state.status]);
 
@@ -33,6 +36,7 @@ export function SalaryComponentForm() {
 
 export function GeneratePayrollRunForm() {
   const [state, formAction, isPending] = useActionState(generatePayrollRunAction, initialState);
+  useActionToast(state);
   const now = new Date();
 
   return (

@@ -5,6 +5,8 @@ import { Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createTeacherAssignmentAction, type TeacherAssignmentState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: TeacherAssignmentState = { status: "idle" };
 
 export function TeacherAssignmentForm({
@@ -17,6 +19,7 @@ export function TeacherAssignmentForm({
   classArms: { id: string; name: string; classGroup: { name: string } }[];
 }) {
   const [state, formAction, isPending] = useActionState(createTeacherAssignmentAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

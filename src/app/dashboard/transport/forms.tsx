@@ -5,10 +5,13 @@ import { Input, Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createVehicleAction, createRouteAction, addRouteStopAction, assignStudentToRouteAction, type TransportFormState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: TransportFormState = { status: "idle" };
 
 export function AddVehicleForm() {
   const [state, formAction, isPending] = useActionState(createVehicleAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => { if (state.status === "success") formRef.current?.reset(); }, [state.status]);
 
@@ -46,6 +49,7 @@ export function AddVehicleForm() {
 
 export function AddRouteForm({ vehicles }: { vehicles: { id: string; name: string }[] }) {
   const [state, formAction, isPending] = useActionState(createRouteAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => { if (state.status === "success") formRef.current?.reset(); }, [state.status]);
 
@@ -70,6 +74,7 @@ export function AddRouteForm({ vehicles }: { vehicles: { id: string; name: strin
 
 export function AddStopForm({ routeId, nextOrder }: { routeId: string; nextOrder: number }) {
   const [state, formAction, isPending] = useActionState(addRouteStopAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => { if (state.status === "success") formRef.current?.reset(); }, [state.status]);
 
@@ -108,6 +113,7 @@ export function AssignStudentForm({
   students: { id: string; firstName: string; lastName: string; admissionNumber: string }[];
 }) {
   const [state, formAction, isPending] = useActionState(assignStudentToRouteAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => { if (state.status === "success") formRef.current?.reset(); }, [state.status]);
 

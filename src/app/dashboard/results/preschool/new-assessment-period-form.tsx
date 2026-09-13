@@ -5,6 +5,8 @@ import { Input, Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createAssessmentPeriodAction, type MilestoneGridState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const TYPES = [
   { value: "CONTINUOUS_ASSESSMENT", label: "Continuous Assessment" },
   { value: "TEST", label: "Test" },
@@ -21,6 +23,7 @@ const initialState: MilestoneGridState = { status: "idle" };
 export function NewAssessmentPeriodForm({ termId }: { termId: string }) {
   const action = createAssessmentPeriodAction.bind(null, termId);
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

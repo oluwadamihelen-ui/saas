@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { saveRolePermissions, type RolePermissionsState } from "./actions";
 import type { RoleWithPermissions } from "@/lib/services/role-permissions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: RolePermissionsState = { status: "idle" };
 
 const MODULE_LABEL_OVERRIDES: Record<string, string> = {
@@ -63,6 +65,12 @@ export function RolePermissionsEditor({
           every permission, and can&apos;t be limited — every school needs at least one role that can undo any other
           role&apos;s misconfiguration.
         </p>
+      ) : selectedRole.key === currentUserRoleKey ? (
+        <p className="text-sm text-muted">
+          This is your own role — you can&apos;t change its permissions yourself. That would let you grant yourself
+          new access with no one else&apos;s sign-off. Ask another School Owner or Head of School to make this
+          change.
+        </p>
       ) : (
         // Remounts only when switching to a different role, so its
         // uncontrolled checkboxes' defaultChecked starts from the right
@@ -73,12 +81,7 @@ export function RolePermissionsEditor({
         // message) at the exact moment it should appear. The checkboxes'
         // current DOM state after a save already IS the new saved state,
         // so there's nothing to resync within the same role anyway.
-        <RoleForm
-          key={selectedRole.id}
-          role={selectedRole}
-          groups={groups}
-          isOwnRole={selectedRole.key === currentUserRoleKey}
-        />
+        <RoleForm key={selectedRole.id} role={selectedRole} groups={groups} />
       )}
     </div>
   );
@@ -87,51 +90,34 @@ export function RolePermissionsEditor({
 function RoleForm({
   role,
   groups,
-  isOwnRole,
 }: {
   role: RoleWithPermissions;
   groups: [string, { key: string; description: string }[]][];
-  isOwnRole: boolean;
 }) {
   const [state, formAction, isPending] = useActionState(saveRolePermissions, initialState);
+  useActionToast(state);
   const checkedSet = new Set(role.permissionKeys);
 
   return (
     <form action={formAction} className="space-y-6">
       <input type="hidden" name="roleId" value={role.id} />
-      {isOwnRole && (
-        <p className="text-xs text-muted">
-          This is your own role — unchecking &quot;Change role permission assignments&quot; for it will be rejected,
-          so you can&apos;t accidentally lock yourself out of this page.
-        </p>
-      )}
       <div className="space-y-5">
         {groups.map(([module, permissions]) => (
           <div key={module}>
             <h3 className="mb-2 text-sm font-semibold text-foreground">{moduleLabel(module)}</h3>
             <div className="space-y-2">
-              {permissions.map((p) => {
-                const isRolesManage = p.key === "roles.manage";
-                const isProtected = isOwnRole && isRolesManage;
-                return (
-                  <label key={p.key} className="flex items-start gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      name="permissionKeys"
-                      value={p.key}
-                      defaultChecked={checkedSet.has(p.key)}
-                      // Deliberately NOT disabled: a disabled checkbox is
-                      // dropped from FormData entirely, which would make
-                      // every save of your own role fail the server's
-                      // self-lockout guard. Left enabled so unchecking it
-                      // is possible but rejected server-side with a clear
-                      // message (see updateRolePermissions).
-                      className="mt-0.5 h-4 w-4 rounded border-border"
-                    />
-                    <span className={isProtected ? "text-muted" : "text-foreground"}>{p.description}</span>
-                  </label>
-                );
-              })}
+              {permissions.map((p) => (
+                <label key={p.key} className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    name="permissionKeys"
+                    value={p.key}
+                    defaultChecked={checkedSet.has(p.key)}
+                    className="mt-0.5 h-4 w-4 rounded border-border"
+                  />
+                  <span className="text-foreground">{p.description}</span>
+                </label>
+              ))}
             </div>
           </div>
         ))}

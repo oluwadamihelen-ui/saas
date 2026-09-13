@@ -8,10 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { CopyLinkButton } from "@/components/dashboard/copy-link-button";
 import { createDirectStaffAction, type DirectCreateState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: DirectCreateState = { status: "idle" };
 
 export function DirectCreateForm({ roles }: { roles: { id: string; name: string }[] }) {
   const [state, formAction, isPending] = useActionState(createDirectStaffAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
 
   if (state.status === "success" && state.user && state.inviteToken) {

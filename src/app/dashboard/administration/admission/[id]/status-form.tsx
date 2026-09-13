@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Label, Select, Textarea } from "@/components/ui/input";
 import { updateApplicantStatusAction, type AdmissionActionState } from "../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: AdmissionActionState = { status: "idle" };
 
 const NEXT_STATUS: Record<string, { value: string; label: string }[]> = {
@@ -15,6 +17,7 @@ const NEXT_STATUS: Record<string, { value: string; label: string }[]> = {
 
 export function StatusForm({ applicantId, status }: { applicantId: string; status: string }) {
   const [state, formAction, isPending] = useActionState(updateApplicantStatusAction, initialState);
+  useActionToast(state);
   const options = NEXT_STATUS[status] ?? [];
   if (options.length === 0) return null;
 

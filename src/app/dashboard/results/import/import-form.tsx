@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { useActionToast } from "@/hooks/use-action-toast";
+
 import {
   previewResultsImportAction,
   confirmResultsImportAction,
@@ -19,10 +21,12 @@ export function ResultsImportForm() {
     previewResultsImportAction,
     { status: "idle" } as ResultsImportPreviewState
   );
+  useActionToast(previewState);
   const [confirmState, confirmAction, isConfirming] = useActionState(
     confirmResultsImportAction,
     { status: "idle" } as ResultsImportConfirmState
   );
+  useActionToast(confirmState);
 
   if (confirmState.status === "done") {
     return (

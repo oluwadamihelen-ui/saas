@@ -5,10 +5,13 @@ import { Input, Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createFeeCategoryAction, createFeeStructureAction, type FinanceFormState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: FinanceFormState = { status: "idle" };
 
 export function FeeCategoryForm() {
   const [state, formAction, isPending] = useActionState(createFeeCategoryAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -37,6 +40,7 @@ export function FeeStructureForm({
   terms: { id: string; name: string }[];
 }) {
   const [state, formAction, isPending] = useActionState(createFeeStructureAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

@@ -5,10 +5,13 @@ import { Input, Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createBookAction, issueLoanAction, type LibraryFormState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: LibraryFormState = { status: "idle" };
 
 export function AddBookForm() {
   const [state, formAction, isPending] = useActionState(createBookAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => { if (state.status === "success") formRef.current?.reset(); }, [state.status]);
 
@@ -54,6 +57,7 @@ export function IssueLoanForm({
   staff: { id: string; name: string }[];
 }) {
   const [state, formAction, isPending] = useActionState(issueLoanAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
   const [borrowerType, setBorrowerType] = useState<"student" | "staff">("student");
   useEffect(() => { if (state.status === "success") formRef.current?.reset(); }, [state.status]);

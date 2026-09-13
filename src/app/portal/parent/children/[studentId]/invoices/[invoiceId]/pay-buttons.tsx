@@ -4,11 +4,14 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { payOnlineFromPortalAction, notifyBankTransferFromPortalAction, type PortalPayFormState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: PortalPayFormState = { status: "idle" };
 
 export function PortalPayOnlineButton({ studentId, invoiceId }: { studentId: string; invoiceId: string }) {
   const action = payOnlineFromPortalAction.bind(null, studentId, invoiceId);
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction}>
@@ -21,6 +24,7 @@ export function PortalPayOnlineButton({ studentId, invoiceId }: { studentId: str
 export function PortalNotifyBankTransferButton({ studentId, invoiceId }: { studentId: string; invoiceId: string }) {
   const action = notifyBankTransferFromPortalAction.bind(null, studentId, invoiceId);
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction}>

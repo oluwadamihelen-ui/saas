@@ -5,9 +5,12 @@ import { Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { replyAsParentAction, type MessageFormState } from "../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 export function ReplyForm({ conversationId }: { conversationId: string }) {
   const action = replyAsParentAction.bind(null, conversationId);
   const [state, formAction, isPending] = useActionState(action, { status: "idle" } as MessageFormState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

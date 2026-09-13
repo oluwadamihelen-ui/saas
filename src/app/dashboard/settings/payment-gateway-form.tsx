@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { saveGatewayCredentialAction, removeGatewayCredentialAction, type GatewayFormState } from "./payment-gateway-actions";
 import type { PaymentGatewayProvider } from "@/generated/prisma/client";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: GatewayFormState = { status: "idle" };
 
 const PROVIDER_LABELS: Record<PaymentGatewayProvider, string> = {
@@ -24,6 +26,7 @@ export function GatewayForm({
   connected?: { publicKey: string; isEnabled: boolean; hasWebhookSecret: boolean } | null;
 }) {
   const [state, formAction, isPending] = useActionState(saveGatewayCredentialAction, initialState);
+  useActionToast(state);
 
   return (
     <div className="space-y-3 rounded-md border border-border p-4">

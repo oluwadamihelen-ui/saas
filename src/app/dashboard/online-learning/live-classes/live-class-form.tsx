@@ -5,6 +5,8 @@ import { useActionState } from "react";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 export interface LiveClassFormState {
   status: "idle" | "error";
   message?: string;
@@ -37,6 +39,7 @@ export function LiveClassForm({
   submitLabel: string;
 }) {
   const [state, formAction, isPending] = useActionState(action, { status: "idle" } as LiveClassFormState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="space-y-4 sm:space-y-6">

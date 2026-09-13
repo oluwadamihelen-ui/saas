@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { generateSchoolHealthInsightAction, type GenerateSchoolHealthInsightState } from "./ai-insight-actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: GenerateSchoolHealthInsightState = { status: "idle" };
 
 /// Only rendered when an AI provider is configured for this deployment
@@ -17,6 +19,7 @@ export function AiInsightCard({ termId }: { termId: string }) {
     async (_prev: GenerateSchoolHealthInsightState) => generateSchoolHealthInsightAction(termId),
     initialState
   );
+  useActionToast(state);
 
   return (
     <Card>

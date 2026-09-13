@@ -4,6 +4,8 @@ import { useActionState, useEffect, useRef, useTransition } from "react";
 import { Label, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Sparkles } from "lucide-react";
+import { useActionToast } from "@/hooks/use-action-toast";
+
 import {
   updatePreschoolCommentsAction,
   generatePreschoolCommentAction,
@@ -31,9 +33,11 @@ export function CommentsForm({
 }) {
   const action = updatePreschoolCommentsAction.bind(null, studentId, termId);
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
 
   const generateAction = generatePreschoolCommentAction.bind(null, studentId, termId);
   const [generateState, runGenerate, isGenerating] = useActionState(generateAction, initialGenerateState);
+  useActionToast(generateState);
   const [, startTransition] = useTransition();
   const overallRef = useRef<HTMLTextAreaElement>(null);
 

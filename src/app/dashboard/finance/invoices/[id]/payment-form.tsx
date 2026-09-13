@@ -5,11 +5,14 @@ import { Input, Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { recordPaymentAction, type PaymentFormState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: PaymentFormState = { status: "idle" };
 
 export function RecordPaymentForm({ invoiceId }: { invoiceId: string }) {
   const action = recordPaymentAction.bind(null, invoiceId);
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

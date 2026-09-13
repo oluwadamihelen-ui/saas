@@ -6,6 +6,8 @@ import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 export interface StudentFormState {
   status: "idle" | "error";
   message?: string;
@@ -48,6 +50,7 @@ export function StudentForm({
   currentPhotoUrl?: string | null;
 }) {
   const [state, formAction, isPending] = useActionState(action, { status: "idle" } as StudentFormState);
+  useActionToast(state);
   const [photoPreview, setPhotoPreview] = useState<string | null>(currentPhotoUrl ?? null);
   const studentName = `${defaults?.firstName ?? ""} ${defaults?.lastName ?? ""}`.trim() || "Student";
 

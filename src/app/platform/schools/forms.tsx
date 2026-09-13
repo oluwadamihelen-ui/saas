@@ -5,6 +5,8 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useActionToast } from "@/hooks/use-action-toast";
+
 import {
   updateSchoolStatusAction,
   changeSchoolPlanAction,
@@ -20,6 +22,7 @@ const initialState: PlatformFormState = { status: "idle" };
 
 export function SchoolStatusForm({ schoolId, currentStatus }: { schoolId: string; currentStatus: "TRIAL" | "ACTIVE" | "SUSPENDED" }) {
   const [state, formAction, isPending] = useActionState(updateSchoolStatusAction, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="flex items-end gap-3">
@@ -39,6 +42,7 @@ export function SchoolStatusForm({ schoolId, currentStatus }: { schoolId: string
 
 export function CreateSubscriptionForm({ schoolId, plans }: { schoolId: string; plans: { id: string; name: string }[] }) {
   const [state, formAction, isPending] = useActionState(createSubscriptionAction, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="flex items-end gap-3">
@@ -65,6 +69,7 @@ export function PlanChangeForm({
   plans: { id: string; name: string }[];
 }) {
   const [state, formAction, isPending] = useActionState(changeSchoolPlanAction, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="flex items-end gap-3">
@@ -88,6 +93,7 @@ export function SubscriptionStatusForm({
   currentStatus: "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED" | "EXPIRED" | "SUSPENDED";
 }) {
   const [state, formAction, isPending] = useActionState(updateSubscriptionStatusAction, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="flex items-end gap-3">

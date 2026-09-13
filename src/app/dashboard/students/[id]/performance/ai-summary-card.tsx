@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { generateAiSummaryAction, type GenerateAiSummaryState } from "./ai-summary-actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: GenerateAiSummaryState = { status: "idle" };
 
 /// Only rendered when an AI provider is actually configured for this
@@ -19,6 +21,7 @@ export function AiSummaryCard({ studentId, termId }: { studentId: string; termId
     async (_prev: GenerateAiSummaryState) => generateAiSummaryAction(studentId, termId),
     initialState
   );
+  useActionToast(state);
 
   return (
     <Card>

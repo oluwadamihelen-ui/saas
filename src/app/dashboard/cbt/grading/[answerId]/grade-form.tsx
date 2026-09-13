@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { gradeAnswerAction, getGradingSuggestionAction, type GradeAnswerState } from "../actions";
 import type { GradingSuggestion } from "@/lib/services/cbt-ai";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: GradeAnswerState = { status: "idle" };
 
 export function GradeForm({
@@ -24,6 +26,7 @@ export function GradeForm({
 }) {
   const action = gradeAnswerAction.bind(null, answerId);
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
 
   const [marks, setMarks] = useState(initialMarks?.toString() ?? "");
   const [feedback, setFeedback] = useState(initialFeedback ?? "");

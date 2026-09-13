@@ -5,10 +5,13 @@ import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createGradeBandAction, createComponentAction, type GradingConfigState } from "../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: GradingConfigState = { status: "idle" };
 
 export function GradeBandForm() {
   const [state, formAction, isPending] = useActionState(createGradeBandAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -41,6 +44,7 @@ export function GradeBandForm() {
 
 export function ComponentForm() {
   const [state, formAction, isPending] = useActionState(createComponentAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

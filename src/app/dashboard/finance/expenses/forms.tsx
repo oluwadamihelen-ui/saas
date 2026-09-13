@@ -5,10 +5,13 @@ import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createVendorAction, createExpenseCategoryAction, recordExpenseAction, type FinanceFormState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: FinanceFormState = { status: "idle" };
 
 export function VendorForm() {
   const [state, formAction, isPending] = useActionState(createVendorAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => { if (state.status === "success") formRef.current?.reset(); }, [state.status]);
 
@@ -30,6 +33,7 @@ export function VendorForm() {
 
 export function ExpenseCategoryForm() {
   const [state, formAction, isPending] = useActionState(createExpenseCategoryAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => { if (state.status === "success") formRef.current?.reset(); }, [state.status]);
 
@@ -53,6 +57,7 @@ export function RecordExpenseForm({
   vendors: { id: string; name: string }[];
 }) {
   const [state, formAction, isPending] = useActionState(recordExpenseAction, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => { if (state.status === "success") formRef.current?.reset(); }, [state.status]);
 

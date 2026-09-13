@@ -5,11 +5,14 @@ import { Input, Label, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { addTopicAction, type SchemeOfWorkState } from "../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: SchemeOfWorkState = { status: "idle" };
 
 export function TopicForm({ schemeOfWorkId }: { schemeOfWorkId: string }) {
   const action = addTopicAction.bind(null, schemeOfWorkId);
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

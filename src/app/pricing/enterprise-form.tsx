@@ -5,11 +5,14 @@ import { Input, Label, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { submitEnterpriseInquiryAction, type EnterpriseFormState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: EnterpriseFormState = { status: "idle" };
 
 export function EnterpriseInquiryForm() {
   const [open, setOpen] = useState(false);
   const [state, formAction, isPending] = useActionState(submitEnterpriseInquiryAction, initialState);
+  useActionToast(state);
 
   if (!open) {
     return (

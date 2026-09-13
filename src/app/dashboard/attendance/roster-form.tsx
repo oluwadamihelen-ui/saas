@@ -6,6 +6,8 @@ import { Select } from "@/components/ui/input";
 import { Avatar } from "@/components/ui/avatar";
 import { markAttendanceAction, type MarkAttendanceState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: MarkAttendanceState = { status: "idle" };
 
 type Status = "PRESENT" | "ABSENT" | "LATE" | "EXCUSED";
@@ -28,6 +30,7 @@ export function RosterForm({
 }) {
   const action = markAttendanceAction.bind(null, classArmId, date);
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
   const [statuses, setStatuses] = useState<Record<string, Status>>(
     Object.fromEntries(roster.map((r) => [r.student.id, r.record?.status ?? "PRESENT"]))
   );

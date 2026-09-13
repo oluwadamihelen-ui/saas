@@ -8,16 +8,20 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { previewImportAction, confirmImportAction, type ImportPreviewState, type ImportConfirmState } from "../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 export function ImportForm() {
   const router = useRouter();
   const [previewState, previewAction, isPreviewing] = useActionState(
     previewImportAction,
     { status: "idle" } as ImportPreviewState
   );
+  useActionToast(previewState);
   const [confirmState, confirmAction, isConfirming] = useActionState(
     confirmImportAction,
     { status: "idle" } as ImportConfirmState
   );
+  useActionToast(confirmState);
 
   if (confirmState.status === "done") {
     return (

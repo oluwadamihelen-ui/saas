@@ -137,10 +137,14 @@ nothing in Phase 1's UI creates or uses such a user yet.
   guardrails live in that function, not the UI, so they hold even against
   a hand-crafted request: `SCHOOL_OWNER`'s permission set can never be
   edited (it must always be able to undo any other role's
-  misconfiguration), and no one can remove `roles.manage` from the role
-  they themselves currently hold (prevents locking yourself out of this
-  page — `SCHOOL_OWNER` would still have it, but that's a support ticket
-  this check avoids). Changes take effect immediately, same as every
+  misconfiguration), and no one can change the permission set of the role
+  they themselves currently hold, at all — not just narrowly protecting
+  `roles.manage` from removal. A Head of School granting themselves a new
+  permission (self-escalation with no other role holder's sign-off) is
+  blocked the same as them removing their own `roles.manage` would be;
+  only a different role's holder (in practice always `SCHOOL_OWNER`,
+  since it's the only other role with `roles.manage` by default) can
+  change what a role can do. Changes take effect immediately, same as every
   other permission check (`getUserPermissions` never caches), and are
   logged via the existing `logAudit()` helper
   (`roles.permissions_changed`), not a separate audit system. **This is

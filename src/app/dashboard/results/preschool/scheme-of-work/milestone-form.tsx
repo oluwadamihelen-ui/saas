@@ -5,11 +5,14 @@ import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { addMilestoneAction, type SchemeOfWorkState } from "../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: SchemeOfWorkState = { status: "idle" };
 
 export function MilestoneForm({ topicId }: { topicId: string }) {
   const action = addMilestoneAction.bind(null, topicId);
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

@@ -5,6 +5,8 @@ import { Input, Label, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { saveSchoolInfo, type SchoolInfoState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: SchoolInfoState = { status: "idle" };
 
 const CURRENCIES = ["NGN", "GHS", "KES", "ZAR", "USD"];
@@ -24,6 +26,7 @@ function suggestAbbreviation(name: string): string {
 
 export function SchoolInfoForm({ schoolName, currentPrefix }: { schoolName: string; currentPrefix: string | null }) {
   const [state, formAction, isPending] = useActionState(saveSchoolInfo, initialState);
+  useActionToast(state);
   const [prefix, setPrefix] = useState(currentPrefix ?? suggestAbbreviation(schoolName));
 
   return (

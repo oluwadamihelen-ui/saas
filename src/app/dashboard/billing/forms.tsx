@@ -7,6 +7,8 @@ import { formatMoney } from "@/lib/money";
 import { annualSavingsMinor } from "@/lib/billing/plan-catalog";
 import { changePlanAction, cancelSubscriptionAction, reactivateSubscriptionAction, payInvoiceAction, type BillingFormState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: BillingFormState = { status: "idle" };
 
 export interface BillingPlanBrief {
@@ -25,6 +27,7 @@ export interface BillingPlanBrief {
 export function PlanPicker({ plans, currentPlanId, currentInterval }: { plans: BillingPlanBrief[]; currentPlanId: string; currentInterval: "MONTHLY" | "YEARLY" }) {
   const [interval, setInterval] = useState<"MONTHLY" | "YEARLY">(currentInterval);
   const [state, formAction] = useActionState(changePlanAction, initialState);
+  useActionToast(state);
 
   return (
     <div className="space-y-4">
@@ -92,6 +95,7 @@ export function PlanPicker({ plans, currentPlanId, currentInterval }: { plans: B
 
 export function CancelSubscriptionForm() {
   const [state, formAction, isPending] = useActionState(cancelSubscriptionAction, initialState);
+  useActionToast(state);
   const [confirming, setConfirming] = useState(false);
 
   if (!confirming) {
@@ -122,6 +126,7 @@ export function CancelSubscriptionForm() {
 
 export function ReactivateSubscriptionForm({ defaultInterval }: { defaultInterval: "MONTHLY" | "YEARLY" }) {
   const [state, formAction, isPending] = useActionState(reactivateSubscriptionAction, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="flex items-center gap-3">
@@ -137,6 +142,7 @@ export function ReactivateSubscriptionForm({ defaultInterval }: { defaultInterva
 export function PayInvoiceButton({ invoiceId }: { invoiceId: string }) {
   const action = payInvoiceAction.bind(null, invoiceId);
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="inline-flex items-center gap-2">

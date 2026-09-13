@@ -4,11 +4,14 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { payApplicationFeeOnlineAction, type ApplyFormState } from "../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: ApplyFormState = { status: "idle" };
 
 export function PayApplicationFeeOnlineButton({ slug, applicantId }: { slug: string; applicantId: string }) {
   const action = payApplicationFeeOnlineAction.bind(null, slug, applicantId);
   const [state, formAction, isPending] = useActionState(action, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction}>

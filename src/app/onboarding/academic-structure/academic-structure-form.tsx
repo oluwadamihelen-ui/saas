@@ -5,12 +5,15 @@ import { Input, Label, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { saveAcademicStructure, type AcademicStructureState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: AcademicStructureState = { status: "idle" };
 
 const thisYear = new Date().getFullYear();
 
 export function AcademicStructureForm() {
   const [state, formAction, isPending] = useActionState(saveAcademicStructure, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="space-y-4">

@@ -5,10 +5,13 @@ import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { startConversationAction, type MessageFormState } from "../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: MessageFormState = { status: "idle" };
 
 export function NewMessageForm({ kids }: { kids: { id: string; firstName: string; lastName: string }[] }) {
   const [state, formAction, isPending] = useActionState(startConversationAction, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="space-y-4">

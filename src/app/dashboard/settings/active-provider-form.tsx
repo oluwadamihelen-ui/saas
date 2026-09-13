@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { setActivePaymentProviderAction, type GatewayFormState } from "./payment-gateway-actions";
 import type { PaymentGatewayProvider } from "@/generated/prisma/client";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: GatewayFormState = { status: "idle" };
 
 const PROVIDER_LABELS: Record<PaymentGatewayProvider, string> = {
@@ -22,6 +24,7 @@ export function ActiveProviderForm({
   connectedProviders: PaymentGatewayProvider[];
 }) {
   const [state, formAction, isPending] = useActionState(setActivePaymentProviderAction, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3">

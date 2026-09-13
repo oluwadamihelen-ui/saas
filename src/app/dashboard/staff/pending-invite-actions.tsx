@@ -8,6 +8,8 @@ import { CopyLinkButton } from "@/components/dashboard/copy-link-button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { resendInviteAction, convertInviteAction, regenerateSetupLinkAction, type ConvertInviteState } from "./actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 export function ResendInviteButton({ inviteId }: { inviteId: string }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -85,6 +87,7 @@ const initialState: ConvertInviteState = { status: "idle" };
 export function ConvertInviteButton({ inviteId, email }: { inviteId: string; email: string }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, isPending] = useActionState(convertInviteAction, initialState);
+  useActionToast(state);
   const router = useRouter();
 
   // The server action deliberately doesn't revalidate the page itself (see

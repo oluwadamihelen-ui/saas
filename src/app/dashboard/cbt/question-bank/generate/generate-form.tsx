@@ -7,10 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { generateQuestionsAction, type GenerateQuestionsState } from "../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: GenerateQuestionsState = { status: "idle" };
 
 export function GenerateForm({ subjects }: { subjects: { id: string; name: string }[] }) {
   const [state, formAction, isPending] = useActionState(generateQuestionsAction, initialState);
+  useActionToast(state);
 
   return (
     <div className="space-y-4 sm:space-y-6">

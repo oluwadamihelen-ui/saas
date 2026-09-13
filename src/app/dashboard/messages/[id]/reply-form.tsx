@@ -5,9 +5,12 @@ import { Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { replyAsStaffAction, type ReplyState } from "../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 export function ReplyForm({ conversationId }: { conversationId: string }) {
   const action = replyAsStaffAction.bind(null, conversationId);
   const [state, formAction, isPending] = useActionState(action, { status: "idle" } as ReplyState);
+  useActionToast(state);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

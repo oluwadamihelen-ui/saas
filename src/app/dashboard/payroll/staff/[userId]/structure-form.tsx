@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { saveStaffSalaryStructureAction, type PayrollFormState } from "../../actions";
 
+import { useActionToast } from "@/hooks/use-action-toast";
+
 const initialState: PayrollFormState = { status: "idle" };
 
 export function StructureForm({
@@ -18,6 +20,7 @@ export function StructureForm({
   existingAmountsMinor: Record<string, number>;
 }) {
   const [state, formAction, isPending] = useActionState(saveStaffSalaryStructureAction, initialState);
+  useActionToast(state);
 
   return (
     <form action={formAction} className="space-y-4">
