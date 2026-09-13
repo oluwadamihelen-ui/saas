@@ -1,0 +1,918 @@
+// =============================================================================
+// Engulfing Zone Structure Engine
+// -----------------------------------------------------------------------------
+// Structural engulfing-zone methodology:
+//   Structural S/R Zones -> First Zone Break -> Second Distinct Zone Break
+//   -> Two-Zone Validation -> Valid Engulf -> Perfect / QM / Hidden
+//   Classification -> First Movement -> Second Movement -> Zone Freshness
+//   -> Collection / Non-Fresh Status -> optional HTF/LTF Confirmation.
+//
+// This is NOT a generic "close > high[1]" engulfing-candle screener. An
+// engulfed zone is only ever created after price breaks TWO DISTINCT
+// structural zones of the same opposite type (two resistance zones for a
+// bullish setup, two support zones for a bearish setup). See the companion
+// specification document for the full mechanical definition of every rule
+// implemented below.
+//
+// Non-repainting: every structural mutation (zone creation, zone break,
+// two-zone validation, classification, collection, failure) is gated on
+// barstate.isconfirmed, pivots are only read once their confirmation delay
+// has elapsed, and all request.security() calls use lookahead_off with no
+// var-fed lookahead. Historical signals never move or change once printed.
+// =============================================================================
+//@version=6
+indicator("Engulfing Zone Structure Engine", shorttitle = "EZ-Engine", overlay = true, max_boxes_count = 500, max_labels_count = 500, max_lines_count = 200)
+
+// =============================================================================
+// A. GENERAL
+// =============================================================================
+gA = "A. General"
+i_signalConfirmedOnly = input.bool(true, "Signal Only On Confirmed Candle", group = gA, tooltip = "Non-repainting is mandatory for this indicator (Part 24 of the spec). This input is kept for transparency/UI parity with the spec, but every structural mutation below is always gated on barstate.isconfirmed regardless of this switch, so historical structure and signals can never repaint.")
+i_bullColor  = input.color(color.new(color.teal, 0), "Bullish Color", group = gA)
+i_bearColor  = input.color(color.new(color.red, 0), "Bearish Color", group = gA)
+i_neutralColor = input.color(color.new(color.gray, 40), "Structural Zone Color", group = gA)
+
+// =============================================================================
+// B. STRUCTURAL ZONES
+// =============================================================================
+gB = "B. Structural Zones"
+i_pivotLen          = input.int(5, "Swing / Pivot Sensitivity (bars each side)", minval = 2, group = gB, tooltip = "A structural pivot high/low is confirmed pivotLen bars after it forms. Lower = more zones, higher = fewer, more significant zones.")
+i_atrLen            = input.int(14, "ATR Length (auto-sizing basis)", minval = 1, group = gB)
+i_zoneHalfWidthMult = input.float(0.25, "Zone Half-Width (x ATR)", minval = 0.01, group = gB, tooltip = "Controls the minimum zone width, e.g. Resistance 1900-1905 instead of a single price line.")
+i_mergeTolMult      = input.float(0.6, "Zone Merge Tolerance (x ATR)", minval = 0, group = gB, tooltip = "New pivots within this distance of an existing unbroken zone's center are merged into it instead of creating a duplicate zone (prevents 6 nearby candles from becoming 6 zones).")
+i_minZoneDistMult   = input.float(0.6, "Minimum Distance Between Zones (x ATR)", minval = 0, group = gB, tooltip = "A brand-new zone must be at least this far from every other unbroken zone of the same type, or it is discarded.")
+i_maxActiveZones    = input.int(10, "Maximum Active Zones (per side)", minval = 2, maxval = 40, group = gB)
+i_maxZoneAgeBars    = input.int(300, "Maximum Zone Age (bars)", minval = 20, group = gB)
+
+// =============================================================================
+// C. TWO-ZONE VALIDATION
+// =============================================================================
+gC = "C. Two-Zone Validation"
+i_breakMode = input.string("Candle Close Beyond Zone", "Zone Break Confirmation", options = ["Candle Close Beyond Zone", "Body Close Beyond Zone", "Wick Penetration", "Full Candle Range Beyond Zone"], group = gC)
+i_maxBarsBetweenBreaks = input.int(60, "Maximum Bars Between Zone Breaks", minval = 1, group = gC, tooltip = "If the second distinct zone is not broken within this many bars of the first break, the candidate expires (no engulf signal).")
+
+// =============================================================================
+// D. PERFECT ENGULF
+// =============================================================================
+gD = "D. Perfect Engulf"
+i_enablePerfect = input.bool(true, "Enable Perfect Engulf Detection", group = gD)
+
+// =============================================================================
+// E. QM ENGULF
+// =============================================================================
+gE = "E. QM Engulf"
+i_enableQM = input.bool(true, "Enable QM Engulf Detection", group = gE)
+
+// =============================================================================
+// F. HIDDEN ENGULF
+// =============================================================================
+gF = "F. Hidden Engulf"
+i_enableHidden = input.bool(true, "Enable Hidden Engulf Detection", group = gF)
+
+// =============================================================================
+// G. FIRST / SECOND MOVEMENT
+// =============================================================================
+gG = "G. First / Second Movement"
+i_secondMoveMaxBars    = input.int(80, "Second Movement Max Tracking Window (bars)", minval = 5, group = gG)
+i_secondMoveRevATRMult = input.float(1.5, "Second Movement Reversal Threshold (x ATR)", minval = 0.1, group = gG, tooltip = "How far price must retrace from the extreme reached after the engulf before the second movement is considered to have ended/developed.")
+
+// =============================================================================
+// H. ZONE FRESHNESS / COLLECTION
+// =============================================================================
+gH = "H. Zone Freshness / Collection"
+i_collectionMode = input.string("Structural Collection", "Zone Collection Method", options = ["Wick Penetration", "Body Penetration", "Candle Close Inside Zone", "Full Zone Penetration", "Structural Collection"], group = gH)
+
+// =============================================================================
+// I. FAILED ENGULF
+// =============================================================================
+gI = "I. Failed Engulf"
+i_failureZoneMult       = input.float(1.0, "Failure Invalidation Distance (x zone height beyond zone)", minval = 0.1, group = gI)
+i_convertFailedToOpposite = input.bool(false, "Convert Failed Zone to Opposite Zone", group = gI)
+
+// =============================================================================
+// J. HIGH-IMPACT MOVEMENT
+// =============================================================================
+gJ = "J. High-Impact Movement"
+i_enableHighImpact   = input.bool(false, "Enable High-Impact Movement Filter", group = gJ)
+i_impactBodyATRMult  = input.float(1.2, "Min Body Size (x ATR)", minval = 0.1, group = gJ)
+i_impactRangeAvgMult = input.float(1.3, "Min Range vs Avg Range (x)", minval = 0.1, group = gJ)
+i_impactCloseStrength = input.float(0.65, "Min Close Strength (0-1)", minval = 0, maxval = 1, group = gJ)
+i_impactUseVolume    = input.bool(false, "Include Volume Filter (optional)", group = gJ)
+i_impactVolMult      = input.float(1.5, "Min Volume vs Avg Volume (x)", minval = 0.1, group = gJ)
+i_requireHighImpact  = input.bool(false, "Require High-Impact On The Zone-2 Break Bar For A Valid Engulf", group = gJ)
+
+// =============================================================================
+// K. MULTI-TIMEFRAME
+// =============================================================================
+gK = "K. Multi-Timeframe"
+i_mtfEnabled       = input.bool(false, "Enable Multi-Timeframe Mode", group = gK)
+i_htf              = input.timeframe("240", "Higher Timeframe", group = gK)
+i_mtfPivotLen      = input.int(3, "HTF Pivot Lookback", minval = 2, group = gK)
+i_mtfMaxBarsBetween = input.int(30, "HTF Max Bars Between Zone Breaks", minval = 1, group = gK)
+
+// =============================================================================
+// L. VISUALS
+// =============================================================================
+gL = "L. Visuals"
+i_showPerfect        = input.bool(true, "Show Perfect Engulf", group = gL)
+i_showQM             = input.bool(true, "Show QM Engulf", group = gL)
+i_showHidden         = input.bool(true, "Show Hidden Engulf", group = gL)
+i_showFirstMove      = input.bool(true, "Show First Movement", group = gL)
+i_showSecondMove     = input.bool(true, "Show Second Movement", group = gL)
+i_showBrokenZones    = input.bool(true, "Show Broken Zones", group = gL)
+i_showEngulfedZones  = input.bool(true, "Show Engulfed Zones", group = gL)
+i_showFreshZones     = input.bool(true, "Show Fresh Zones", group = gL)
+i_showCollectedZones = input.bool(true, "Show Collected Zones", group = gL)
+i_showFailedZones    = input.bool(true, "Show Failed Zones", group = gL)
+i_showHTFZones       = input.bool(true, "Show HTF Zones", group = gL)
+i_showLTFConfirm     = input.bool(true, "Show LTF Confirmation", group = gL)
+i_showHighImpact     = input.bool(false, "Show High-Impact Movement", group = gL)
+
+// =============================================================================
+// M. ALERTS
+// =============================================================================
+gM = "M. Alerts"
+i_alertsEnabled = input.bool(true, "Enable Alerts", group = gM)
+
+// =============================================================================
+// N. DEBUG
+// =============================================================================
+gN = "N. Debug"
+i_debugMode    = input.bool(false, "Enable Debug Mode", group = gN)
+i_debugRows    = input.int(12, "Debug Log Rows", minval = 4, maxval = 30, group = gN)
+
+// =============================================================================
+// O. DASHBOARD
+// =============================================================================
+gO = "O. Dashboard"
+i_showDashboard = input.bool(true, "Show Dashboard", group = gO)
+i_dashPos = input.string("Top Right", "Dashboard Position", options = ["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group = gO)
+
+// =============================================================================
+// TYPES
+// =============================================================================
+type SRZone
+    string kind          // "R" (resistance) or "S" (support)
+    float  top
+    float  bottom
+    int    createdBar
+    int    touches       = 1
+    bool   broken        = false
+    int    breakBar      = na
+    float  breakPrice    = na
+    box    bx            = na
+    label  lb            = na
+
+type EngulfZone
+    string dir              // "BULL" or "BEAR"
+    string etype            // "PERFECT", "QM", "HIDDEN"
+    float  top
+    float  bottom
+    int    createdBar
+    string status           = "FRESH"   // FRESH, TOUCHED, COLLECTED, FAILED
+    int    collectBar       = na
+    float  collectPrice     = na
+    float  collectDepth     = na
+    int    interactions     = 0
+    float  qmLevel          = na
+    int    fmStartBar       = na
+    int    fmEndBar         = na
+    int    zone1Bar         = na
+    int    zone2Bar         = na
+    int    smStartBar       = na
+    float  smHigh           = na
+    float  smLow            = na
+    bool   smEnded          = false
+    int    smEndBar         = na
+    box    bx               = na
+    label  lb               = na
+    box    fmLine           = na
+
+type Candidate
+    int    state          = 0     // 0 = none, 1 = first zone broken
+    int    zone1Idx        = na
+    int    firstBreakBar   = na
+    int    fmStartBar      = na
+    float  pullbackLevel   = na
+    bool   hadPullback     = false
+
+// =============================================================================
+// PERSISTENT STATE
+// =============================================================================
+var array<SRZone>     resZones    = array.new<SRZone>()
+var array<SRZone>     supZones    = array.new<SRZone>()
+var array<EngulfZone> engulfZones = array.new<EngulfZone>()
+var Candidate bullCand = Candidate.new()
+var Candidate bearCand = Candidate.new()
+
+var float lastPivotLowPrice  = na
+var int   lastPivotLowBar    = na
+var float lastPivotHighPrice = na
+var int   lastPivotHighBar   = na
+
+var box htfBullBox = na
+var box htfBearBox = na
+var label htfBullLbl = na
+var label htfBearLbl = na
+
+var array<string> debugLog = array.new<string>()
+
+// alert pulses (reset every bar, set true only on the bar the event happens)
+var bool sigFirstResBroken   = false
+var bool sigSecondResBroken  = false
+var bool sigFirstSupBroken   = false
+var bool sigSecondSupBroken  = false
+var bool sigBullTwoZone      = false
+var bool sigBearTwoZone      = false
+var bool sigPerfectBuy       = false
+var bool sigPerfectSell      = false
+var bool sigQMBuy            = false
+var bool sigQMSell            = false
+var bool sigHiddenBuy        = false
+var bool sigHiddenSell       = false
+var bool sigFreshBull        = false
+var bool sigFreshBear        = false
+var bool sigZoneCollected    = false
+var bool sigZoneNonFresh     = false
+var bool sigFailedBull       = false
+var bool sigFailedBear       = false
+var bool sigHTFBull          = false
+var bool sigHTFBear          = false
+var bool sigLTFBullConfirm   = false
+var bool sigLTFBearConfirm   = false
+var bool sigHighImpactBull   = false
+var bool sigHighImpactBear   = false
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+f_logDebug(txt) =>
+    array.push(debugLog, str.format("[{0}] {1}", bar_index, txt))
+    if array.size(debugLog) > i_debugRows
+        array.remove(debugLog, 0)
+
+f_pruneZones(array<SRZone> zones, maxAge, maxCount) =>
+    if array.size(zones) > 0
+        for i = array.size(zones) - 1 to 0
+            SRZone z = array.get(zones, i)
+            if not z.broken and (bar_index - z.createdBar) > maxAge
+                if not na(z.bx)
+                    box.delete(z.bx)
+                if not na(z.lb)
+                    label.delete(z.lb)
+                array.remove(zones, i)
+    while array.size(zones) > maxCount
+        int oldestIdx = 0
+        int oldestBar = 2000000000
+        for i = 0 to array.size(zones) - 1
+            SRZone zz = array.get(zones, i)
+            if zz.createdBar < oldestBar
+                oldestBar := zz.createdBar
+                oldestIdx := i
+        SRZone zrem = array.get(zones, oldestIdx)
+        if not na(zrem.bx)
+            box.delete(zrem.bx)
+        if not na(zrem.lb)
+            label.delete(zrem.lb)
+        array.remove(zones, oldestIdx)
+
+f_upsertZone(array<SRZone> zones, float price, string kind, int pivotBar, float halfWidth, float mergeTol, float minDist) =>
+    float top = price + halfWidth
+    float bottom = price - halfWidth
+    int mergedIdx = -1
+    if array.size(zones) > 0
+        for i = 0 to array.size(zones) - 1
+            SRZone z = array.get(zones, i)
+            if not z.broken
+                float zc = (z.top + z.bottom) / 2.0
+                if math.abs(zc - price) <= mergeTol
+                    mergedIdx := i
+                    break
+    if mergedIdx >= 0
+        SRZone z = array.get(zones, mergedIdx)
+        z.top := math.max(z.top, top)
+        z.bottom := math.min(z.bottom, bottom)
+        z.touches := z.touches + 1
+        array.set(zones, mergedIdx, z)
+    else
+        bool tooClose = false
+        if array.size(zones) > 0
+            for i = 0 to array.size(zones) - 1
+                SRZone z2 = array.get(zones, i)
+                if not z2.broken
+                    float zc2 = (z2.top + z2.bottom) / 2.0
+                    if math.abs(zc2 - price) < minDist
+                        tooClose := true
+        if not tooClose
+            SRZone nz = SRZone.new(kind = kind, top = top, bottom = bottom, createdBar = pivotBar)
+            array.push(zones, nz)
+
+// Returns indices (in the supplied zones array) of zones newly broken on this bar,
+// ordered nearest-to-price first, so zone1/zone2 are assigned in the order price
+// would actually have crossed them.
+f_findBreaks(array<SRZone> zones, string mode, float o, float h, float l, float c, bool isRes) =>
+    array<int> hits = array.new<int>()
+    if array.size(zones) > 0
+        for i = 0 to array.size(zones) - 1
+            SRZone z = array.get(zones, i)
+            if not z.broken
+                bool brk = false
+                if isRes
+                    if mode == "Candle Close Beyond Zone"
+                        brk := c > z.top
+                    else if mode == "Body Close Beyond Zone"
+                        brk := math.min(o, c) > z.top
+                    else if mode == "Wick Penetration"
+                        brk := h > z.top
+                    else
+                        brk := l > z.top and h > z.top
+                else
+                    if mode == "Candle Close Beyond Zone"
+                        brk := c < z.bottom
+                    else if mode == "Body Close Beyond Zone"
+                        brk := math.max(o, c) < z.bottom
+                    else if mode == "Wick Penetration"
+                        brk := l < z.bottom
+                    else
+                        brk := h < z.bottom and l < z.bottom
+                if brk
+                    array.push(hits, i)
+    // insertion-sort the hit indices by proximity (ascending top for resistance,
+    // descending bottom for support) so nearest-crossed zone becomes zone1
+    if array.size(hits) > 1
+        for i = 1 to array.size(hits) - 1
+            int key = array.get(hits, i)
+            SRZone zk = array.get(zones, key)
+            float keyLvl = isRes ? zk.top : -zk.bottom
+            int j = i - 1
+            while j >= 0
+                int cand = array.get(hits, j)
+                SRZone zc = array.get(zones, cand)
+                float candLvl = isRes ? zc.top : -zc.bottom
+                if candLvl > keyLvl
+                    array.set(hits, j + 1, cand)
+                    j -= 1
+                else
+                    break
+            array.set(hits, j + 1, key)
+    hits
+
+f_isCollected(mode, dir, top, bottom, o, h, l, c) =>
+    bool hit = false
+    if mode == "Wick Penetration"
+        hit := h >= bottom and l <= top
+    else if mode == "Body Penetration"
+        hit := math.max(o, c) >= bottom and math.min(o, c) <= top
+    else if mode == "Candle Close Inside Zone"
+        hit := c <= top and c >= bottom
+    else if mode == "Full Zone Penetration"
+        hit := l <= bottom and h >= top
+    else // Structural Collection (default)
+        bool bodyOverlap = math.max(o, c) >= bottom and math.min(o, c) <= top
+        hit := dir == "BULL" ? (bodyOverlap and c <= top) : (bodyOverlap and c >= bottom)
+    hit
+
+f_wickTouch(top, bottom, h, l) =>
+    h >= bottom and l <= top
+
+// Simplified HTF structural engine: scalar-only two-zone validation, evaluated
+// on the higher timeframe series via request.security(lookahead_off). Persists
+// via `var` across the HTF series' own bar progression.
+f_htfEngine(pivLen, maxBars) =>
+    float ph = ta.pivothigh(pivLen, pivLen)
+    float pl = ta.pivotlow(pivLen, pivLen)
+    var float pendingR = na
+    var float pendingS = na
+    var int   rState = 0
+    var float rZone1 = na
+    var int   rFirstBar = 0
+    var int   sState = 0
+    var float sZone1 = na
+    var int   sFirstBar = 0
+    var float htfBullTop = na
+    var float htfBullBot = na
+    var float htfBearTop = na
+    var float htfBearBot = na
+    bool bullValid = false
+    bool bearValid = false
+
+    if not na(ph)
+        pendingR := ph
+    if not na(pl)
+        pendingS := pl
+
+    if not na(pendingR) and close > pendingR
+        float brokenLevel = pendingR
+        pendingR := na
+        if rState == 0
+            rState := 1
+            rZone1 := brokenLevel
+            rFirstBar := bar_index
+        else
+            if (bar_index - rFirstBar) <= maxBars
+                bullValid := true
+                htfBullTop := brokenLevel
+                htfBullBot := rZone1
+            rState := 0
+
+    if not na(pendingS) and close < pendingS
+        float brokenLevelS = pendingS
+        pendingS := na
+        if sState == 0
+            sState := 1
+            sZone1 := brokenLevelS
+            sFirstBar := bar_index
+        else
+            if (bar_index - sFirstBar) <= maxBars
+                bearValid := true
+                htfBearTop := sZone1
+                htfBearBot := brokenLevelS
+            sState := 0
+
+    [bullValid, bearValid, htfBullTop, htfBullBot, htfBearTop, htfBearBot]
+
+// =============================================================================
+// HIGH-IMPACT MOVEMENT
+// =============================================================================
+atrVal = ta.atr(i_atrLen)
+avgRange = ta.sma(high - low, 20)
+avgVol = ta.sma(volume, 20)
+bodySize = math.abs(close - open)
+barRange = high - low
+closeStrengthBull = barRange == 0 ? 0.0 : (close - low) / barRange
+closeStrengthBear = barRange == 0 ? 0.0 : (high - close) / barRange
+
+bool highImpactBull = bodySize >= i_impactBodyATRMult * atrVal and barRange >= i_impactRangeAvgMult * avgRange and closeStrengthBull >= i_impactCloseStrength and close > open
+bool highImpactBear = bodySize >= i_impactBodyATRMult * atrVal and barRange >= i_impactRangeAvgMult * avgRange and closeStrengthBear >= i_impactCloseStrength and close < open
+if i_impactUseVolume
+    highImpactBull := highImpactBull and volume >= i_impactVolMult * avgVol
+    highImpactBear := highImpactBear and volume >= i_impactVolMult * avgVol
+
+// =============================================================================
+// MAIN ENGINE (structural mutations gated on confirmed bars only -> non-repainting)
+// =============================================================================
+if barstate.isconfirmed
+    // reset per-bar alert pulses
+    sigFirstResBroken := false
+    sigSecondResBroken := false
+    sigFirstSupBroken := false
+    sigSecondSupBroken := false
+    sigBullTwoZone := false
+    sigBearTwoZone := false
+    sigPerfectBuy := false
+    sigPerfectSell := false
+    sigQMBuy := false
+    sigQMSell := false
+    sigHiddenBuy := false
+    sigHiddenSell := false
+    sigFreshBull := false
+    sigFreshBear := false
+    sigZoneCollected := false
+    sigZoneNonFresh := false
+    sigFailedBull := false
+    sigFailedBear := false
+    sigHighImpactBull := highImpactBull
+    sigHighImpactBear := highImpactBear
+
+    float halfWidth = i_zoneHalfWidthMult * atrVal
+    float mergeTol  = i_mergeTolMult * atrVal
+    float minDist   = i_minZoneDistMult * atrVal
+
+    // ---- 1. structural pivot -> zone registration ----
+    float ph = ta.pivothigh(i_pivotLen, i_pivotLen)
+    float pl = ta.pivotlow(i_pivotLen, i_pivotLen)
+    int pivotBarIdx = bar_index - i_pivotLen
+
+    if not na(ph)
+        f_upsertZone(resZones, ph, "R", pivotBarIdx, halfWidth, mergeTol, minDist)
+        lastPivotHighPrice := ph
+        lastPivotHighBar := pivotBarIdx
+
+    if not na(pl)
+        f_upsertZone(supZones, pl, "S", pivotBarIdx, halfWidth, mergeTol, minDist)
+        lastPivotLowPrice := pl
+        lastPivotLowBar := pivotBarIdx
+
+    f_pruneZones(resZones, i_maxZoneAgeBars, i_maxActiveZones)
+    f_pruneZones(supZones, i_maxZoneAgeBars, i_maxActiveZones)
+
+    // ---- 2. candidate expiry (second zone not broken within the allowed window) ----
+    if bullCand.state == 1 and (bar_index - bullCand.firstBreakBar) > i_maxBarsBetweenBreaks
+        f_logDebug("BULL candidate EXPIRED (no R2 within window)")
+        bullCand := Candidate.new()
+    if bearCand.state == 1 and (bar_index - bearCand.firstBreakBar) > i_maxBarsBetweenBreaks
+        f_logDebug("BEAR candidate EXPIRED (no S2 within window)")
+        bearCand := Candidate.new()
+
+    // ---- 3. track pullback (bar against the candidate's direction) while state==1 ----
+    if bullCand.state == 1 and close < close[1]
+        bullCand.hadPullback := true
+        bullCand.pullbackLevel := na(bullCand.pullbackLevel) ? low : math.min(bullCand.pullbackLevel, low)
+    if bearCand.state == 1 and close > close[1]
+        bearCand.hadPullback := true
+        bearCand.pullbackLevel := na(bearCand.pullbackLevel) ? high : math.max(bearCand.pullbackLevel, high)
+
+    // ---- 4. resistance breaks -> bullish two-zone validation ----
+    array<int> resHits = f_findBreaks(resZones, i_breakMode, open, high, low, close, true)
+    if array.size(resHits) > 0
+        for hi = 0 to array.size(resHits) - 1
+            int idx = array.get(resHits, hi)
+            SRZone z = array.get(resZones, idx)
+            z.broken := true
+            z.breakBar := bar_index
+            z.breakPrice := close
+            array.set(resZones, idx, z)
+
+            if bullCand.state == 0
+                bullCand := Candidate.new()
+                bullCand.state := 1
+                bullCand.zone1Idx := idx
+                bullCand.firstBreakBar := bar_index
+                bullCand.fmStartBar := na(lastPivotLowBar) ? bar_index : lastPivotLowBar
+                sigFirstResBroken := true
+                f_logDebug("R1 BROKEN @ " + str.tostring(z.top))
+            else if bullCand.state == 1 and idx != bullCand.zone1Idx
+                sigSecondResBroken := true
+                f_logDebug("R2 BROKEN @ " + str.tostring(z.top))
+                SRZone z1 = array.get(resZones, bullCand.zone1Idx)
+
+                bool hadPullback = bullCand.hadPullback
+                bool isEngulfCandle = close > open and open <= close[1] and close >= open[1] and close[1] < open[1]
+                string etype = (not hadPullback and isEngulfCandle) ? "PERFECT" : hadPullback ? "QM" : "HIDDEN"
+                bool impactOK = not i_requireHighImpact or highImpactBull
+
+                sigBullTwoZone := true
+                f_logDebug("2-ZONE VALIDATION = TRUE | ENGULF = VALID | TYPE = " + etype)
+
+                bool typeEnabled = (etype == "PERFECT" and i_enablePerfect) or (etype == "QM" and i_enableQM) or (etype == "HIDDEN" and i_enableHidden)
+                if typeEnabled and impactOK
+                    EngulfZone ez = EngulfZone.new(dir = "BULL", etype = etype, top = z.top, bottom = z.bottom, createdBar = bar_index)
+                    ez.qmLevel := etype == "QM" ? bullCand.pullbackLevel : na
+                    ez.fmStartBar := bullCand.fmStartBar
+                    ez.fmEndBar := bar_index
+                    ez.zone1Bar := z1.breakBar
+                    ez.zone2Bar := bar_index
+                    ez.smStartBar := bar_index
+                    ez.smHigh := high
+                    ez.smLow := low
+                    array.push(engulfZones, ez)
+                    sigFreshBull := true
+                    if etype == "PERFECT"
+                        sigPerfectBuy := true
+                    else if etype == "QM"
+                        sigQMBuy := true
+                    else
+                        sigHiddenBuy := true
+                    f_logDebug("ENGULFED ZONE CREATED [" + etype + " BUY] " + str.tostring(z.bottom) + "-" + str.tostring(z.top) + " | STATUS = FRESH")
+
+                bullCand := Candidate.new()
+
+    // ---- 5. support breaks -> bearish two-zone validation ----
+    array<int> supHits = f_findBreaks(supZones, i_breakMode, open, high, low, close, false)
+    if array.size(supHits) > 0
+        for hi = 0 to array.size(supHits) - 1
+            int idx = array.get(supHits, hi)
+            SRZone z = array.get(supZones, idx)
+            z.broken := true
+            z.breakBar := bar_index
+            z.breakPrice := close
+            array.set(supZones, idx, z)
+
+            if bearCand.state == 0
+                bearCand := Candidate.new()
+                bearCand.state := 1
+                bearCand.zone1Idx := idx
+                bearCand.firstBreakBar := bar_index
+                bearCand.fmStartBar := na(lastPivotHighBar) ? bar_index : lastPivotHighBar
+                sigFirstSupBroken := true
+                f_logDebug("S1 BROKEN @ " + str.tostring(z.bottom))
+            else if bearCand.state == 1 and idx != bearCand.zone1Idx
+                sigSecondSupBroken := true
+                f_logDebug("S2 BROKEN @ " + str.tostring(z.bottom))
+                SRZone z1 = array.get(supZones, bearCand.zone1Idx)
+
+                bool hadPullback = bearCand.hadPullback
+                bool isEngulfCandle = close < open and open >= close[1] and close <= open[1] and close[1] > open[1]
+                string etype = (not hadPullback and isEngulfCandle) ? "PERFECT" : hadPullback ? "QM" : "HIDDEN"
+                bool impactOK = not i_requireHighImpact or highImpactBear
+
+                sigBearTwoZone := true
+                f_logDebug("2-ZONE VALIDATION = TRUE | ENGULF = VALID | TYPE = " + etype)
+
+                bool typeEnabled = (etype == "PERFECT" and i_enablePerfect) or (etype == "QM" and i_enableQM) or (etype == "HIDDEN" and i_enableHidden)
+                if typeEnabled and impactOK
+                    EngulfZone ez = EngulfZone.new(dir = "BEAR", etype = etype, top = z.top, bottom = z.bottom, createdBar = bar_index)
+                    ez.qmLevel := etype == "QM" ? bearCand.pullbackLevel : na
+                    ez.fmStartBar := bearCand.fmStartBar
+                    ez.fmEndBar := bar_index
+                    ez.zone1Bar := z1.breakBar
+                    ez.zone2Bar := bar_index
+                    ez.smStartBar := bar_index
+                    ez.smHigh := high
+                    ez.smLow := low
+                    array.push(engulfZones, ez)
+                    sigFreshBear := true
+                    if etype == "PERFECT"
+                        sigPerfectSell := true
+                    else if etype == "QM"
+                        sigQMSell := true
+                    else
+                        sigHiddenSell := true
+                    f_logDebug("ENGULFED ZONE CREATED [" + etype + " SELL] " + str.tostring(z.bottom) + "-" + str.tostring(z.top) + " | STATUS = FRESH")
+
+                bearCand := Candidate.new()
+
+    // ---- 6. second-movement tracking + freshness/collection + failure, per engulfed zone ----
+    if array.size(engulfZones) > 0
+        for i = 0 to array.size(engulfZones) - 1
+            EngulfZone ez = array.get(engulfZones, i)
+            if ez.status != "FAILED" and bar_index > ez.createdBar
+                // second movement extremes
+                if not ez.smEnded and (bar_index - ez.smStartBar) <= i_secondMoveMaxBars
+                    ez.smHigh := math.max(ez.smHigh, high)
+                    ez.smLow := math.min(ez.smLow, low)
+                    if ez.dir == "BULL" and (ez.smHigh - close) >= i_secondMoveRevATRMult * atrVal
+                        ez.smEnded := true
+                        ez.smEndBar := bar_index
+                    if ez.dir == "BEAR" and (close - ez.smLow) >= i_secondMoveRevATRMult * atrVal
+                        ez.smEnded := true
+                        ez.smEndBar := bar_index
+
+                // collection / touch
+                bool wasFresh = ez.status == "FRESH"
+                bool touch = f_wickTouch(ez.top, ez.bottom, high, low)
+                bool collected = f_isCollected(i_collectionMode, ez.dir, ez.top, ez.bottom, open, high, low, close)
+                if collected
+                    ez.interactions := ez.interactions + 1
+                    if ez.status != "COLLECTED"
+                        ez.status := "COLLECTED"
+                        ez.collectBar := bar_index
+                        ez.collectPrice := close
+                        ez.collectDepth := ez.dir == "BULL" ? math.max(ez.top - close, 0.0) : math.max(close - ez.bottom, 0.0)
+                        sigZoneCollected := true
+                        sigZoneNonFresh := true
+                        f_logDebug("ZONE COLLECTED -> NON-FRESH [" + ez.dir + " " + ez.etype + "]")
+                else if touch and wasFresh
+                    ez.status := "TOUCHED"
+
+                // failure (decisive opposite move through the zone)
+                float zh = ez.top - ez.bottom
+                bool failedNow = ez.dir == "BULL" ? close < (ez.bottom - i_failureZoneMult * zh) : close > (ez.top + i_failureZoneMult * zh)
+                if failedNow
+                    ez.status := "FAILED"
+                    if ez.dir == "BULL"
+                        sigFailedBull := true
+                    else
+                        sigFailedBear := true
+                    f_logDebug("FAILED " + ez.etype + " " + (ez.dir == "BULL" ? "BUY" : "SELL"))
+                    if i_convertFailedToOpposite
+                        if ez.dir == "BULL"
+                            f_upsertZone(resZones, (ez.top + ez.bottom) / 2.0, "R", bar_index, (ez.top - ez.bottom) / 2.0, mergeTol, 0.0)
+                        else
+                            f_upsertZone(supZones, (ez.top + ez.bottom) / 2.0, "S", bar_index, (ez.top - ez.bottom) / 2.0, mergeTol, 0.0)
+
+            array.set(engulfZones, i, ez)
+
+    // prune very old engulf zones (historical bookkeeping only; keeps drawing counts bounded)
+    if array.size(engulfZones) > 0
+        for i = array.size(engulfZones) - 1 to 0
+            EngulfZone ez2 = array.get(engulfZones, i)
+            if (bar_index - ez2.createdBar) > i_maxZoneAgeBars * 3
+                if not na(ez2.bx)
+                    box.delete(ez2.bx)
+                if not na(ez2.lb)
+                    label.delete(ez2.lb)
+                array.remove(engulfZones, i)
+
+// =============================================================================
+// MULTI-TIMEFRAME
+// =============================================================================
+// Always evaluated (cheap) so the tuple destructuring below has a single,
+// unconditional type signature; every downstream use is gated on i_mtfEnabled.
+[htfBullValid, htfBearValid, htfBullTop, htfBullBot, htfBearTop, htfBearBot] = request.security(syminfo.tickerid, i_htf, f_htfEngine(i_mtfPivotLen, i_mtfMaxBarsBetween), lookahead = barmerge.lookahead_off)
+
+bool htfBullEdge = i_mtfEnabled and htfBullValid and not htfBullValid[1]
+bool htfBearEdge = i_mtfEnabled and htfBearValid and not htfBearValid[1]
+
+if barstate.isconfirmed and i_mtfEnabled
+    sigHTFBull := htfBullEdge
+    sigHTFBear := htfBearEdge
+
+bool nearHtfBullZone = i_mtfEnabled and not na(htfBullTop) and low <= htfBullTop and high >= htfBullBot
+bool nearHtfBearZone = i_mtfEnabled and not na(htfBearTop) and low <= htfBearTop and high >= htfBearBot
+bool anyBullEngulfThisBar = sigPerfectBuy or sigQMBuy or sigHiddenBuy
+bool anyBearEngulfThisBar = sigPerfectSell or sigQMSell or sigHiddenSell
+
+if barstate.isconfirmed
+    sigLTFBullConfirm := i_mtfEnabled and nearHtfBullZone and anyBullEngulfThisBar
+    sigLTFBearConfirm := i_mtfEnabled and nearHtfBearZone and anyBearEngulfThisBar
+
+// =============================================================================
+// VISUALIZATION
+// =============================================================================
+f_zoneBoxColor(kind) =>
+    kind == "R" ? color.new(color.red, 85) : color.new(color.teal, 85)
+
+if barstate.isconfirmed and i_showBrokenZones
+    if array.size(resZones) > 0
+        for i = 0 to array.size(resZones) - 1
+            SRZone z = array.get(resZones, i)
+            if na(z.bx)
+                z.bx := box.new(z.createdBar, z.top, bar_index, z.bottom, border_color = i_neutralColor, bgcolor = f_zoneBoxColor("R"), extend = extend.none)
+            else
+                box.set_right(z.bx, z.broken ? z.breakBar : bar_index)
+            if z.broken and na(z.lb)
+                z.lb := label.new(z.breakBar, z.top, "R", style = label.style_label_down, color = color.new(color.red, 60), textcolor = color.white, size = size.tiny)
+            array.set(resZones, i, z)
+    if array.size(supZones) > 0
+        for i = 0 to array.size(supZones) - 1
+            SRZone z = array.get(supZones, i)
+            if na(z.bx)
+                z.bx := box.new(z.createdBar, z.top, bar_index, z.bottom, border_color = i_neutralColor, bgcolor = f_zoneBoxColor("S"), extend = extend.none)
+            else
+                box.set_right(z.bx, z.broken ? z.breakBar : bar_index)
+            if z.broken and na(z.lb)
+                z.lb := label.new(z.breakBar, z.bottom, "S", style = label.style_label_up, color = color.new(color.teal, 60), textcolor = color.white, size = size.tiny)
+            array.set(supZones, i, z)
+
+if barstate.isconfirmed and i_showEngulfedZones
+    if array.size(engulfZones) > 0
+        for i = 0 to array.size(engulfZones) - 1
+            EngulfZone ez = array.get(engulfZones, i)
+            bool typeShown = (ez.etype == "PERFECT" and i_showPerfect) or (ez.etype == "QM" and i_showQM) or (ez.etype == "HIDDEN" and i_showHidden)
+            bool freshShown = ez.status == "FRESH" and i_showFreshZones
+            bool touchedShown = ez.status == "TOUCHED" and i_showFreshZones
+            bool collectedShown = ez.status == "COLLECTED" and i_showCollectedZones
+            bool failedShown = ez.status == "FAILED" and i_showFailedZones
+            if typeShown and (freshShown or touchedShown or collectedShown or failedShown)
+                color bxColor = ez.status == "FAILED" ? color.new(color.gray, 70) : ez.status == "COLLECTED" ? color.new(color.orange, 75) : ez.dir == "BULL" ? color.new(i_bullColor, 82) : color.new(i_bearColor, 82)
+                if na(ez.bx)
+                    ez.bx := box.new(ez.createdBar, ez.top, bar_index, ez.bottom, border_color = ez.dir == "BULL" ? i_bullColor : i_bearColor, bgcolor = bxColor, extend = extend.none)
+                    string lbl = (ez.etype == "PERFECT" ? "PE " : ez.etype == "QM" ? "QM " : "HE ") + (ez.dir == "BULL" ? "BUY" : "SELL")
+                    ez.lb := label.new(ez.createdBar, ez.dir == "BULL" ? ez.bottom : ez.top, lbl, style = ez.dir == "BULL" ? label.style_label_up : label.style_label_down, color = ez.dir == "BULL" ? i_bullColor : i_bearColor, textcolor = color.white, size = size.small)
+                else
+                    box.set_right(ez.bx, bar_index)
+                    box.set_bgcolor(ez.bx, bxColor)
+                if ez.status == "COLLECTED" and not na(ez.collectBar)
+                    label.new(ez.collectBar, ez.dir == "BULL" ? ez.bottom : ez.top, "COLLECTED", style = label.style_label_down, color = color.new(color.orange, 20), textcolor = color.white, size = size.tiny)
+                if ez.status == "FAILED"
+                    label.new(bar_index, ez.dir == "BULL" ? ez.bottom : ez.top, "FAILED", style = label.style_label_down, color = color.new(color.gray, 20), textcolor = color.white, size = size.tiny)
+            array.set(engulfZones, i, ez)
+
+if barstate.isconfirmed and i_showFirstMove and array.size(engulfZones) > 0
+    for i = 0 to array.size(engulfZones) - 1
+        EngulfZone ez = array.get(engulfZones, i)
+        if ez.createdBar == bar_index
+            label.new(ez.fmStartBar, ez.dir == "BULL" ? ez.bottom : ez.top, "1ST MOVE", style = ez.dir == "BULL" ? label.style_label_up : label.style_label_down, color = color.new(i_bullColor, 40), textcolor = color.white, size = size.tiny)
+
+if barstate.isconfirmed and i_showSecondMove and array.size(engulfZones) > 0
+    for i = 0 to array.size(engulfZones) - 1
+        EngulfZone ez = array.get(engulfZones, i)
+        if ez.smEnded and ez.smEndBar == bar_index
+            label.new(bar_index, ez.dir == "BULL" ? ez.smHigh : ez.smLow, "2ND MOVE", style = ez.dir == "BULL" ? label.style_label_down : label.style_label_up, color = color.new(color.purple, 30), textcolor = color.white, size = size.tiny)
+
+if i_mtfEnabled and i_showHTFZones
+    if not na(htfBullTop)
+        if na(htfBullBox)
+            htfBullBox := box.new(bar_index, htfBullTop, bar_index, htfBullBot, border_color = i_bullColor, border_style = line.style_dashed, bgcolor = color.new(i_bullColor, 88), extend = extend.none)
+        else
+            box.set_right(htfBullBox, bar_index)
+            if htfBullEdge
+                box.set_top(htfBullBox, htfBullTop)
+                box.set_bottom(htfBullBox, htfBullBot)
+                box.set_left(htfBullBox, bar_index)
+        if htfBullEdge
+            label.delete(htfBullLbl)
+            htfBullLbl := label.new(bar_index, htfBullBot, "HTF BUY", style = label.style_label_up, color = color.new(i_bullColor, 10), textcolor = color.white, size = size.small)
+    if not na(htfBearTop)
+        if na(htfBearBox)
+            htfBearBox := box.new(bar_index, htfBearTop, bar_index, htfBearBot, border_color = i_bearColor, border_style = line.style_dashed, bgcolor = color.new(i_bearColor, 88), extend = extend.none)
+        else
+            box.set_right(htfBearBox, bar_index)
+            if htfBearEdge
+                box.set_top(htfBearBox, htfBearTop)
+                box.set_bottom(htfBearBox, htfBearBot)
+                box.set_left(htfBearBox, bar_index)
+        if htfBearEdge
+            label.delete(htfBearLbl)
+            htfBearLbl := label.new(bar_index, htfBearTop, "HTF SELL", style = label.style_label_down, color = color.new(i_bearColor, 10), textcolor = color.white, size = size.small)
+
+if barstate.isconfirmed and i_showLTFConfirm
+    if sigLTFBullConfirm
+        label.new(bar_index, low, "LTF BUY CONFIRM", style = label.style_label_up, color = color.new(color.blue, 10), textcolor = color.white, size = size.small)
+    if sigLTFBearConfirm
+        label.new(bar_index, high, "LTF SELL CONFIRM", style = label.style_label_down, color = color.new(color.blue, 10), textcolor = color.white, size = size.small)
+
+if barstate.isconfirmed and i_showHighImpact
+    if highImpactBull
+        label.new(bar_index, low, "HI-IMPACT", style = label.style_label_up, color = color.new(color.yellow, 30), textcolor = color.black, size = size.tiny)
+    if highImpactBear
+        label.new(bar_index, high, "HI-IMPACT", style = label.style_label_down, color = color.new(color.yellow, 30), textcolor = color.black, size = size.tiny)
+
+// =============================================================================
+// DEBUG TABLE
+// =============================================================================
+var table dbgTable = na
+if i_debugMode and barstate.islast
+    if na(dbgTable)
+        dbgTable := table.new(position.bottom_left, 1, i_debugRows + 1, bgcolor = color.new(color.black, 20), border_width = 1)
+    table.clear(dbgTable, 0, 0, 0, i_debugRows)
+    table.cell(dbgTable, 0, 0, "DEBUG LOG (structural engine)", text_color = color.white, bgcolor = color.new(color.gray, 10))
+    if array.size(debugLog) > 0
+        for i = 0 to array.size(debugLog) - 1
+            table.cell(dbgTable, 0, i + 1, array.get(debugLog, array.size(debugLog) - 1 - i), text_color = color.white, text_size = size.small, text_halign = text.align_left)
+
+// =============================================================================
+// DASHBOARD
+// =============================================================================
+f_posFromLabel(lbl) =>
+    lbl == "Top Left" ? position.top_left : lbl == "Bottom Right" ? position.bottom_right : lbl == "Bottom Left" ? position.bottom_left : position.top_right
+
+var table dash = na
+if i_showDashboard and barstate.islast
+    if na(dash)
+        dash := table.new(f_posFromLabel(i_dashPos), 2, 15, bgcolor = color.new(color.black, 15), border_width = 1)
+
+    string latestPE = "-"
+    string latestQM = "-"
+    string latestHE = "-"
+    string latestSignal = "-"
+    string nearestFreshBuy = "-"
+    string nearestFreshSell = "-"
+    string zoneStatusStr = "-"
+    if array.size(engulfZones) > 0
+        for i = array.size(engulfZones) - 1 to 0
+            EngulfZone ez = array.get(engulfZones, i)
+            if ez.etype == "PERFECT" and latestPE == "-"
+                latestPE := (ez.dir == "BULL" ? "PE BUY @ " : "PE SELL @ ") + str.tostring(math.round_to_mintick((ez.top + ez.bottom) / 2))
+            if ez.etype == "QM" and latestQM == "-"
+                latestQM := (ez.dir == "BULL" ? "QM BUY @ " : "QM SELL @ ") + str.tostring(math.round_to_mintick((ez.top + ez.bottom) / 2))
+            if ez.etype == "HIDDEN" and latestHE == "-"
+                latestHE := (ez.dir == "BULL" ? "HIDDEN BUY @ " : "HIDDEN SELL @ ") + str.tostring(math.round_to_mintick((ez.top + ez.bottom) / 2))
+            if latestSignal == "-"
+                latestSignal := ez.etype + " " + (ez.dir == "BULL" ? "BUY" : "SELL") + " [" + ez.status + "]"
+            if ez.dir == "BULL" and ez.status == "FRESH" and nearestFreshBuy == "-"
+                nearestFreshBuy := str.tostring(math.round_to_mintick(ez.bottom)) + "-" + str.tostring(math.round_to_mintick(ez.top))
+            if ez.dir == "BEAR" and ez.status == "FRESH" and nearestFreshSell == "-"
+                nearestFreshSell := str.tostring(math.round_to_mintick(ez.bottom)) + "-" + str.tostring(math.round_to_mintick(ez.top))
+            if zoneStatusStr == "-"
+                zoneStatusStr := ez.status
+
+    string htfBias = not i_mtfEnabled ? "MTF OFF" : htfBullValid ? "BULLISH" : htfBearValid ? "BEARISH" : "NEUTRAL"
+
+    table.cell(dash, 0, 0, "ENGULF ENGINE", text_color = color.white, bgcolor = color.new(color.blue, 20), text_size = size.normal)
+    table.cell(dash, 1, 0, "", bgcolor = color.new(color.blue, 20))
+    table.cell(dash, 0, 1, "HTF Bias", text_color = color.gray)
+    table.cell(dash, 1, 1, htfBias, text_color = color.white)
+    table.cell(dash, 0, 2, "Latest PE", text_color = color.gray)
+    table.cell(dash, 1, 2, latestPE, text_color = color.white)
+    table.cell(dash, 0, 3, "Latest QM", text_color = color.gray)
+    table.cell(dash, 1, 3, latestQM, text_color = color.white)
+    table.cell(dash, 0, 4, "Latest Hidden Engulf", text_color = color.gray)
+    table.cell(dash, 1, 4, latestHE, text_color = color.white)
+    table.cell(dash, 0, 5, "First Movement", text_color = color.gray)
+    table.cell(dash, 1, 5, str.tostring(bullCand.state) + "/" + str.tostring(bearCand.state), text_color = color.white)
+    table.cell(dash, 0, 6, "Second Movement", text_color = color.gray)
+    table.cell(dash, 1, 6, i_showSecondMove ? "tracked" : "hidden", text_color = color.white)
+    table.cell(dash, 0, 7, "Nearest Fresh Buy Zone", text_color = color.gray)
+    table.cell(dash, 1, 7, nearestFreshBuy, text_color = color.white)
+    table.cell(dash, 0, 8, "Nearest Fresh Sell Zone", text_color = color.gray)
+    table.cell(dash, 1, 8, nearestFreshSell, text_color = color.white)
+    table.cell(dash, 0, 9, "Zone Status", text_color = color.gray)
+    table.cell(dash, 1, 9, zoneStatusStr, text_color = color.white)
+    table.cell(dash, 0, 10, "Two-Zone Validation", text_color = color.gray)
+    table.cell(dash, 1, 10, (sigBullTwoZone or sigBearTwoZone) ? "TRUE (this bar)" : "waiting", text_color = color.white)
+    table.cell(dash, 0, 11, "HTF Confirmation", text_color = color.gray)
+    table.cell(dash, 1, 11, htfBullValid ? "BULL" : htfBearValid ? "BEAR" : "-", text_color = color.white)
+    table.cell(dash, 0, 12, "LTF Confirmation", text_color = color.gray)
+    table.cell(dash, 1, 12, sigLTFBullConfirm ? "BULL" : sigLTFBearConfirm ? "BEAR" : "-", text_color = color.white)
+    table.cell(dash, 0, 13, "Latest Signal", text_color = color.gray)
+    table.cell(dash, 1, 13, latestSignal, text_color = color.white)
+
+// =============================================================================
+// ALERTS (confirmed-bar pulses only)
+// =============================================================================
+alertcondition(i_alertsEnabled and sigPerfectBuy, title = "Valid Bullish Perfect Engulf", message = "PE BUY: valid bullish Perfect Engulf (two resistance zones broken)")
+alertcondition(i_alertsEnabled and sigPerfectSell, title = "Valid Bearish Perfect Engulf", message = "PE SELL: valid bearish Perfect Engulf (two support zones broken)")
+alertcondition(i_alertsEnabled and sigQMBuy, title = "Valid Bullish QM Engulf", message = "QM BUY: valid bullish QM Engulf")
+alertcondition(i_alertsEnabled and sigQMSell, title = "Valid Bearish QM Engulf", message = "QM SELL: valid bearish QM Engulf")
+alertcondition(i_alertsEnabled and sigHiddenBuy, title = "Valid Bullish Hidden Engulf", message = "HIDDEN BUY: valid bullish Hidden Engulf")
+alertcondition(i_alertsEnabled and sigHiddenSell, title = "Valid Bearish Hidden Engulf", message = "HIDDEN SELL: valid bearish Hidden Engulf")
+alertcondition(i_alertsEnabled and sigFirstResBroken, title = "First Resistance Broken", message = "R1 broken")
+alertcondition(i_alertsEnabled and sigSecondResBroken, title = "Second Resistance Broken", message = "R2 broken")
+alertcondition(i_alertsEnabled and sigFirstSupBroken, title = "First Support Broken", message = "S1 broken")
+alertcondition(i_alertsEnabled and sigSecondSupBroken, title = "Second Support Broken", message = "S2 broken")
+alertcondition(i_alertsEnabled and sigBullTwoZone, title = "Valid Two-Zone Bullish Engulf", message = "Two-zone bullish validation TRUE")
+alertcondition(i_alertsEnabled and sigBearTwoZone, title = "Valid Two-Zone Bearish Engulf", message = "Two-zone bearish validation TRUE")
+alertcondition(i_alertsEnabled and sigFreshBull, title = "Fresh Bullish Zone", message = "New fresh bullish engulfed zone created")
+alertcondition(i_alertsEnabled and sigFreshBear, title = "Fresh Bearish Zone", message = "New fresh bearish engulfed zone created")
+alertcondition(i_alertsEnabled and sigZoneCollected, title = "Zone Collected", message = "An engulfed zone was collected")
+alertcondition(i_alertsEnabled and sigZoneNonFresh, title = "Zone Becomes Non-Fresh", message = "Zone transitioned FRESH -> NON-FRESH")
+alertcondition(i_alertsEnabled and sigFailedBull, title = "Failed Bullish Engulf", message = "FAILED bullish engulf")
+alertcondition(i_alertsEnabled and sigFailedBear, title = "Failed Bearish Engulf", message = "FAILED bearish engulf")
+alertcondition(i_alertsEnabled and sigHTFBull, title = "HTF Bullish Zone", message = "HTF bullish zone formed")
+alertcondition(i_alertsEnabled and sigHTFBear, title = "HTF Bearish Zone", message = "HTF bearish zone formed")
+alertcondition(i_alertsEnabled and sigLTFBullConfirm, title = "LTF Bullish Confirmation", message = "LTF BUY CONFIRM inside HTF zone")
+alertcondition(i_alertsEnabled and sigLTFBearConfirm, title = "LTF Bearish Confirmation", message = "LTF SELL CONFIRM inside HTF zone")
+alertcondition(i_alertsEnabled and sigHighImpactBull, title = "High-Impact Bullish Movement", message = "High-impact bullish movement detected")
+alertcondition(i_alertsEnabled and sigHighImpactBear, title = "High-Impact Bearish Movement", message = "High-impact bearish movement detected")
