@@ -189,8 +189,10 @@ type EngulfZone
     box    fmLine           = na
 
 type Candidate
-    int    state          = 0     // 0 = none, 1 = first zone broken
-    int    zone1Idx        = na
+    int    state           = 0     // 0 = none, 1 = first zone broken
+    int    zone1CreatedBar = na    // stable identity of zone1 (never a mutable array index --
+                                   // pruning/eviction can shift or remove array positions, so
+                                   // zone1 is tracked by its own immutable creation bar instead)
     int    firstBreakBar   = na
     int    fmStartBar      = na
     float  pullbackLevel   = na
@@ -262,13 +264,23 @@ f_pruneZones(array<SRZone> zones, maxAge, maxCount) =>
                     label.delete(z.lb)
                 array.remove(zones, i)
     while array.size(zones) > maxCount
-        int oldestIdx = 0
+        // Evict the oldest UNBROKEN zone first -- broken zones are historical
+        // structure that an active Candidate may still reference (as zone1),
+        // so they must never be silently evicted here.
+        int oldestIdx = -1
         int oldestBar = 2000000000
         for i = 0 to array.size(zones) - 1
             SRZone zz = array.get(zones, i)
-            if zz.createdBar < oldestBar
+            if not zz.broken and zz.createdBar < oldestBar
                 oldestBar := zz.createdBar
                 oldestIdx := i
+        if oldestIdx == -1
+            // every zone is broken; fall back to the oldest overall so the loop still terminates
+            for i = 0 to array.size(zones) - 1
+                SRZone zz2 = array.get(zones, i)
+                if zz2.createdBar < oldestBar
+                    oldestBar := zz2.createdBar
+                    oldestIdx := i
         SRZone zrem = array.get(zones, oldestIdx)
         if not na(zrem.bx)
             box.delete(zrem.bx)
@@ -526,15 +538,14 @@ if barstate.isconfirmed
             if bullCand.state == 0
                 bullCand := Candidate.new()
                 bullCand.state := 1
-                bullCand.zone1Idx := idx
+                bullCand.zone1CreatedBar := z.createdBar
                 bullCand.firstBreakBar := bar_index
                 bullCand.fmStartBar := na(lastPivotLowBar) ? bar_index : lastPivotLowBar
                 sigFirstResBroken := true
                 f_logDebug("R1 BROKEN @ " + str.tostring(z.top))
-            else if bullCand.state == 1 and idx != bullCand.zone1Idx
+            else if bullCand.state == 1 and z.createdBar != bullCand.zone1CreatedBar
                 sigSecondResBroken := true
                 f_logDebug("R2 BROKEN @ " + str.tostring(z.top))
-                SRZone z1 = array.get(resZones, bullCand.zone1Idx)
 
                 bool hadPullback = bullCand.hadPullback
                 bool isEngulfCandle = close > open and open <= close[1] and close >= open[1] and close[1] < open[1]
@@ -550,7 +561,7 @@ if barstate.isconfirmed
                     ez.qmLevel := etype == "QM" ? bullCand.pullbackLevel : na
                     ez.fmStartBar := bullCand.fmStartBar
                     ez.fmEndBar := bar_index
-                    ez.zone1Bar := z1.breakBar
+                    ez.zone1Bar := bullCand.firstBreakBar
                     ez.zone2Bar := bar_index
                     ez.smStartBar := bar_index
                     ez.smHigh := high
@@ -581,15 +592,14 @@ if barstate.isconfirmed
             if bearCand.state == 0
                 bearCand := Candidate.new()
                 bearCand.state := 1
-                bearCand.zone1Idx := idx
+                bearCand.zone1CreatedBar := z.createdBar
                 bearCand.firstBreakBar := bar_index
                 bearCand.fmStartBar := na(lastPivotHighBar) ? bar_index : lastPivotHighBar
                 sigFirstSupBroken := true
                 f_logDebug("S1 BROKEN @ " + str.tostring(z.bottom))
-            else if bearCand.state == 1 and idx != bearCand.zone1Idx
+            else if bearCand.state == 1 and z.createdBar != bearCand.zone1CreatedBar
                 sigSecondSupBroken := true
                 f_logDebug("S2 BROKEN @ " + str.tostring(z.bottom))
-                SRZone z1 = array.get(supZones, bearCand.zone1Idx)
 
                 bool hadPullback = bearCand.hadPullback
                 bool isEngulfCandle = close < open and open >= close[1] and close <= open[1] and close[1] > open[1]
@@ -605,7 +615,7 @@ if barstate.isconfirmed
                     ez.qmLevel := etype == "QM" ? bearCand.pullbackLevel : na
                     ez.fmStartBar := bearCand.fmStartBar
                     ez.fmEndBar := bar_index
-                    ez.zone1Bar := z1.breakBar
+                    ez.zone1Bar := bearCand.firstBreakBar
                     ez.zone2Bar := bar_index
                     ez.smStartBar := bar_index
                     ez.smHigh := high
