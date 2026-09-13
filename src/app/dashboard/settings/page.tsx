@@ -10,6 +10,7 @@ import { BrandingForm } from "./branding-form";
 import { GatewayForm } from "./payment-gateway-form";
 import { ActiveProviderForm } from "./active-provider-form";
 import { MyProfileForm } from "./my-profile-form";
+import { ThresholdsForm } from "./thresholds-form";
 
 const ALL_PROVIDERS = ["PAYSTACK", "FLUTTERWAVE", "KORAPAY"] as const;
 
@@ -50,6 +51,30 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent>
           <SettingsForm school={school} studentCount={studentCount} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Thresholds & risk settings</CardTitle>
+          <CardDescription>
+            The numbers behind expense approvals, Student Performance Analysis and the School Health Score. Sensible
+            defaults are already applied — change them only if your school needs different limits.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ThresholdsForm
+            currency={school.currency}
+            expenseApprovalThresholdMinor={school.expenseApprovalThresholdMinor}
+            performancePassMark={school.performancePassMark}
+            performanceSignificantChangePoints={school.performanceSignificantChangePoints}
+            attendanceConcernThreshold={school.attendanceConcernThreshold}
+            performanceFailedSubjectConcernThreshold={school.performanceFailedSubjectConcernThreshold}
+            healthScoreWeightAcademic={school.healthScoreWeightAcademic}
+            healthScoreWeightAttendance={school.healthScoreWeightAttendance}
+            healthScoreWeightFinancial={school.healthScoreWeightFinancial}
+            healthScoreWeightOperational={school.healthScoreWeightOperational}
+          />
         </CardContent>
       </Card>
 
