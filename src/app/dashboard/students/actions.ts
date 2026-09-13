@@ -5,7 +5,16 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
-import { createStudent, updateStudent, withdrawStudent, addGuardianToStudent } from "@/lib/services/students";
+import {
+  createStudent,
+  updateStudent,
+  withdrawStudent,
+  addGuardianToStudent,
+  searchGuardians,
+  linkExistingGuardianToStudent,
+  removeGuardianFromStudent,
+  mergeGuardians,
+} from "@/lib/services/students";
 import { inviteGuardianToPortal, inviteStudentToPortal } from "@/lib/services/portal-invites";
 import { logAudit } from "@/lib/audit";
 import { StudentLimitError } from "@/lib/billing/entitlements";
@@ -253,6 +262,89 @@ export async function addGuardianAction(
 
   revalidatePath(`/dashboard/students/${studentId}`);
   return { status: "idle" };
+}
+
+export async function searchGuardiansAction(query: string) {
+  const user = await requirePermission(PERMISSIONS.GUARDIANS_MANAGE);
+  const results = await searchGuardians(user.schoolId, query);
+  return results.map((g) => ({
+    id: g.id,
+    firstName: g.firstName,
+    lastName: g.lastName,
+    phone: g.phone,
+    email: g.email,
+    hasPortalLogin: Boolean(g.userId),
+    students: g.students.map((sg) => `${sg.student.firstName} ${sg.student.lastName} (${sg.student.admissionNumber})`),
+  }));
+}
+
+export interface LinkGuardianState {
+  status: "idle" | "error";
+  message?: string;
+}
+
+export async function linkExistingGuardianAction(
+  studentId: string,
+  _prev: LinkGuardianState,
+  formData: FormData
+): Promise<LinkGuardianState> {
+  const user = await requirePermission(PERMISSIONS.GUARDIANS_MANAGE);
+  const guardianId = formData.get("guardianId");
+  const parsed = relationshipEnum.safeParse(formData.get("relationship"));
+  if (typeof guardianId !== "string" || !guardianId) return { status: "error", message: "Choose a guardian to link." };
+  if (!parsed.success) return { status: "error", message: "Choose a relationship." };
+
+  try {
+    await linkExistingGuardianToStudent(user.schoolId, studentId, guardianId, parsed.data);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Could not link this guardian." };
+  }
+
+  await logAudit({ schoolId: user.schoolId, userId: user.id, action: "guardian.linked_existing", resourceType: "Student", resourceId: studentId });
+  revalidatePath(`/dashboard/students/${studentId}`);
+  return { status: "idle" };
+}
+
+export async function removeGuardianAction(studentId: string, guardianId: string) {
+  const user = await requirePermission(PERMISSIONS.GUARDIANS_MANAGE);
+  await removeGuardianFromStudent(user.schoolId, studentId, guardianId);
+  await logAudit({ schoolId: user.schoolId, userId: user.id, action: "guardian.removed", resourceType: "Student", resourceId: studentId });
+  revalidatePath(`/dashboard/students/${studentId}`);
+}
+
+export interface MergeGuardianState {
+  status: "idle" | "error" | "success";
+  message?: string;
+}
+
+export async function mergeGuardiansAction(
+  studentId: string,
+  keepGuardianId: string,
+  _prev: MergeGuardianState,
+  formData: FormData
+): Promise<MergeGuardianState> {
+  const user = await requirePermission(PERMISSIONS.GUARDIANS_MANAGE);
+  const removeGuardianId = formData.get("removeGuardianId");
+  if (typeof removeGuardianId !== "string" || !removeGuardianId) {
+    return { status: "error", message: "Choose the duplicate guardian to merge away." };
+  }
+
+  try {
+    await mergeGuardians(user.schoolId, keepGuardianId, removeGuardianId);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Could not merge these guardians." };
+  }
+
+  await logAudit({
+    schoolId: user.schoolId,
+    userId: user.id,
+    action: "guardian.merged",
+    resourceType: "Guardian",
+    resourceId: keepGuardianId,
+    previousValue: { removedGuardianId: removeGuardianId },
+  });
+  revalidatePath(`/dashboard/students/${studentId}`);
+  return { status: "success", message: "Merged." };
 }
 
 const portalInviteEmailSchema = z.object({

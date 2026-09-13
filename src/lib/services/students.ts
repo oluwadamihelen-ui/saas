@@ -364,3 +364,111 @@ export async function addGuardianToStudent(
     data: { studentId, guardianId: guardian.id, relationship: input.relationship, isPrimary: false },
   });
 }
+
+/// Finds existing guardians in this school by name/phone/email, so a
+/// second (or third) child of the same parent can be linked to the
+/// parent's one real Guardian record instead of a new one being created
+/// for every student — the fix for "the parent's portal only shows one
+/// of their children" (Guardian.userId is unique: only one Guardian row
+/// can ever hold a given parent's portal login, so every one of their
+/// children must point at that same row via StudentGuardian).
+export async function searchGuardians(schoolId: string, query: string) {
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return [];
+  return prisma.guardian.findMany({
+    where: {
+      schoolId,
+      OR: [
+        { firstName: { contains: trimmed, mode: "insensitive" } },
+        { lastName: { contains: trimmed, mode: "insensitive" } },
+        { phone: { contains: trimmed, mode: "insensitive" } },
+        { email: { contains: trimmed, mode: "insensitive" } },
+      ],
+    },
+    include: { students: { include: { student: { select: { firstName: true, lastName: true, admissionNumber: true } } } } },
+    orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+    take: 10,
+  });
+}
+
+export async function linkExistingGuardianToStudent(
+  schoolId: string,
+  studentId: string,
+  guardianId: string,
+  relationship: GuardianRelationship
+) {
+  const [student, guardian] = await Promise.all([
+    prisma.student.findFirst({ where: { schoolId, id: studentId } }),
+    prisma.guardian.findFirst({ where: { schoolId, id: guardianId } }),
+  ]);
+  if (!student) throw new Error("Student not found.");
+  if (!guardian) throw new Error("Guardian not found.");
+
+  const existingLink = await prisma.studentGuardian.findUnique({ where: { studentId_guardianId: { studentId, guardianId } } });
+  if (existingLink) throw new Error("This guardian is already linked to this student.");
+
+  return prisma.studentGuardian.create({
+    data: { studentId, guardianId, relationship, isPrimary: false },
+  });
+}
+
+/// Unlinks one guardian from one student — the record for the guardian
+/// themselves (and their portal login, if any) is untouched, and any
+/// other student they're linked to is unaffected. If this was their only
+/// remaining link, the Guardian row is left behind as orphaned data
+/// rather than auto-deleted (a school may want to re-link it later, and
+/// silently deleting on the last unlink would surprise nobody expecting
+/// it) — mergeGuardians is the deliberate way to clean up a duplicate.
+export async function removeGuardianFromStudent(schoolId: string, studentId: string, guardianId: string) {
+  const student = await prisma.student.findFirst({ where: { schoolId, id: studentId } });
+  if (!student) throw new Error("Student not found.");
+  await prisma.studentGuardian.deleteMany({ where: { studentId, guardianId } });
+}
+
+/// Combines two Guardian records that turned out to be the same real
+/// parent — every student linked to `removeGuardianId` is re-pointed to
+/// `keepGuardianId` (skipping any student already linked to both, so the
+/// unique (studentId, guardianId) pair is never violated), then the
+/// now-empty duplicate is deleted. If the duplicate being removed is the
+/// one holding the portal login (Guardian.userId), that login is moved
+/// over to the survivor first — deleting it outright would otherwise log
+/// the parent out permanently. Two real, independent portal logins can't
+/// both survive one merge (only one Guardian row can ever hold a given
+/// login), so that case is rejected with a clear message rather than
+/// silently destroying one of them.
+export async function mergeGuardians(schoolId: string, keepGuardianId: string, removeGuardianId: string) {
+  if (keepGuardianId === removeGuardianId) throw new Error("Choose two different guardians to merge.");
+
+  const [keep, remove] = await Promise.all([
+    prisma.guardian.findFirst({ where: { schoolId, id: keepGuardianId }, include: { students: true } }),
+    prisma.guardian.findFirst({ where: { schoolId, id: removeGuardianId }, include: { students: true } }),
+  ]);
+  if (!keep) throw new Error("Guardian to keep not found.");
+  if (!remove) throw new Error("Guardian to remove not found.");
+  if (keep.userId && remove.userId) {
+    throw new Error("Both guardians have their own portal login — remove one login before merging, or ask support for help.");
+  }
+
+  const keptStudentIds = new Set(keep.students.map((sg) => sg.studentId));
+  const toRelink = remove.students.filter((sg) => !keptStudentIds.has(sg.studentId));
+  const toDrop = remove.students.filter((sg) => keptStudentIds.has(sg.studentId));
+
+  await prisma.$transaction(async (tx) => {
+    if (remove.userId && !keep.userId) {
+      // Clear first — userId is unique, so both rows briefly holding it
+      // would violate the constraint even inside one transaction.
+      await tx.guardian.update({ where: { id: remove.id }, data: { userId: null } });
+      await tx.guardian.update({ where: { id: keep.id }, data: { userId: remove.userId } });
+    }
+    for (const sg of toRelink) {
+      await tx.studentGuardian.update({
+        where: { studentId_guardianId: { studentId: sg.studentId, guardianId: remove.id } },
+        data: { guardianId: keep.id },
+      });
+    }
+    for (const sg of toDrop) {
+      await tx.studentGuardian.delete({ where: { studentId_guardianId: { studentId: sg.studentId, guardianId: remove.id } } });
+    }
+    await tx.guardian.delete({ where: { id: remove.id } });
+  });
+}

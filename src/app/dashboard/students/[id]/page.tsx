@@ -20,6 +20,9 @@ import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import { WithdrawButton } from "./withdraw-button";
 import { AddGuardianForm } from "./add-guardian-form";
+import { LinkExistingGuardianForm } from "./link-existing-guardian-form";
+import { RemoveGuardianButton } from "./remove-guardian-button";
+import { MergeGuardianButton } from "./merge-guardian-button";
 import { PortalInviteForm } from "./portal-invite-form";
 import { inviteGuardianPortalAction, inviteStudentPortalAction } from "../actions";
 
@@ -151,18 +154,45 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
               <Card>
                 <CardContent className="divide-y divide-border p-0">
                   {student.guardians.map((sg) => (
-                    <div key={sg.guardianId} className="flex items-center justify-between p-4 text-sm">
-                      <div>
-                        <p className="font-medium text-foreground">{sg.guardian.firstName} {sg.guardian.lastName}</p>
-                        <p className="text-xs text-muted">{sg.guardian.phone}{sg.guardian.email ? ` · ${sg.guardian.email}` : ""}</p>
+                    <div key={sg.guardianId} className="p-4 text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-foreground">
+                            {sg.guardian.firstName} {sg.guardian.lastName}
+                            {sg.guardian.userId && <span className="ml-2 text-xs font-normal text-success">Has portal login</span>}
+                          </p>
+                          <p className="text-xs text-muted">{sg.guardian.phone}{sg.guardian.email ? ` · ${sg.guardian.email}` : ""}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="accent">{sg.relationship}{sg.isPrimary ? " · Primary" : ""}</Badge>
+                          {canManageGuardians && (
+                            <RemoveGuardianButton
+                              studentId={student.id}
+                              guardianId={sg.guardianId}
+                              guardianName={`${sg.guardian.firstName} ${sg.guardian.lastName}`}
+                            />
+                          )}
+                        </div>
                       </div>
-                      <Badge variant="accent">{sg.relationship}{sg.isPrimary ? " · Primary" : ""}</Badge>
+                      {canManageGuardians && (
+                        <MergeGuardianButton
+                          studentId={student.id}
+                          guardianId={sg.guardianId}
+                          guardianName={`${sg.guardian.firstName} ${sg.guardian.lastName}`}
+                          guardianHasPortalLogin={Boolean(sg.guardian.userId)}
+                        />
+                      )}
                     </div>
                   ))}
                 </CardContent>
               </Card>
             )}
-            {canManageGuardians && <AddGuardianForm studentId={student.id} />}
+            {canManageGuardians && (
+              <>
+                <AddGuardianForm studentId={student.id} />
+                <LinkExistingGuardianForm studentId={student.id} />
+              </>
+            )}
           </div>
         </TabsContent>
 
