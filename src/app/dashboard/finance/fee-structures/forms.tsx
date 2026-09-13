@@ -78,6 +78,10 @@ export function FeeStructureForm({
         <Label htmlFor="amount">Amount</Label>
         <Input id="amount" name="amount" type="number" min={0} step="0.01" required />
       </div>
+      <div className="flex items-center gap-2 pb-2">
+        <input id="isOptional" name="isOptional" type="checkbox" className="h-4 w-4 rounded border-border" />
+        <Label htmlFor="isOptional" className="mb-0">Optional (parents can untick it)</Label>
+      </div>
       <Button type="submit" size="sm" disabled={isPending}>{isPending ? "Adding..." : "Add"}</Button>
       {state.status === "error" && <p className="w-full text-sm text-danger">{state.message}</p>}
     </form>

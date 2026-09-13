@@ -36,6 +36,7 @@ const structureSchema = z.object({
   classGroupId: z.string().trim().optional().or(z.literal("")),
   termId: z.string().trim().min(1, "Choose a term"),
   amount: z.coerce.number().positive("Enter an amount greater than 0"),
+  isOptional: z.literal("on").optional(),
 });
 
 export async function createFeeStructureAction(_prev: FinanceFormState, formData: FormData): Promise<FinanceFormState> {
@@ -46,6 +47,7 @@ export async function createFeeStructureAction(_prev: FinanceFormState, formData
     classGroupId: formData.get("classGroupId") ?? "",
     termId: formData.get("termId"),
     amount: formData.get("amount"),
+    isOptional: formData.get("isOptional") ?? undefined,
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
 
@@ -56,6 +58,7 @@ export async function createFeeStructureAction(_prev: FinanceFormState, formData
       classGroupId: parsed.data.classGroupId || null,
       termId: parsed.data.termId,
       amountMinor: toMinorUnits(parsed.data.amount),
+      isOptional: parsed.data.isOptional === "on",
     });
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not create fee structure." };

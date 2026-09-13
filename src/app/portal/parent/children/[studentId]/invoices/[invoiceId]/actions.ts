@@ -2,13 +2,19 @@
 
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
+import { revalidatePath } from "next/cache";
 import { requireSchoolUser } from "@/lib/auth/require";
 import { getChildForGuardian } from "@/lib/services/portal";
-import { getInvoice } from "@/lib/services/invoices";
+import { getInvoice, updateInvoiceItemSelections } from "@/lib/services/invoices";
 import { initiateOnlinePayment, notifyBankTransfer } from "@/lib/services/payments";
 
 export interface PortalPayFormState {
   status: "idle" | "error";
+  message?: string;
+}
+
+export interface PortalSelectionFormState {
+  status: "idle" | "error" | "success";
   message?: string;
 }
 
@@ -68,4 +74,26 @@ export async function notifyBankTransferFromPortalAction(
     return { status: "error", message: error instanceof Error ? error.message : "Could not record your notice." };
   }
   redirect(`/portal/parent/children/${studentId}/invoices/${invoiceId}`);
+}
+
+export async function updateInvoiceSelectionsAction(
+  studentId: string,
+  invoiceId: string,
+  _prev: PortalSelectionFormState,
+  formData: FormData
+): Promise<PortalSelectionFormState> {
+  const invoice = await requireOwnInvoice(studentId, invoiceId);
+
+  const selections = invoice.items
+    .filter((item) => item.isOptional)
+    .map((item) => ({ itemId: item.id, included: formData.get(`item-${item.id}`) === "on" }));
+
+  try {
+    await updateInvoiceItemSelections(invoice.schoolId, invoiceId, selections);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Could not update your selections." };
+  }
+
+  revalidatePath(`/portal/parent/children/${studentId}/invoices/${invoiceId}`);
+  return { status: "success", message: "Your selections have been saved." };
 }

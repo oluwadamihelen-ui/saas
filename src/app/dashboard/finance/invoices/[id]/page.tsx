@@ -51,13 +51,18 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow><TableHead>Description</TableHead><TableHead>Amount</TableHead></TableRow>
+              <TableRow><TableHead>Description</TableHead><TableHead>Amount</TableHead><TableHead /></TableRow>
             </TableHeader>
             <TableBody>
               {invoice.items.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell>{item.description}</TableCell>
-                  <TableCell>{formatMoney(item.amountMinor, school.currency)}</TableCell>
+                <TableRow key={item.id} className={item.isOptional && !item.isIncluded ? "text-muted" : undefined}>
+                  <TableCell className={item.isOptional && !item.isIncluded ? "line-through" : undefined}>{item.description}</TableCell>
+                  <TableCell className={item.isOptional && !item.isIncluded ? "line-through" : undefined}>{formatMoney(item.amountMinor, school.currency)}</TableCell>
+                  <TableCell>
+                    {item.isOptional && (
+                      <Badge variant={item.isIncluded ? "accent" : "neutral"}>{item.isIncluded ? "Optional · included" : "Optional · declined"}</Badge>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

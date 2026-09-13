@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -59,6 +60,7 @@ export default async function FeeStructuresPage() {
                 <TableHead>Class</TableHead>
                 <TableHead>Term</TableHead>
                 <TableHead>Amount</TableHead>
+                <TableHead>Optional</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
@@ -70,6 +72,9 @@ export default async function FeeStructuresPage() {
                   <TableCell className="text-muted">{s.classGroup?.name ?? "All classes"}</TableCell>
                   <TableCell className="text-muted">{s.term.name}</TableCell>
                   <TableCell>{formatMoney(s.amountMinor, school.currency)}</TableCell>
+                  <TableCell>
+                    {s.isOptional ? <Badge variant="warning">Optional</Badge> : <span className="text-xs text-muted">Required</span>}
+                  </TableCell>
                   <TableCell className="text-right"><DeleteStructureButton id={s.id} /></TableCell>
                 </TableRow>
               ))}

@@ -54,7 +54,17 @@ export async function generateInvoicesForClass(schoolId: string, classArmId: str
         totalMinor: subtotalMinor,
         dueDate,
         payToken: crypto.randomBytes(20).toString("hex"),
-        items: { create: feeStructures.map((f) => ({ feeStructureId: f.id, description: f.name, amountMinor: f.amountMinor })) },
+        // Optional items start included (opt-out, not opt-in) — a parent
+        // unticks the ones they don't want via updateInvoiceItemSelections
+        // below, same as every non-optional item just always stays true.
+        items: {
+          create: feeStructures.map((f) => ({
+            feeStructureId: f.id,
+            description: f.name,
+            amountMinor: f.amountMinor,
+            isOptional: f.isOptional,
+          })),
+        },
       },
     });
     await notifyInvoiceIssued(schoolId, invoice.id);
@@ -131,6 +141,52 @@ export async function getInvoiceByToken(payToken: string) {
 export function invoiceBalanceMinor(invoice: { totalMinor: number; payments: { status: string; amountMinor: number }[] }) {
   const paid = invoice.payments.filter((p) => p.status === "CONFIRMED").reduce((sum, p) => sum + p.amountMinor, 0);
   return Math.max(0, invoice.totalMinor - paid);
+}
+
+/// Lets a parent tick/untick the optional line items on their own
+/// invoice (school bus, swimming, computer/fine-arts classes, etc.) —
+/// recomputes subtotalMinor/totalMinor from whichever items end up
+/// included. Locked the moment any Payment row exists on the invoice
+/// (pending or confirmed): once a payment is in flight, the total this
+/// invoice was generated/paid against must stop moving, or the numbers
+/// stop reconciling — from then on, only a staff member adjusting things
+/// directly can change it. A selection naming a non-optional item, or an
+/// item that isn't actually on this invoice, is silently ignored rather
+/// than erroring the whole batch — the UI never offers those, so this
+/// only ever matters against a hand-crafted request.
+export async function updateInvoiceItemSelections(
+  schoolId: string,
+  invoiceId: string,
+  selections: { itemId: string; included: boolean }[]
+) {
+  const invoice = await prisma.invoice.findFirst({
+    where: { schoolId, id: invoiceId },
+    include: { items: true, payments: true },
+  });
+  if (!invoice) throw new Error("Invoice not found.");
+  if (invoice.status === "CANCELLED") throw new Error("This invoice has been cancelled.");
+  if (invoice.payments.length > 0) {
+    throw new Error("You can't change your selections once a payment has started on this invoice — contact the school to adjust it.");
+  }
+
+  const selectionByItemId = new Map(selections.map((s) => [s.itemId, s.included]));
+  const updatedItems = invoice.items.map((item) => {
+    if (!item.isOptional) return item;
+    const included = selectionByItemId.get(item.id);
+    return included === undefined ? item : { ...item, isIncluded: included };
+  });
+
+  const subtotalMinor = updatedItems.filter((i) => i.isIncluded).reduce((sum, i) => sum + i.amountMinor, 0);
+  const totalMinor = Math.max(0, subtotalMinor - invoice.discountMinor);
+
+  return prisma.$transaction(async (tx) => {
+    for (const item of updatedItems) {
+      if (item.isOptional && selectionByItemId.has(item.id)) {
+        await tx.invoiceItem.update({ where: { id: item.id }, data: { isIncluded: item.isIncluded } });
+      }
+    }
+    return tx.invoice.update({ where: { id: invoiceId }, data: { subtotalMinor, totalMinor } });
+  });
 }
 
 /// Recomputes and persists status from confirmed payments — status is

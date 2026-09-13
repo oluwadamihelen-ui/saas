@@ -10,6 +10,7 @@ import { prisma } from "@/lib/db";
 import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
 import { PortalPayOnlineButton, PortalNotifyBankTransferButton } from "./pay-buttons";
+import { OptionalItemsForm } from "./optional-items-form";
 
 const STATUS_VARIANT = { ISSUED: "warning", PARTIALLY_PAID: "accent", PAID: "success", CANCELLED: "neutral" } as const;
 
@@ -37,6 +38,9 @@ export default async function PortalInvoicePage({
   const balance = invoiceBalanceMinor(invoice);
   const hasBankDetails = school.bankName && school.bankAccountNumber;
   const confirmedPayments = invoice.payments.filter((p) => p.status === "CONFIRMED");
+  const optionalItems = invoice.items.filter((item) => item.isOptional);
+  const includedItems = invoice.items.filter((item) => !item.isOptional || item.isIncluded);
+  const canEditSelections = optionalItems.length > 0 && invoice.payments.length === 0;
 
   return (
     <div className="max-w-2xl space-y-4 sm:space-y-6">
@@ -62,7 +66,7 @@ export default async function PortalInvoicePage({
               <TableRow><TableHead>Description</TableHead><TableHead>Amount</TableHead></TableRow>
             </TableHeader>
             <TableBody>
-              {invoice.items.map((item) => (
+              {includedItems.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell>{item.description}</TableCell>
                   <TableCell>{formatMoney(item.amountMinor, school.currency)}</TableCell>
@@ -74,6 +78,23 @@ export default async function PortalInvoicePage({
             <div className="flex justify-between font-medium text-foreground"><span>Total</span><span>{formatMoney(invoice.totalMinor, school.currency)}</span></div>
             <div className="flex justify-between font-medium text-foreground"><span>Balance due</span><span>{formatMoney(balance, school.currency)}</span></div>
           </div>
+          {optionalItems.length > 0 && canEditSelections && (
+            <OptionalItemsForm studentId={studentId} invoiceId={invoiceId} items={optionalItems} currency={school.currency} />
+          )}
+          {optionalItems.length > 0 && !canEditSelections && invoice.payments.length > 0 && (
+            <div className="space-y-2 border-t border-border p-4">
+              <p className="text-sm font-medium text-foreground">Optional items</p>
+              <p className="text-xs text-muted">A payment has started on this invoice, so selections are locked. Contact the school to make changes.</p>
+              <div className="space-y-1">
+                {optionalItems.map((item) => (
+                  <div key={item.id} className={`flex justify-between text-sm ${item.isIncluded ? "" : "text-muted line-through"}`}>
+                    <span>{item.description}</span>
+                    <span>{formatMoney(item.amountMinor, school.currency)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

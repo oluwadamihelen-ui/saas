@@ -38,7 +38,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
               <TableRow><TableHead>Description</TableHead><TableHead>Amount</TableHead></TableRow>
             </TableHeader>
             <TableBody>
-              {invoice.items.map((item) => (
+              {invoice.items.filter((item) => !item.isOptional || item.isIncluded).map((item) => (
                 <TableRow key={item.id}>
                   <TableCell>{item.description}</TableCell>
                   <TableCell>{formatMoney(item.amountMinor, invoice.school.currency)}</TableCell>

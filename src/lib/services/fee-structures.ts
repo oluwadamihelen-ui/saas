@@ -29,6 +29,7 @@ export interface FeeStructureInput {
   classGroupId: string | null;
   termId: string;
   amountMinor: number;
+  isOptional: boolean;
 }
 
 export async function createFeeStructure(schoolId: string, input: FeeStructureInput) {
@@ -50,6 +51,7 @@ export async function createFeeStructure(schoolId: string, input: FeeStructureIn
       classGroupId: input.classGroupId,
       termId: input.termId,
       amountMinor: input.amountMinor,
+      isOptional: input.isOptional,
     },
   });
 }

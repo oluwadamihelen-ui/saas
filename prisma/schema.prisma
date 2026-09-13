@@ -1530,6 +1530,13 @@ model FeeStructure {
   name        String
   amountMinor Int
 
+  /// When true, a parent can untick the resulting line item from their own
+  /// invoice (e.g. school bus, swimming, computer/fine-arts lessons) —
+  /// generateInvoicesForClass still includes it by default (opt-out, not
+  /// opt-in), snapshotting this flag onto InvoiceItem.isOptional so a
+  /// later change here never alters an already-generated invoice.
+  isOptional Boolean @default(false)
+
   createdAt DateTime @default(now())
 
   invoiceItems InvoiceItem[]
@@ -1562,7 +1569,7 @@ model Invoice {
   termId    String
   term      Term    @relation(fields: [termId], references: [id], onDelete: Cascade)
 
-  invoiceNumber  String        @unique
+  invoiceNumber  String
   status         InvoiceStatus @default(ISSUED)
   subtotalMinor  Int
   discountMinor  Int           @default(0)
@@ -1578,6 +1585,11 @@ model Invoice {
   payments Payment[]
 
   @@unique([studentId, termId])
+  // Scoped per school, not global — invoiceNumber is only ever generated
+  // and displayed within one school's own count, so a global unique
+  // constraint would collide the moment two schools each issue their
+  // first invoice of the year.
+  @@unique([schoolId, invoiceNumber])
   @@index([schoolId])
   @@index([schoolId, status])
 }
@@ -1591,6 +1603,17 @@ model InvoiceItem {
 
   description String
   amountMinor Int
+
+  /// Snapshotted from FeeStructure.isOptional at generation time — never
+  /// re-read live, so editing a fee structure's optional-ness later can't
+  /// retroactively change an invoice a parent has already seen/acted on.
+  isOptional Boolean @default(false)
+  /// The parent's current selection for an optional item (see
+  /// updateInvoiceItemSelections in src/lib/services/invoices.ts) — always
+  /// true for a non-optional item, never toggled. The row is kept (not
+  /// deleted) when unticked, both so re-ticking is a simple flip back and
+  /// so staff can still see what was on offer versus what was chosen.
+  isIncluded Boolean @default(true)
 
   @@index([invoiceId])
 }
