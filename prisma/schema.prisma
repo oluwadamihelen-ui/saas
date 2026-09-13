@@ -144,6 +144,17 @@ model School {
   /// never required.
   activePaymentProvider PaymentGatewayProvider?
 
+  /// Which connected provider actually sends email/SMS for this school's
+  /// notifications — same "null means not connected yet, purely additive"
+  /// pattern as activePaymentProvider above. Unlike payments, there is no
+  /// mock/simulated fallback: with either left null, that channel's sends
+  /// are silently skipped (NotificationPreference.emailEnabled/smsEnabled
+  /// simply have nothing to dispatch to yet), which is exactly today's
+  /// pre-existing behavior — connecting a provider here is what turns
+  /// those already-shipped preference flags from inert to live.
+  activeEmailProvider NotificationDeliveryProvider?
+  activeSmsProvider   NotificationDeliveryProvider?
+
   // Onboarding wizard progress (brief section 4). Nullable timestamps double
   // as both a "is this step done" flag and a record of when it happened.
   accountCreatedAt         DateTime  @default(now())
@@ -234,6 +245,7 @@ model School {
   feedback       Feedback[]
 
   paymentGatewayCredentials PaymentGatewayCredential[]
+  notificationProviderCredentials NotificationProviderCredential[]
 
   cbtExamTypes    CBTExamTypeOption[]
   cbtQuestions    CBTQuestion[]
@@ -1619,6 +1631,40 @@ model PaymentGatewayCredential {
   /// for a school that hasn't set up webhooks at all (the pay-confirm
   /// page's own server-side verify() call still works without it).
   webhookSecretEnc String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, provider])
+  @@index([schoolId])
+}
+
+enum NotificationDeliveryProvider {
+  RESEND
+  TWILIO
+  SENTDM
+}
+
+/// A school's own email/SMS provider credentials, brought and managed by
+/// the school itself — never a platform-wide key, same pattern as
+/// PaymentGatewayCredential. RESEND is email-only; TWILIO/SENTDM are
+/// SMS-only (src/lib/notification-delivery/registry.ts enforces the
+/// channel a given provider belongs to, not this schema). fromIdentifier
+/// is the verified sender email (Resend) or sender phone number/ID
+/// (Twilio/Sent.dm) — safe to store in the clear, the same reasoning as
+/// PaymentGatewayCredential.publicKey. accountSidEnc is Twilio-only (its
+/// Account SID, paired with apiKeyEnc holding the Auth Token); null for
+/// every other provider.
+model NotificationProviderCredential {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  provider       NotificationDeliveryProvider
+  fromIdentifier String
+  apiKeyEnc      String
+  accountSidEnc  String?
+  isEnabled      Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

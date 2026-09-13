@@ -26,20 +26,30 @@ export async function saveGatewayCredential(schoolId: string, input: SaveGateway
     throw new Error("Enter the secret key to connect this gateway.");
   }
 
-  return prisma.paymentGatewayCredential.upsert({
-    where: { schoolId_provider: { schoolId, provider: input.provider } },
-    create: {
+  // Deliberately two separate calls, not upsert({create, update}) — a JS
+  // object literal evaluates every property eagerly, so an upsert's
+  // unused `create` branch would still call encryptSecret(input.
+  // secretKey!) on every edit that leaves the secret key blank (the
+  // documented "leave blank to keep existing" flow) and crash on the
+  // undefined, even though only `update` was ever going to run.
+  if (existing) {
+    return prisma.paymentGatewayCredential.update({
+      where: { schoolId_provider: { schoolId, provider: input.provider } },
+      data: {
+        publicKey: input.publicKey,
+        ...(input.secretKey ? { secretKeyEnc: encryptSecret(input.secretKey) } : {}),
+        ...(input.webhookSecret !== undefined ? { webhookSecretEnc: input.webhookSecret ? encryptSecret(input.webhookSecret) : null } : {}),
+        isEnabled: input.isEnabled,
+      },
+    });
+  }
+  return prisma.paymentGatewayCredential.create({
+    data: {
       schoolId,
       provider: input.provider,
       publicKey: input.publicKey,
       secretKeyEnc: encryptSecret(input.secretKey!),
       webhookSecretEnc: input.webhookSecret ? encryptSecret(input.webhookSecret) : null,
-      isEnabled: input.isEnabled,
-    },
-    update: {
-      publicKey: input.publicKey,
-      ...(input.secretKey ? { secretKeyEnc: encryptSecret(input.secretKey) } : {}),
-      ...(input.webhookSecret !== undefined ? { webhookSecretEnc: input.webhookSecret ? encryptSecret(input.webhookSecret) : null } : {}),
       isEnabled: input.isEnabled,
     },
   });

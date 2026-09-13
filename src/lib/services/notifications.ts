@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import type { NotificationType, NotificationCategory, NotificationPriority, Prisma } from "@/generated/prisma/client";
 import { formatMoney } from "@/lib/money";
+import { resolveActiveEmailProvider, resolveActiveSmsProvider } from "@/lib/notification-delivery/registry";
 import type { ActionItem, ActionPriority } from "@/lib/services/school-health/types";
 
 /// Sort weight for the bell/notifications page — lower sorts first
@@ -168,6 +169,40 @@ export async function setNotificationPreference(schoolId: string, userId: string
   });
 }
 
+/// Email/SMS opt-in per category — unlike inAppEnabled (default true,
+/// opt-out), these default false on the schema itself: an external
+/// message costs the school money to send and reaches a device outside
+/// the app, so a missing row here means "off", not "using the default".
+export async function getChannelPreferences(
+  schoolId: string,
+  userId: string
+): Promise<Record<NotificationCategory, { emailEnabled: boolean; smsEnabled: boolean }>> {
+  const rows = await prisma.notificationPreference.findMany({ where: { schoolId, userId }, select: { category: true, emailEnabled: true, smsEnabled: true } });
+  const overrides = new Map(rows.map((r) => [r.category, r]));
+  const result = {} as Record<NotificationCategory, { emailEnabled: boolean; smsEnabled: boolean }>;
+  for (const category of PREFERENCE_TOGGLEABLE_CATEGORIES) {
+    const row = overrides.get(category);
+    result[category] = { emailEnabled: row?.emailEnabled ?? false, smsEnabled: row?.smsEnabled ?? false };
+  }
+  return result;
+}
+
+export async function setNotificationChannelPreference(
+  schoolId: string,
+  userId: string,
+  category: NotificationCategory,
+  channel: "email" | "sms",
+  enabled: boolean
+): Promise<void> {
+  if (!PREFERENCE_TOGGLEABLE_CATEGORIES.includes(category)) return;
+  const field = channel === "email" ? "emailEnabled" : "smsEnabled";
+  await prisma.notificationPreference.upsert({
+    where: { userId_category: { userId, category } },
+    create: { schoolId, userId, category, [field]: enabled },
+    update: { [field]: enabled },
+  });
+}
+
 export interface NotifyOptions {
   category: NotificationCategory;
   priority?: NotificationPriority;
@@ -202,38 +237,123 @@ async function notifyRecipients(
   const uniqueIds = [...new Set(userIds)];
   if (uniqueIds.length === 0) return;
 
-  let recipients = uniqueIds;
-  if (isCategorySuppressible(options.category)) {
-    const muted = await prisma.notificationPreference.findMany({
-      where: { userId: { in: uniqueIds }, category: options.category, inAppEnabled: false },
-      select: { userId: true },
+  // One query covers all three channels' preference rows for every
+  // recipient — in-app mute, and email/sms opt-in, are independent flags
+  // on the same row, so a user can mute in-app while still opting into
+  // email for the same category (or vice versa).
+  const prefRows = await prisma.notificationPreference.findMany({
+    where: { userId: { in: uniqueIds }, category: options.category },
+    select: { userId: true, inAppEnabled: true, emailEnabled: true, smsEnabled: true },
+  });
+  const prefByUser = new Map(prefRows.map((r) => [r.userId, r]));
+
+  const recipients = isCategorySuppressible(options.category)
+    ? uniqueIds.filter((id) => prefByUser.get(id)?.inAppEnabled !== false)
+    : uniqueIds;
+  const emailRecipients = uniqueIds.filter((id) => prefByUser.get(id)?.emailEnabled === true);
+  const smsRecipients = uniqueIds.filter((id) => prefByUser.get(id)?.smsEnabled === true);
+
+  if (recipients.length > 0) {
+    await prisma.notification.createMany({
+      data: recipients.map((userId) => ({
+        schoolId,
+        userId,
+        type,
+        title,
+        body,
+        link,
+        category: options.category,
+        priority: options.priority ?? "MEDIUM",
+        actionLabel: options.actionLabel,
+        entityType: options.entityType,
+        entityId: options.entityId,
+        metadata: options.metadata,
+        dedupeKey: options.dedupeKey,
+        expiresAt: options.expiresAt,
+      })),
+      skipDuplicates: true,
     });
-    if (muted.length > 0) {
-      const mutedIds = new Set(muted.map((m) => m.userId));
-      recipients = uniqueIds.filter((id) => !mutedIds.has(id));
+  }
+
+  // Best-effort external delivery — awaited (this app has no background
+  // job runner to hand it off to — see AGENTS.md — and an un-awaited
+  // promise here could simply be killed mid-flight once a serverless
+  // request finishes), but never allowed to throw back into the ~40 call
+  // sites above: a Resend/Twilio outage must never break the in-app
+  // notification (already persisted above) it's mirroring.
+  if (emailRecipients.length > 0 || smsRecipients.length > 0) {
+    try {
+      await dispatchExternalChannels(schoolId, emailRecipients, smsRecipients, title, body);
+    } catch (err) {
+      console.error("notifications: external delivery failed", err);
     }
   }
-  if (recipients.length === 0) return;
+}
 
-  await prisma.notification.createMany({
-    data: recipients.map((userId) => ({
-      schoolId,
-      userId,
-      type,
-      title,
-      body,
-      link,
-      category: options.category,
-      priority: options.priority ?? "MEDIUM",
-      actionLabel: options.actionLabel,
-      entityType: options.entityType,
-      entityId: options.entityId,
-      metadata: options.metadata,
-      dedupeKey: options.dedupeKey,
-      expiresAt: options.expiresAt,
-    })),
-    skipDuplicates: true,
-  });
+/// Sends the same notification by email/SMS to whoever opted in for this
+/// category, via whichever provider the school has connected and made
+/// active (registry.ts) — a no-op per channel when nothing is connected,
+/// so this is purely additive on top of the in-app notification that
+/// already exists regardless. Recipients without a resolvable email/phone
+/// (e.g. a student portal account with no phone anywhere) are silently
+/// skipped rather than erroring the whole batch.
+async function dispatchExternalChannels(
+  schoolId: string,
+  emailRecipientIds: string[],
+  smsRecipientIds: string[],
+  title: string,
+  body: string | undefined
+): Promise<void> {
+  const [emailResolved, smsResolved] = await Promise.all([
+    emailRecipientIds.length > 0 ? resolveActiveEmailProvider(schoolId) : null,
+    smsRecipientIds.length > 0 ? resolveActiveSmsProvider(schoolId) : null,
+  ]);
+  if (!emailResolved && !smsResolved) return;
+
+  const contactIds = [...new Set([...(emailResolved ? emailRecipientIds : []), ...(smsResolved ? smsRecipientIds : [])])];
+  const contacts = await resolveRecipientContacts(contactIds);
+
+  const messageBody = body ?? title;
+  const sends: Promise<unknown>[] = [];
+
+  if (emailResolved) {
+    for (const userId of emailRecipientIds) {
+      const email = contacts.get(userId)?.email;
+      if (!email) continue;
+      sends.push(
+        emailResolved.provider
+          .send({ to: email, subject: title, body: messageBody }, emailResolved.credentials)
+          .catch((err) => console.error(`notifications: email send failed for ${userId}`, err))
+      );
+    }
+  }
+  if (smsResolved) {
+    for (const userId of smsRecipientIds) {
+      const phone = contacts.get(userId)?.phone;
+      if (!phone) continue;
+      sends.push(
+        smsResolved.provider
+          .send({ to: phone, body: `${title}${body ? ` — ${body}` : ""}` }, smsResolved.credentials)
+          .catch((err) => console.error(`notifications: sms send failed for ${userId}`, err))
+      );
+    }
+  }
+  await Promise.all(sends);
+}
+
+/// Resolves each recipient's email/phone for external delivery. Staff
+/// accounts carry their own phone directly on User (see User.phone's doc
+/// comment); a parent portal account doesn't — a guardian's phone lives on
+/// their own Guardian record — so this falls back to the linked Guardian's
+/// phone when User.phone is null. Student portal accounts have neither and
+/// are simply skipped for SMS (email still works off User.email).
+async function resolveRecipientContacts(userIds: string[]): Promise<Map<string, { email: string; phone: string | null }>> {
+  const [users, guardians] = await Promise.all([
+    prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true, phone: true } }),
+    prisma.guardian.findMany({ where: { userId: { in: userIds } }, select: { userId: true, phone: true } }),
+  ]);
+  const guardianPhoneByUserId = new Map(guardians.filter((g) => g.userId).map((g) => [g.userId as string, g.phone]));
+  return new Map(users.map((u) => [u.id, { email: u.email, phone: u.phone ?? guardianPhoneByUserId.get(u.id) ?? null }]));
 }
 
 /// The recipients for anything about a specific student: the student's own

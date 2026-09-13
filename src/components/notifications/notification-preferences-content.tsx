@@ -1,11 +1,17 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { getNotificationPreferences, PREFERENCE_TOGGLEABLE_CATEGORIES } from "@/lib/services/notifications";
+import { getNotificationPreferences, getChannelPreferences, PREFERENCE_TOGGLEABLE_CATEGORIES } from "@/lib/services/notifications";
+import { resolveActiveEmailProvider, resolveActiveSmsProvider } from "@/lib/notification-delivery/registry";
 import { NotificationPreferencesForm } from "@/components/notifications/notification-preferences-form";
 
 export async function NotificationPreferencesContent({ schoolId, userId, backHref }: { schoolId: string; userId: string; backHref: string }) {
-  const preferences = await getNotificationPreferences(schoolId, userId);
+  const [preferences, channelPreferences, emailProvider, smsProvider] = await Promise.all([
+    getNotificationPreferences(schoolId, userId),
+    getChannelPreferences(schoolId, userId),
+    resolveActiveEmailProvider(schoolId),
+    resolveActiveSmsProvider(schoolId),
+  ]);
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -19,7 +25,13 @@ export async function NotificationPreferencesContent({ schoolId, userId, backHre
 
       <Card>
         <CardContent>
-          <NotificationPreferencesForm categories={PREFERENCE_TOGGLEABLE_CATEGORIES} initial={preferences} />
+          <NotificationPreferencesForm
+          categories={PREFERENCE_TOGGLEABLE_CATEGORIES}
+          initial={preferences}
+          initialChannels={channelPreferences}
+          emailAvailable={Boolean(emailProvider)}
+          smsAvailable={Boolean(smsProvider)}
+        />
         </CardContent>
       </Card>
     </div>

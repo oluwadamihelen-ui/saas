@@ -4,6 +4,8 @@ import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getSchool } from "@/lib/services/school";
 import { listGatewayCredentials } from "@/lib/services/payment-gateways";
+import { listNotificationProviderCredentials } from "@/lib/services/notification-delivery";
+import { EMAIL_PROVIDERS, SMS_PROVIDERS } from "@/lib/notification-delivery/registry";
 import { prisma } from "@/lib/db";
 import { SettingsForm } from "./settings-form";
 import { BrandingForm } from "./branding-form";
@@ -11,6 +13,8 @@ import { GatewayForm } from "./payment-gateway-form";
 import { ActiveProviderForm } from "./active-provider-form";
 import { MyProfileForm } from "./my-profile-form";
 import { ThresholdsForm } from "./thresholds-form";
+import { NotificationProviderForm } from "./notification-provider-form";
+import { ActiveEmailProviderForm, ActiveSmsProviderForm } from "./active-notification-provider-form";
 
 const ALL_PROVIDERS = ["PAYSTACK", "FLUTTERWAVE", "KORAPAY"] as const;
 
@@ -18,14 +22,17 @@ export default async function SettingsPage() {
   const user = await requireSchoolUser();
   const perms = await getUserPermissions(user.id);
   const canManageGateways = perms.has(PERMISSIONS.PAYMENT_GATEWAYS_MANAGE);
+  const canManageNotificationProviders = perms.has(PERMISSIONS.NOTIFICATION_PROVIDERS_MANAGE);
 
-  const [school, credentials, me, studentCount] = await Promise.all([
+  const [school, credentials, notificationCredentials, me, studentCount] = await Promise.all([
     getSchool(user.schoolId),
     canManageGateways ? listGatewayCredentials(user.schoolId) : Promise.resolve([]),
+    canManageNotificationProviders ? listNotificationProviderCredentials(user.schoolId) : Promise.resolve([]),
     prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { dateOfBirth: true } }),
     prisma.student.count({ where: { schoolId: user.schoolId } }),
   ]);
   const credentialByProvider = new Map(credentials.map((c) => [c.provider, c]));
+  const notificationCredentialByProvider = new Map(notificationCredentials.map((c) => [c.provider, c]));
 
   return (
     <div className="max-w-2xl space-y-4 sm:space-y-6">
@@ -111,6 +118,43 @@ export default async function SettingsPage() {
                   key={p}
                   provider={p}
                   connected={c ? { publicKey: c.publicKey, isEnabled: c.isEnabled, hasWebhookSecret: Boolean(c.webhookSecretEnc) } : null}
+                />
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
+      {canManageNotificationProviders && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Email & SMS delivery</CardTitle>
+            <CardDescription>
+              Connect Resend for email and Twilio and/or Sent.dm for SMS so staff, parents and students who opt in
+              (Notifications → Preferences) receive email/SMS copies, not just in-app ones. Until you connect a
+              provider for a channel, that channel&apos;s sends are simply skipped.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {notificationCredentials.some((c) => EMAIL_PROVIDERS.includes(c.provider)) && (
+              <ActiveEmailProviderForm
+                currentProvider={school.activeEmailProvider}
+                connectedProviders={notificationCredentials.filter((c) => c.isEnabled && EMAIL_PROVIDERS.includes(c.provider)).map((c) => c.provider)}
+              />
+            )}
+            {notificationCredentials.some((c) => SMS_PROVIDERS.includes(c.provider)) && (
+              <ActiveSmsProviderForm
+                currentProvider={school.activeSmsProvider}
+                connectedProviders={notificationCredentials.filter((c) => c.isEnabled && SMS_PROVIDERS.includes(c.provider)).map((c) => c.provider)}
+              />
+            )}
+            {[...EMAIL_PROVIDERS, ...SMS_PROVIDERS].map((p) => {
+              const c = notificationCredentialByProvider.get(p);
+              return (
+                <NotificationProviderForm
+                  key={p}
+                  provider={p}
+                  connected={c ? { fromIdentifier: c.fromIdentifier, isEnabled: c.isEnabled, hasAccountSid: Boolean(c.accountSidEnc) } : null}
                 />
               );
             })}

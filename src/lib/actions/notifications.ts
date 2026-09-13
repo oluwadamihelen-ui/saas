@@ -8,6 +8,7 @@ import {
   deleteNotification,
   clearExpiredNotifications,
   setNotificationPreference,
+  setNotificationChannelPreference,
 } from "@/lib/services/notifications";
 import type { NotificationCategory } from "@/generated/prisma/client";
 import { generateNotificationsAiSummary, isNotificationAiConfigured, type NotificationsAiSummary } from "@/lib/services/notification-ai-summary";
@@ -43,6 +44,14 @@ export async function clearExpiredNotificationsAction() {
 export async function setNotificationPreferenceAction(category: NotificationCategory, inAppEnabled: boolean) {
   const user = await requireSchoolUser();
   await setNotificationPreference(user.schoolId, user.id, category, inAppEnabled);
+  revalidatePath("/dashboard/notifications/preferences");
+  revalidatePath("/portal/parent/notifications/preferences");
+  revalidatePath("/portal/student/notifications/preferences");
+}
+
+export async function setNotificationChannelPreferenceAction(category: NotificationCategory, channel: "email" | "sms", enabled: boolean) {
+  const user = await requireSchoolUser();
+  await setNotificationChannelPreference(user.schoolId, user.id, category, channel, enabled);
   revalidatePath("/dashboard/notifications/preferences");
   revalidatePath("/portal/parent/notifications/preferences");
   revalidatePath("/portal/student/notifications/preferences");

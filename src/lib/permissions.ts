@@ -65,6 +65,7 @@ export const PERMISSIONS = {
   FEEDBACK_VIEW: "feedback.view",
   FEEDBACK_MANAGE: "feedback.manage",
   PAYMENT_GATEWAYS_MANAGE: "payment_gateways.manage",
+  NOTIFICATION_PROVIDERS_MANAGE: "notification_providers.manage",
   BILLING_MANAGE: "billing.manage",
   CBT_VIEW: "cbt.view",
   CBT_CREATE: "cbt.create",
@@ -148,6 +149,7 @@ export const PERMISSION_CATALOG: { key: PermissionKey; module: string; descripti
   { key: PERMISSIONS.FEEDBACK_VIEW, module: "administration", description: "View feedback submitted by staff and parents" },
   { key: PERMISSIONS.FEEDBACK_MANAGE, module: "administration", description: "Mark submitted feedback as reviewed" },
   { key: PERMISSIONS.PAYMENT_GATEWAYS_MANAGE, module: "finance", description: "Connect and manage the school's own online payment gateway credentials" },
+  { key: PERMISSIONS.NOTIFICATION_PROVIDERS_MANAGE, module: "school", description: "Connect and manage the school's own email/SMS provider credentials" },
   { key: PERMISSIONS.BILLING_MANAGE, module: "billing", description: "Upgrade, downgrade, cancel or renew the school's own Schoolum subscription" },
   { key: PERMISSIONS.CBT_VIEW, module: "cbt", description: "View CBT examinations and their configuration" },
   { key: PERMISSIONS.CBT_CREATE, module: "cbt", description: "Create new CBT examinations" },
@@ -215,6 +217,8 @@ const ALL_PERMISSIONS = PERMISSION_CATALOG.map((p) => p.key);
 /// default. payment_gateways.manage gets the same owner-only treatment:
 /// these are live secret API keys that can redirect where the school's
 /// money goes, at least as sensitive as the billing relationship.
+/// notification_providers.manage gets the same treatment for the same
+/// reason — live email/SMS provider secret keys.
 export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = {
   SCHOOL_OWNER: ALL_PERMISSIONS,
   SCHOOL_ADMIN: ALL_PERMISSIONS.filter(
@@ -223,6 +227,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
       p !== PERMISSIONS.STUDENTS_CREATE &&
       p !== PERMISSIONS.BILLING_VIEW &&
       p !== PERMISSIONS.PAYMENT_GATEWAYS_MANAGE &&
+      p !== PERMISSIONS.NOTIFICATION_PROVIDERS_MANAGE &&
       p !== PERMISSIONS.BILLING_MANAGE
   ),
   PRINCIPAL: [
