@@ -1911,6 +1911,19 @@ enum NotificationType {
   FEES_OUTSTANDING
   ATTENDANCE_CONCERN
   AI_DAILY_SUMMARY
+
+  /// HR/Payroll/Library/Transport rule additions — LIBRARY_BOOKS_OVERDUE
+  /// and STAFF_INVITE_PENDING are rule-engine-generated (time-crossing
+  /// conditions, same reasoning as TEACHER_SCORES_PENDING above);
+  /// TRANSPORT_STUDENT_UNASSIGNED and the two payroll types are
+  /// event-triggered (hooked directly into transport.ts/payroll.ts, same
+  /// pattern as ASSIGNMENT_CREATED/ASSIGNMENT_GRADED), since each has one
+  /// well-defined moment it becomes true rather than needing a scan.
+  LIBRARY_BOOKS_OVERDUE
+  TRANSPORT_STUDENT_UNASSIGNED
+  PAYROLL_RUN_READY_FOR_APPROVAL
+  PAYSLIP_AVAILABLE
+  STAFF_INVITE_PENDING
 }
 
 /// Brief section 6's category system — deliberately broader than the rules

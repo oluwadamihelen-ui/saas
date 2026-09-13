@@ -1,5 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { PERMISSIONS } from "@/lib/permissions";
+import { notifyTransportStudentUnassigned } from "@/lib/services/notifications";
 
 export async function listVehicles(schoolId: string) {
   return prisma.vehicle.findMany({ where: { schoolId }, orderBy: { name: "asc" } });
@@ -67,7 +69,25 @@ export async function assignStudentToRoute(schoolId: string, studentId: string, 
 }
 
 export async function unassignStudentFromRoute(schoolId: string, assignmentId: string) {
-  const assignment = await prisma.studentTransportAssignment.findFirst({ where: { schoolId, id: assignmentId } });
+  const assignment = await prisma.studentTransportAssignment.findFirst({
+    where: { schoolId, id: assignmentId },
+    include: { student: true, route: true },
+  });
   if (!assignment) throw new Error("Assignment not found.");
-  return prisma.studentTransportAssignment.update({ where: { id: assignmentId }, data: { endedAt: new Date() } });
+
+  const updated = await prisma.studentTransportAssignment.update({ where: { id: assignmentId }, data: { endedAt: new Date() } });
+
+  const recipients = await prisma.user.findMany({
+    where: { schoolId, status: "ACTIVE", role: { rolePermissions: { some: { permission: { key: PERMISSIONS.TRANSPORT_VIEW } } } } },
+    select: { id: true },
+  });
+  await notifyTransportStudentUnassigned(
+    schoolId,
+    recipients.map((r) => r.id),
+    `${assignment.student.firstName} ${assignment.student.lastName}`,
+    assignment.route.name,
+    assignment.id
+  );
+
+  return updated;
 }

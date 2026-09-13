@@ -1,5 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { PERMISSIONS } from "@/lib/permissions";
+import { notifyPayrollRunReadyForApproval, notifyPayslipAvailable } from "@/lib/services/notifications";
 import type { Prisma, SalaryComponentType } from "@/generated/prisma/client";
 
 export async function listSalaryComponents(schoolId: string) {
@@ -118,6 +120,13 @@ export async function generatePayrollRun(schoolId: string, month: number, year: 
   });
 
   await prisma.payslip.createMany({ data: rows });
+
+  const approvers = await prisma.user.findMany({
+    where: { schoolId, status: "ACTIVE", role: { rolePermissions: { some: { permission: { key: PERMISSIONS.PAYROLL_APPROVE } } } } },
+    select: { id: true },
+  });
+  await notifyPayrollRunReadyForApproval(schoolId, approvers.map((a) => a.id), run.id, month, year);
+
   return run;
 }
 
@@ -129,8 +138,13 @@ export async function approvePayrollRun(schoolId: string, approvedById: string, 
 }
 
 export async function markPayrollRunPaid(schoolId: string, id: string) {
-  const run = await prisma.payrollRun.findFirst({ where: { schoolId, id } });
+  const run = await prisma.payrollRun.findFirst({ where: { schoolId, id }, include: { payslips: { select: { userId: true } } } });
   if (!run) throw new Error("Payroll run not found.");
   if (run.status !== "APPROVED") throw new Error("Only an approved payroll run can be marked paid.");
-  return prisma.payrollRun.update({ where: { id }, data: { status: "PAID", paidAt: new Date() } });
+
+  const updated = await prisma.payrollRun.update({ where: { id }, data: { status: "PAID", paidAt: new Date() } });
+
+  await Promise.all(run.payslips.map((p) => notifyPayslipAvailable(schoolId, p.userId, run.month, run.year, run.id)));
+
+  return updated;
 }

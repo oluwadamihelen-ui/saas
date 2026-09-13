@@ -13,6 +13,8 @@ import {
   notifyParentAttendanceConcern,
   notifyStudentAssignmentDueSoon,
   notifyLiveClassStartingSoon,
+  notifyLibraryBooksOverdueDigest,
+  notifyStaffInvitePendingDigest,
 } from "@/lib/services/notifications";
 
 /// How long a rule scan's results are trusted before the next request
@@ -34,6 +36,15 @@ const ASSIGNMENT_DUE_SOON_WINDOW_HOURS = 24;
 /// (HIGH priority) rather than just "due soon" (MEDIUM) — brief section 7:
 /// don't exaggerate urgency that isn't there yet.
 const ASSIGNMENT_DUE_TODAY_WINDOW_HOURS = 12;
+
+/// A library loan due within this many hours counts as "due tomorrow" for
+/// the overdue/due-tomorrow digest.
+const LIBRARY_DUE_TOMORROW_WINDOW_HOURS = 24;
+
+/// A PENDING StaffInvite older than this counts as "pending too long" —
+/// long enough that a genuinely slow-to-respond invitee is the likely
+/// explanation, not just "it was sent this morning."
+const STAFF_INVITE_PENDING_DAYS = 3;
 
 /// The one entry point layouts call. Wins a throttle race via a single
 /// conditional UPDATE (only one concurrent request's UPDATE actually
@@ -75,6 +86,8 @@ async function runNotificationRules(schoolId: string, now: Date): Promise<void> 
     term ? runTeacherRules(schoolId, term.id, now) : Promise.resolve(),
     term ? runParentRules(schoolId, term.id, school.currency, school.attendanceConcernThreshold, now) : Promise.resolve(),
     runStudentAssignmentRules(schoolId, now),
+    runLibraryRules(schoolId, now),
+    runStaffInvitePendingRules(schoolId, now),
   ]);
   for (const result of results) {
     if (result.status === "rejected") console.error("notification-rules: rule group failed", result.reason);
@@ -333,4 +346,38 @@ async function runStudentAssignmentRules(schoolId: string, now: Date): Promise<v
       notifyStudentAssignmentDueSoon(schoolId, student.userId!, countByStudent.get(student.id) ?? 0, dueTodayStudents.has(student.id), now)
     )
   );
+}
+
+/// Library rule: overdue and due-tomorrow loans, counted school-wide and
+/// sent as one digest to whoever holds library.view — see
+/// notifyLibraryBooksOverdueDigest's own doc comment for why this is
+/// staff-facing rather than per-borrower.
+async function runLibraryRules(schoolId: string, now: Date): Promise<void> {
+  const dueTomorrowCutoff = new Date(now.getTime() + LIBRARY_DUE_TOMORROW_WINDOW_HOURS * 60 * 60 * 1000);
+  const [overdueCount, dueTomorrowCount, recipients] = await Promise.all([
+    prisma.bookLoan.count({ where: { schoolId, status: "ISSUED", dueAt: { lt: now } } }),
+    prisma.bookLoan.count({ where: { schoolId, status: "ISSUED", dueAt: { gte: now, lte: dueTomorrowCutoff } } }),
+    prisma.user.findMany({
+      where: { schoolId, status: "ACTIVE", role: { rolePermissions: { some: { permission: { key: PERMISSIONS.LIBRARY_VIEW } } } } },
+      select: { id: true },
+    }),
+  ]);
+  if (recipients.length === 0) return;
+  await notifyLibraryBooksOverdueDigest(schoolId, recipients.map((r) => r.id), overdueCount, dueTomorrowCount, now);
+}
+
+/// HR rule: StaffInvite rows still PENDING after STAFF_INVITE_PENDING_DAYS
+/// — counted school-wide and sent as one digest to whoever holds
+/// staff.manage, the same permission the staff list itself requires.
+async function runStaffInvitePendingRules(schoolId: string, now: Date): Promise<void> {
+  const cutoff = new Date(now.getTime() - STAFF_INVITE_PENDING_DAYS * 24 * 60 * 60 * 1000);
+  const [pendingCount, recipients] = await Promise.all([
+    prisma.staffInvite.count({ where: { schoolId, status: "PENDING", createdAt: { lt: cutoff } } }),
+    prisma.user.findMany({
+      where: { schoolId, status: "ACTIVE", role: { rolePermissions: { some: { permission: { key: PERMISSIONS.STAFF_MANAGE } } } } },
+      select: { id: true },
+    }),
+  ]);
+  if (recipients.length === 0) return;
+  await notifyStaffInvitePendingDigest(schoolId, recipients.map((r) => r.id), pendingCount, now);
 }

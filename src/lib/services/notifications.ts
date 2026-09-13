@@ -1046,6 +1046,136 @@ export async function notifyStudentAssignmentDueSoon(schoolId: string, studentUs
   );
 }
 
+/// Library-manager-facing digest — never per-loan, per-borrower spam, same
+/// "smart digesting" reasoning as the birthdays digest. There's no
+/// student/parent-facing library page in this app yet, so this stays a
+/// staff-only alert to whoever holds library.view (same permission the
+/// Loans page itself requires), rather than nagging the actual borrower
+/// through a portal surface that doesn't exist. Re-derived (and re-
+/// deduped) daily.
+export async function notifyLibraryBooksOverdueDigest(
+  schoolId: string,
+  recipientUserIds: string[],
+  overdueCount: number,
+  dueTomorrowCount: number,
+  now: Date = new Date()
+) {
+  if (recipientUserIds.length === 0 || (overdueCount === 0 && dueTomorrowCount === 0)) return;
+  const parts: string[] = [];
+  if (overdueCount > 0) parts.push(`${overdueCount} book${overdueCount === 1 ? "" : "s"} overdue`);
+  if (dueTomorrowCount > 0) parts.push(`${dueTomorrowCount} due tomorrow`);
+  const dayKey = now.toISOString().slice(0, 10);
+  await notifyRecipients(schoolId, recipientUserIds, "LIBRARY_BOOKS_OVERDUE", parts.join(" and "), undefined, "/dashboard/library/loans", {
+    category: "LIBRARY",
+    priority: overdueCount > 0 ? "HIGH" : "MEDIUM",
+    actionLabel: "View loans",
+    dedupeKey: `library-overdue-digest:${dayKey}`,
+    expiresAt: endOfToday(now),
+  });
+}
+
+/// Transport-manager-facing, event-triggered the moment
+/// unassignStudentFromRoute runs (not a scan) — a genuinely one-off event,
+/// so there's exactly one notification per unassignment rather than a
+/// recurring digest. Never fired for a student simply switching routes
+/// (assignStudentToRoute's own end-the-old-assignment step doesn't call
+/// this), only for an explicit "remove from route" action.
+export async function notifyTransportStudentUnassigned(
+  schoolId: string,
+  recipientUserIds: string[],
+  studentName: string,
+  routeName: string,
+  assignmentId: string
+) {
+  if (recipientUserIds.length === 0) return;
+  await notifyRecipients(
+    schoolId,
+    recipientUserIds,
+    "TRANSPORT_STUDENT_UNASSIGNED",
+    "Student unassigned from route",
+    `${studentName} is no longer assigned to ${routeName} and may need a new route.`,
+    "/dashboard/transport",
+    {
+      category: "TRANSPORT",
+      priority: "LOW",
+      actionLabel: "View transport",
+      dedupeKey: `transport-student-unassigned:${assignmentId}`,
+    }
+  );
+}
+
+/// Payroll-approver-facing, event-triggered right after generatePayrollRun
+/// produces a fresh set of payslips — one notification per run (deduped on
+/// the run's own id, so regenerating a still-DRAFT run doesn't re-notify).
+export async function notifyPayrollRunReadyForApproval(schoolId: string, recipientUserIds: string[], runId: string, month: number, year: number) {
+  if (recipientUserIds.length === 0) return;
+  const monthName = new Date(2000, month - 1, 1).toLocaleString("en-US", { month: "long" });
+  await notifyRecipients(
+    schoolId,
+    recipientUserIds,
+    "PAYROLL_RUN_READY_FOR_APPROVAL",
+    "Payroll run ready for approval",
+    `The ${monthName} ${year} payroll run has been generated and is awaiting approval.`,
+    `/dashboard/payroll/runs/${runId}`,
+    {
+      category: "PAYROLL",
+      priority: "MEDIUM",
+      actionLabel: "Review run",
+      entityType: "PayrollRun",
+      entityId: runId,
+      dedupeKey: `payroll-run-ready:${runId}`,
+    }
+  );
+}
+
+/// Staff-facing, event-triggered when their payroll run is marked paid.
+/// There's no self-service payslip view in this app yet (the payslip
+/// detail page requires payroll.manage), so this stays informational with
+/// no link rather than pointing at a page the recipient can't open.
+export async function notifyPayslipAvailable(schoolId: string, staffUserId: string, month: number, year: number, runId: string) {
+  const monthName = new Date(2000, month - 1, 1).toLocaleString("en-US", { month: "long" });
+  await notifyRecipients(
+    schoolId,
+    [staffUserId],
+    "PAYSLIP_AVAILABLE",
+    "Payslip available",
+    `Your payslip for ${monthName} ${year} is now available. Contact HR/admin for a copy.`,
+    undefined,
+    {
+      category: "PAYROLL",
+      priority: "MEDIUM",
+      entityType: "Payslip",
+      entityId: runId,
+      dedupeKey: `payslip-available:${staffUserId}:${runId}`,
+    }
+  );
+}
+
+/// HR-facing digest — a StaffInvite that's sat PENDING for too long,
+/// scoped to whoever holds staff.manage. Re-derived (and re-deduped)
+/// weekly so a still-pending batch of invites resurfaces without nagging
+/// daily.
+export async function notifyStaffInvitePendingDigest(schoolId: string, recipientUserIds: string[], pendingCount: number, now: Date = new Date()) {
+  if (recipientUserIds.length === 0 || pendingCount === 0) return;
+  const weekKey = isoWeekKey(now);
+  const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  await notifyRecipients(
+    schoolId,
+    recipientUserIds,
+    "STAFF_INVITE_PENDING",
+    "Staff invites pending",
+    `${pendingCount} staff invite${pendingCount === 1 ? "" : "s"} have been pending for a while and may need a nudge or a resend.`,
+    "/dashboard/staff",
+    {
+      category: "HR",
+      priority: "LOW",
+      actionLabel: "View staff",
+      dedupeKey: `staff-invite-pending-digest:${weekKey}`,
+      expiresAt,
+    }
+  );
+}
+
 /// ISO 8601 week number (Monday-start, per the standard) — used only to
 /// bucket "re-check weekly" dedupeKeys, never displayed to a user, so the
 /// standard's exact edge-case behavior around year boundaries doesn't
