@@ -1,10 +1,10 @@
 import "server-only";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
-import sharp from "sharp";
 import { prisma } from "@/lib/db";
 import { getStudentAcademicHistory, computeTranscriptSummary } from "@/lib/services/transcripts";
 import { calculateAge } from "@/lib/utils";
+import { dataUrlToBuffer, toEmbeddableImageBuffer } from "@/lib/services/pdf-images";
 
 const COLORS = {
   heading: "#131a2b",
@@ -19,42 +19,6 @@ const PAGE_MARGIN = 50;
 function baseUrl() {
   if (process.env.APP_URL) return process.env.APP_URL;
   return "http://localhost:3001";
-}
-
-/// School logos and student photos are both stored as data: URLs (this app
-/// has no external object storage) — decode straight to a Buffer. Returns
-/// null for anything else (unset, or a future non-data URL scheme) so the
-/// caller can just skip drawing it.
-function dataUrlToBuffer(dataUrl: string | null | undefined): Buffer | null {
-  if (!dataUrl || !dataUrl.startsWith("data:")) return null;
-  const comma = dataUrl.indexOf(",");
-  if (comma === -1) return null;
-  try {
-    return Buffer.from(dataUrl.slice(comma + 1), "base64");
-  } catch {
-    return null;
-  }
-}
-
-/// pdfkit's doc.image() only understands raw JPEG and PNG bytes — but the
-/// logo/photo upload forms also accept WebP (both) and SVG (logo only),
-/// per their own "PNG, JPEG or WebP" / accept attributes. Uploading one of
-/// those formats used to store fine and preview fine in the browser, but
-/// silently produced an empty photo/logo box on the transcript PDF, since
-/// generateTranscriptPdfBuffer's own doc.image() try/catch swallowed
-/// pdfkit's "Unknown image format" error. Normalizing every image through
-/// sharp here (which does understand WebP/SVG/GIF/TIFF, unlike pdfkit)
-/// fixes both newly uploaded photos and ones already sitting in the
-/// database from before this fix, with no need to re-upload anything.
-export async function toEmbeddableImageBuffer(buffer: Buffer): Promise<Buffer | null> {
-  const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8;
-  const isPng = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47;
-  if (isJpeg || isPng) return buffer;
-  try {
-    return await sharp(buffer).png().toBuffer();
-  } catch {
-    return null;
-  }
 }
 
 /**

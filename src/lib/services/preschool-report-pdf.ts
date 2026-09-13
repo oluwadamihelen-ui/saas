@@ -1,12 +1,15 @@
 import PDFDocument from "pdfkit";
 import { prisma } from "@/lib/db";
 import { computePreschoolReport, listAssessmentLevels } from "@/lib/services/preschool-results";
+import { loadReportCardDesign, drawReportCardWatermark, drawReportCardFooter } from "@/lib/services/report-card-design";
 
 /**
  * Renders a Pre-School Milestone Report PDF server-side (pdfkit) — the
  * milestone system's counterpart to generateReportCardPdfBuffer. Milestones/
  * levels/comments are always recomputed live via computePreschoolReport,
- * never cached, same rule as the numerical report card.
+ * never cached, same rule as the numerical report card. Shares the same
+ * school-wide design (header/watermark/signature/footer/accent) set once in
+ * Settings → Report card design — see report-card-design.ts.
  */
 export async function generatePreschoolReportPdfBuffer(schoolId: string, studentId: string, termId: string): Promise<Buffer> {
   const school = await prisma.school.findUniqueOrThrow({ where: { id: schoolId } });
@@ -15,6 +18,7 @@ export async function generatePreschoolReportPdfBuffer(schoolId: string, student
     listAssessmentLevels(schoolId),
   ]);
   const labelByLevel = new Map(levels.map((l) => [l.level, l.label]));
+  const design = await loadReportCardDesign(school);
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 50, bufferPages: true });
@@ -23,11 +27,23 @@ export async function generatePreschoolReportPdfBuffer(schoolId: string, student
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    doc.fontSize(18).font("Helvetica-Bold").fillColor("#131a2b").text(school.name);
-    doc.fontSize(9).font("Helvetica").fillColor("#5b6478").text([school.city, school.state, school.country].filter(Boolean).join(", "));
+    drawReportCardWatermark(doc, design.watermarkBuffer);
+
+    if (design.headerBuffer) {
+      try {
+        doc.image(design.headerBuffer, 50, doc.y, { fit: [500, 90], align: "center" });
+        doc.y += 90;
+      } catch {
+        doc.fontSize(18).font("Helvetica-Bold").fillColor("#131a2b").text(school.name);
+        doc.fontSize(9).font("Helvetica").fillColor("#5b6478").text([school.city, school.state, school.country].filter(Boolean).join(", "));
+      }
+    } else {
+      doc.fontSize(18).font("Helvetica-Bold").fillColor("#131a2b").text(school.name);
+      doc.fontSize(9).font("Helvetica").fillColor("#5b6478").text([school.city, school.state, school.country].filter(Boolean).join(", "));
+    }
     doc.moveDown(1);
 
-    doc.fontSize(14).font("Helvetica-Bold").fillColor("#1a6fba").text("Developmental Milestone Report");
+    doc.fontSize(14).font("Helvetica-Bold").fillColor(design.accentColor).text("Developmental Milestone Report");
     doc.fontSize(9).font("Helvetica").fillColor("#5b6478");
     doc.text(`Term: ${term?.name ?? "—"}`);
     doc.moveDown(1);
@@ -42,7 +58,10 @@ export async function generatePreschoolReportPdfBuffer(schoolId: string, student
     const right = 550;
 
     function ensureSpace(needed: number) {
-      if (doc.y + needed > doc.page.height - doc.page.margins.bottom) doc.addPage();
+      if (doc.y + needed > doc.page.height - doc.page.margins.bottom) {
+        doc.addPage();
+        drawReportCardWatermark(doc, design.watermarkBuffer);
+      }
     }
 
     for (const subject of subjects) {
@@ -59,7 +78,7 @@ export async function generatePreschoolReportPdfBuffer(schoolId: string, student
           ensureSpace(40);
           const y = doc.y;
           doc.fontSize(9).font("Helvetica-Bold").fillColor("#131a2b").text(m.title, left, y, { width: right - left - 150 });
-          doc.font("Helvetica").fillColor("#1a6fba").text(labelByLevel.get(m.level) ?? m.level, right - 150, y, { width: 150, align: "right" });
+          doc.font("Helvetica").fillColor(design.accentColor).text(labelByLevel.get(m.level) ?? m.level, right - 150, y, { width: 150, align: "right" });
           if (m.comment) {
             doc.fontSize(8).font("Helvetica").fillColor("#5b6478").text(m.comment, left, doc.y, { width: right - left });
           }
@@ -99,6 +118,24 @@ export async function generatePreschoolReportPdfBuffer(schoolId: string, student
       doc.fontSize(9).font("Helvetica-Bold").fillColor("#131a2b").text("Head of school's comment", left, doc.y);
       doc.moveDown(0.2);
       doc.font("Helvetica").fillColor("#5b6478").text(report.principalComment, left, doc.y, { width: right - left });
+      doc.moveDown(1);
+    }
+
+    if (design.signatureBuffer) {
+      ensureSpace(60);
+      const sigY = doc.y;
+      try {
+        doc.image(design.signatureBuffer, left, sigY, { fit: [140, 50] });
+        doc.fontSize(8).font("Helvetica").fillColor("#5b6478").text("Authorized signature", left, sigY + 54);
+      } catch {
+        // Corrupt/unsupported image — skip the signature block silently.
+      }
+    }
+
+    const range = doc.bufferedPageRange();
+    for (let i = range.start; i < range.start + range.count; i++) {
+      doc.switchToPage(i);
+      drawReportCardFooter(doc, design.footerText, "#5b6478");
     }
 
     doc.end();

@@ -137,6 +137,21 @@ model School {
   /// pages for this school only; null keeps the default Schoolum blue.
   brandColor String?
 
+  /// Report card design. All four are optional and independent — a school
+  /// can set any subset. headerUrl is a full-width letterhead image drawn
+  /// in place of the plain "school name + address" text block; when null,
+  /// report cards fall back to that plain text header exactly as before
+  /// this feature existed. watermarkUrl is drawn faint and centered behind
+  /// the page content. signatureUrl is drawn near the principal's comment
+  /// as an authorized signature/stamp. footerText is a free-text line
+  /// (motto, next-term date, accreditation note) shown at the bottom of
+  /// every report card. Same data: URL storage as logoUrl above — applies
+  /// to both the numerical report card and the pre-school milestone report.
+  reportCardHeaderUrl    String?
+  reportCardWatermarkUrl String?
+  reportCardSignatureUrl String?
+  reportCardFooterText   String?
+
   /// Which connected gateway "Pay online" uses for this school. Null (the
   /// default for every school until an owner connects one) falls back to
   /// the built-in mock/simulated gateway, so the pay -> receipt flow keeps

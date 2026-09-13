@@ -2,7 +2,8 @@ import { describe, it, expect, afterAll } from "vitest";
 import sharp from "sharp";
 import { prisma } from "@/lib/db";
 import { generateTranscript } from "@/lib/services/transcripts";
-import { generateTranscriptPdfBuffer, toEmbeddableImageBuffer } from "@/lib/services/transcript-pdf";
+import { generateTranscriptPdfBuffer } from "@/lib/services/transcript-pdf";
+import { toEmbeddableImageBuffer } from "@/lib/services/pdf-images";
 import { createTestSchool, cleanupTestSchools } from "../helpers/factories";
 
 afterAll(cleanupTestSchools);

@@ -9,6 +9,7 @@ import { EMAIL_PROVIDERS, SMS_PROVIDERS } from "@/lib/notification-delivery/regi
 import { prisma } from "@/lib/db";
 import { SettingsForm } from "./settings-form";
 import { BrandingForm } from "./branding-form";
+import { ReportCardDesignForm } from "./report-card-design-form";
 import { GatewayForm } from "./payment-gateway-form";
 import { ActiveProviderForm } from "./active-provider-form";
 import { MyProfileForm } from "./my-profile-form";
@@ -92,6 +93,26 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent>
           <BrandingForm school={{ name: school.name, logoUrl: school.logoUrl, brandColor: school.brandColor }} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Report card design</CardTitle>
+          <CardDescription>
+            Upload a header, watermark and signature once and every report card a parent or student downloads from
+            this school uses them automatically — no need to redesign anything per term.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ReportCardDesignForm
+            school={{
+              reportCardHeaderUrl: school.reportCardHeaderUrl,
+              reportCardWatermarkUrl: school.reportCardWatermarkUrl,
+              reportCardSignatureUrl: school.reportCardSignatureUrl,
+              reportCardFooterText: school.reportCardFooterText,
+            }}
+          />
         </CardContent>
       </Card>
 

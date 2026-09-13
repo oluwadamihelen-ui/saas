@@ -27,3 +27,18 @@ export async function fileToLogoDataUrl(file: File): Promise<string> {
 export async function fileToStudentPhotoDataUrl(file: File): Promise<string> {
   return fileToDataUrl(file, 2 * 1024 * 1024, "Photo");
 }
+
+/// Report card design uploads — same data: URL storage as the school logo.
+/// The header is a full-width letterhead so it gets a larger allowance than
+/// the small logo/signature crops.
+export async function fileToReportCardHeaderDataUrl(file: File): Promise<string> {
+  return fileToDataUrl(file, 3 * 1024 * 1024, "Header image");
+}
+
+export async function fileToReportCardWatermarkDataUrl(file: File): Promise<string> {
+  return fileToDataUrl(file, 2 * 1024 * 1024, "Watermark image");
+}
+
+export async function fileToReportCardSignatureDataUrl(file: File): Promise<string> {
+  return fileToDataUrl(file, 1 * 1024 * 1024, "Signature image");
+}
