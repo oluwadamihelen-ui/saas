@@ -173,6 +173,7 @@ type EngulfZone
     int    collectBar       = na
     float  collectPrice     = na
     float  collectDepth     = na
+    int    failBar          = na
     int    interactions     = 0
     float  qmLevel          = na
     int    fmStartBar       = na
@@ -665,11 +666,15 @@ if barstate.isconfirmed
                 else if touch and wasFresh
                     ez.status := "TOUCHED"
 
-                // failure (decisive opposite move through the zone)
+                // failure (decisive opposite move through the zone) -- guarded so this
+                // only fires ONCE, on the bar it transitions into FAILED, rather than
+                // re-firing (and re-creating labels/opposite zones) on every later bar
+                // the close still happens to sit beyond the failure threshold.
                 float zh = ez.top - ez.bottom
                 bool failedNow = ez.dir == "BULL" ? close < (ez.bottom - i_failureZoneMult * zh) : close > (ez.top + i_failureZoneMult * zh)
-                if failedNow
+                if failedNow and ez.status != "FAILED"
                     ez.status := "FAILED"
+                    ez.failBar := bar_index
                     if ez.dir == "BULL"
                         sigFailedBull := true
                     else
@@ -729,8 +734,14 @@ if barstate.isconfirmed and i_showBrokenZones
             SRZone z = array.get(resZones, i)
             if na(z.bx)
                 z.bx := box.new(z.createdBar, z.top, bar_index, z.bottom, border_color = i_neutralColor, bgcolor = f_zoneBoxColor("R"), extend = extend.none)
-            else
-                box.set_right(z.bx, z.broken ? z.breakBar : bar_index)
+            else if not z.broken
+                box.set_right(z.bx, bar_index)
+            else if na(z.lb)
+                // finalize the box's right edge exactly once, at the bar it breaks
+                // (right == bar_index here, zero distance) -- never reset it again on
+                // later bars, or the fixed old breakBar eventually becomes "too far"
+                // from a much later current bar_index (RE10026).
+                box.set_right(z.bx, z.breakBar)
             if z.broken and na(z.lb)
                 z.lb := label.new(z.breakBar, z.top, "R", style = label.style_label_down, color = color.new(color.red, 60), textcolor = color.white, size = size.tiny)
             array.set(resZones, i, z)
@@ -739,8 +750,10 @@ if barstate.isconfirmed and i_showBrokenZones
             SRZone z = array.get(supZones, i)
             if na(z.bx)
                 z.bx := box.new(z.createdBar, z.top, bar_index, z.bottom, border_color = i_neutralColor, bgcolor = f_zoneBoxColor("S"), extend = extend.none)
-            else
-                box.set_right(z.bx, z.broken ? z.breakBar : bar_index)
+            else if not z.broken
+                box.set_right(z.bx, bar_index)
+            else if na(z.lb)
+                box.set_right(z.bx, z.breakBar)
             if z.broken and na(z.lb)
                 z.lb := label.new(z.breakBar, z.bottom, "S", style = label.style_label_up, color = color.new(color.teal, 60), textcolor = color.white, size = size.tiny)
             array.set(supZones, i, z)
@@ -763,10 +776,12 @@ if barstate.isconfirmed and i_showEngulfedZones
                 else
                     box.set_right(ez.bx, bar_index)
                     box.set_bgcolor(ez.bx, bxColor)
-                if ez.status == "COLLECTED" and not na(ez.collectBar)
+                // gated to the exact event bar only -- these must fire once, not on
+                // every subsequent bar the zone happens to still read COLLECTED/FAILED
+                if ez.status == "COLLECTED" and ez.collectBar == bar_index
                     label.new(ez.collectBar, ez.dir == "BULL" ? ez.bottom : ez.top, "COLLECTED", style = label.style_label_down, color = color.new(color.orange, 20), textcolor = color.white, size = size.tiny)
-                if ez.status == "FAILED"
-                    label.new(bar_index, ez.dir == "BULL" ? ez.bottom : ez.top, "FAILED", style = label.style_label_down, color = color.new(color.gray, 20), textcolor = color.white, size = size.tiny)
+                if ez.status == "FAILED" and ez.failBar == bar_index
+                    label.new(ez.failBar, ez.dir == "BULL" ? ez.bottom : ez.top, "FAILED", style = label.style_label_down, color = color.new(color.gray, 20), textcolor = color.white, size = size.tiny)
             array.set(engulfZones, i, ez)
 
 if barstate.isconfirmed and i_showFirstMove and array.size(engulfZones) > 0
