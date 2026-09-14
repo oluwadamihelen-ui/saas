@@ -1329,17 +1329,29 @@ async function main() {
     skipDuplicates: true,
   });
 
-  let superAdminRole = await prisma.role.findFirst({ where: { schoolId: null, key: "SUPER_ADMIN" } });
-  if (!superAdminRole) {
-    superAdminRole = await prisma.role.create({
-      data: { schoolId: null, key: "SUPER_ADMIN", name: "Super Admin", isSystem: true },
+  // SUPER_ADMIN is a platform-wide role with no tenant scoping — it sees
+  // every School and Buyer in the database, not just this seed's own.
+  // Creating a second one is only ever safe against a genuinely empty
+  // database (a fresh local dev setup); against any database that already
+  // has a real Super Admin (i.e. any real deployment), it would hand out
+  // a full-access account under a publicly-known password. So this only
+  // ever runs once, on the very first seed of a brand-new database — every
+  // later run (including every re-seed of the demo school itself) finds
+  // the existing role/user and skips straight past it.
+  const existingSuperAdminRole = await prisma.role.findFirst({ where: { schoolId: null, key: "SUPER_ADMIN" } });
+  const existingSuperAdminUser = existingSuperAdminRole
+    ? await prisma.user.findFirst({ where: { roleId: existingSuperAdminRole.id } })
+    : null;
+  let seededSuperAdmin = false;
+  if (!existingSuperAdminUser) {
+    const superAdminRole =
+      existingSuperAdminRole ??
+      (await prisma.role.create({ data: { schoolId: null, key: "SUPER_ADMIN", name: "Super Admin", isSystem: true } }));
+    await prisma.user.create({
+      data: { schoolId: null, roleId: superAdminRole.id, email: "superadmin@schoolum.demo", name: "Schoolum Platform Admin", passwordHash },
     });
+    seededSuperAdmin = true;
   }
-  await prisma.user.upsert({
-    where: { email: "superadmin@schoolum.demo" },
-    create: { schoolId: null, roleId: superAdminRole.id, email: "superadmin@schoolum.demo", name: "Schoolum Platform Admin", passwordHash },
-    update: {},
-  });
 
   // A second, smaller demo school — a brand-new signup still inside its
   // 14-day trial on Starter, so the platform admin/billing dashboards and
@@ -1417,8 +1429,12 @@ async function main() {
   console.log(`  PARENT           ${parentUser.email}`);
   console.log(`  STUDENT          ${studentUser.email}`);
   console.log(`\nA "Numeracy Practice Test" CBT exam is live and ready — log in as the student above and visit /portal/student/cbt.`);
-  console.log(`\nPlatform admin (same password: ${DEMO_PASSWORD}):`);
-  console.log(`  SUPER_ADMIN      superadmin@schoolum.demo`);
+  if (seededSuperAdmin) {
+    console.log(`\nPlatform admin (same password: ${DEMO_PASSWORD}):`);
+    console.log(`  SUPER_ADMIN      superadmin@schoolum.demo`);
+  } else {
+    console.log(`\nA Super Admin already exists in this database — skipped creating a demo one (never safe against a database that may hold real tenants).`);
+  }
   console.log(`\nSecond demo school "${trialSchoolName}" (Starter plan, 14-day trial, same password: ${DEMO_PASSWORD}):`);
   console.log(`  SCHOOL_OWNER     ${trialOwner.email}`);
   console.log(`\nPre-School Results demo: class "Nursery 1" (assessmentMode=MILESTONE), subject "English Language", student "Abayo Adewale" (${abayoAdmissionNumber}) with 4 example milestone assessments. Visit /dashboard/results/preschool.`);
