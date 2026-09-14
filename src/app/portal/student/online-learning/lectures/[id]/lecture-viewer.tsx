@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProgressBar } from "@/components/online-learning/progress-bar";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { markLectureOpenedAction, updateVideoProgressAction, markLectureCompleteManuallyAction } from "../../actions";
 
 interface Resource {
@@ -29,7 +30,7 @@ export function LectureViewer({
   initialStatus: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
   initialPositionSeconds: number;
 }) {
-  const [, startTransition] = useTransition();
+  const [, run] = useSafeAction();
   const [status, setStatus] = useState(initialStatus);
   const [watchPercent, setWatchPercent] = useState(initialStatus === "COMPLETED" ? 100 : 0);
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
@@ -38,9 +39,7 @@ export function LectureViewer({
   const primaryMedia = resources.find((r) => r.type === "VIDEO" || r.type === "AUDIO");
 
   useEffect(() => {
-    startTransition(() => {
-      markLectureOpenedAction(lectureId);
-    });
+    run(() => markLectureOpenedAction(lectureId));
     // Only run once on mount — this records "the student opened this
     // lecture", not something that should re-fire on every re-render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -57,9 +56,7 @@ export function LectureViewer({
     const now = Date.now();
     if (!force && now - lastSavedRef.current < PROGRESS_SAVE_INTERVAL_MS) return;
     lastSavedRef.current = now;
-    startTransition(() => {
-      updateVideoProgressAction(lectureId, el.currentTime, el.duration);
-    });
+    run(() => updateVideoProgressAction(lectureId, el.currentTime, el.duration));
   }
 
   function handleLoadedMetadata() {
@@ -70,9 +67,7 @@ export function LectureViewer({
   }
 
   function markComplete() {
-    startTransition(() => {
-      markLectureCompleteManuallyAction(lectureId);
-    });
+    run(() => markLectureCompleteManuallyAction(lectureId));
     setStatus("COMPLETED");
   }
 

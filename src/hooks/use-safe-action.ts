@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { unstable_rethrow } from "next/navigation";
 import { toast } from "sonner";
 
 /// For a button that calls a fire-and-forget Server Action directly (one
@@ -13,6 +14,12 @@ import { toast } from "sonner";
 /// page couldn't load" screen instead of telling the user why. This is the
 /// same fix as withAuthErrors (src/lib/auth/require.ts) for that call
 /// shape: catch it here and show it as a toast instead.
+///
+/// Several wrapped actions redirect() on success (e.g. startLiveClassAction
+/// sends the caller to /classroom/[id]) — redirect()/notFound() work by
+/// throwing a special Next-internal error that a normal try/catch has no
+/// business swallowing. unstable_rethrow lets those pass through untouched
+/// so the navigation still happens; only genuine errors reach the toast.
 export function useSafeAction() {
   const [isPending, startTransition] = useTransition();
 
@@ -21,6 +28,7 @@ export function useSafeAction() {
       try {
         await action();
       } catch (error) {
+        unstable_rethrow(error);
         toast.error(error instanceof Error ? error.message : "Something went wrong. Please try again.");
       }
     });

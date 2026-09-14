@@ -1,29 +1,29 @@
 "use client";
 
-import { useTransition } from "react";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { publishLectureAction, archiveLectureAction, unpublishLectureAction } from "../actions";
 
 export function PublishButton({ lectureId }: { lectureId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   return (
-    <Button size="sm" disabled={isPending} onClick={() => startTransition(() => publishLectureAction(lectureId))}>
+    <Button size="sm" disabled={isPending} onClick={() => run(() => publishLectureAction(lectureId))}>
       {isPending ? "Publishing..." : "Publish"}
     </Button>
   );
 }
 
 export function UnpublishButton({ lectureId }: { lectureId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   return (
-    <Button size="sm" variant="secondary" disabled={isPending} onClick={() => startTransition(() => unpublishLectureAction(lectureId))}>
+    <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => unpublishLectureAction(lectureId))}>
       {isPending ? "Moving..." : "Move to draft"}
     </Button>
   );
 }
 
 export function ArchiveButton({ lectureId }: { lectureId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   return (
     <Button
       size="sm"
@@ -31,7 +31,7 @@ export function ArchiveButton({ lectureId }: { lectureId: string }) {
       disabled={isPending}
       onClick={() => {
         if (confirm("Archive this lecture? Students will no longer be able to see it.")) {
-          startTransition(() => archiveLectureAction(lectureId));
+          run(() => archiveLectureAction(lectureId));
         }
       }}
     >
