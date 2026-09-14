@@ -290,6 +290,15 @@ f_pruneZones(array<SRZone> zones, maxAge, maxCount) =>
         array.remove(zones, oldestIdx)
 
 f_upsertZone(array<SRZone> zones, float price, string kind, int pivotBar, float halfWidth, float mergeTol, float minDist) =>
+    // Defensive guard (belt-and-suspenders on top of the call-site check): a zone
+    // with an na top/bottom eventually reaches box.new() and throws a runtime error
+    // that silently halts the whole script, so refuse to create/merge one at all.
+    // (No `else` branch on purpose -- callers never use this function's return
+    // value, so there's no risk of a type mismatch between branches.)
+    if not na(price) and not na(halfWidth) and not na(mergeTol) and not na(minDist)
+        f_upsertZoneImpl(zones, price, kind, pivotBar, halfWidth, mergeTol, minDist)
+
+f_upsertZoneImpl(array<SRZone> zones, float price, string kind, int pivotBar, float halfWidth, float mergeTol, float minDist) =>
     float top = price + halfWidth
     float bottom = price - halfWidth
     int mergedIdx = -1
@@ -492,16 +501,22 @@ if barstate.isconfirmed
     float minDist   = i_minZoneDistMult * atrVal
 
     // ---- 1. structural pivot -> zone registration ----
+    // Guarded on `not na(atrVal)`: ATR(atrLen) is na for the first atrLen bars, and a
+    // pivot can confirm before that warm-up finishes (pivotLen can be smaller than
+    // atrLen). Registering a zone while halfWidth/mergeTol/minDist are na would give
+    // that SRZone permanently-na top/bottom (na propagates through math.max/min), and
+    // feeding na coordinates into box.new() throws a runtime error that halts the
+    // entire script from that bar forward -- which looks like "nothing ever draws".
     float ph = ta.pivothigh(i_pivotLen, i_pivotLen)
     float pl = ta.pivotlow(i_pivotLen, i_pivotLen)
     int pivotBarIdx = bar_index - i_pivotLen
 
-    if not na(ph)
+    if not na(ph) and not na(atrVal)
         f_upsertZone(resZones, ph, "R", pivotBarIdx, halfWidth, mergeTol, minDist)
         lastPivotHighPrice := ph
         lastPivotHighBar := pivotBarIdx
 
-    if not na(pl)
+    if not na(pl) and not na(atrVal)
         f_upsertZone(supZones, pl, "S", pivotBarIdx, halfWidth, mergeTol, minDist)
         lastPivotLowPrice := pl
         lastPivotLowBar := pivotBarIdx
