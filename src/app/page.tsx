@@ -13,6 +13,14 @@ import { WhySchoolum } from "@/components/marketing/why-schoolum";
 import { SecuritySection } from "@/components/marketing/security-section";
 import { FinalCta } from "@/components/marketing/final-cta";
 
+// Vercel's edge cache for a statically prerendered page is keyed by
+// pathname only, not by Host — a cache HIT is served straight from the
+// CDN without ever running middleware.ts, so a prerendered "/" would
+// permanently serve schoolum.io's own homepage to demo.schoolum.io too,
+// regardless of the hostname-based rewrite there. Forcing this one route
+// dynamic keeps every request live long enough for middleware to run.
+export const dynamic = "force-dynamic";
+
 export default function HomePage() {
   return (
     <div className="flex min-h-screen flex-col overflow-x-clip">
