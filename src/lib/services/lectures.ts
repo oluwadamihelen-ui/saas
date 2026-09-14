@@ -363,9 +363,16 @@ export interface StudentProgressRow {
 /// lecture's own classArm) and left-joins progress, so a student who never
 /// opened the lecture still shows up as NOT_STARTED rather than being
 /// invisible.
+/// Thrown only for the "no such lecture" case — kept distinct from any
+/// other error this function can raise so a caller can 404 on this one
+/// specifically (matching the deliberate existence-hiding 404 this app
+/// uses for cross-tenant/cross-teacher IDs, see ARCHITECTURE.md) without
+/// also masking a genuine bug behind an identical, misleading 404.
+export class LectureNotFoundError extends Error {}
+
 export async function getLectureProgressForTeacher(schoolId: string, teacherId: string, lectureId: string) {
   const lecture = await prisma.lecture.findFirst({ where: { schoolId, teacherId, id: lectureId } });
-  if (!lecture) throw new Error("Lecture not found.");
+  if (!lecture) throw new LectureNotFoundError("Lecture not found.");
 
   const [students, progressRows] = await Promise.all([
     prisma.student.findMany({

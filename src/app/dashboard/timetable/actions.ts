@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { createTimetableSlot, deleteTimetableSlot } from "@/lib/services/timetable";
 import { logAudit } from "@/lib/audit";
@@ -23,7 +23,7 @@ export interface SlotFormState {
   message?: string;
 }
 
-export async function createSlotAction(_prev: SlotFormState, formData: FormData): Promise<SlotFormState> {
+export const createSlotAction = withAuthErrors(async function createSlotAction(_prev: SlotFormState, formData: FormData): Promise<SlotFormState> {
   const user = await requirePermission(PERMISSIONS.TIMETABLE_MANAGE);
 
   const parsed = schema.safeParse({
@@ -53,7 +53,7 @@ export async function createSlotAction(_prev: SlotFormState, formData: FormData)
 
   revalidatePath("/dashboard/timetable");
   return { status: "success" };
-}
+});
 
 export async function deleteSlotAction(id: string) {
   const user = await requirePermission(PERMISSIONS.TIMETABLE_MANAGE);

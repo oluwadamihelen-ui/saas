@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import {
@@ -23,7 +23,7 @@ export interface ScoreGridState {
   message?: string;
 }
 
-export async function saveScoreGridAction(
+export const saveScoreGridAction = withAuthErrors(async function saveScoreGridAction(
   classArmId: string,
   subjectId: string,
   termId: string,
@@ -72,7 +72,7 @@ export async function saveScoreGridAction(
 
   revalidatePath("/dashboard/results");
   return { status: "success", message: `Saved ${entries.length} score${entries.length === 1 ? "" : "s"}.` };
-}
+});
 
 const gradeBandSchema = z.object({
   grade: z.string().trim().min(1).max(10),
@@ -86,7 +86,7 @@ export interface GradingConfigState {
   message?: string;
 }
 
-export async function createGradeBandAction(_prev: GradingConfigState, formData: FormData): Promise<GradingConfigState> {
+export const createGradeBandAction = withAuthErrors(async function createGradeBandAction(_prev: GradingConfigState, formData: FormData): Promise<GradingConfigState> {
   const user = await requirePermission(PERMISSIONS.GRADING_MANAGE);
   const parsed = gradeBandSchema.safeParse({
     grade: formData.get("grade"),
@@ -99,7 +99,7 @@ export async function createGradeBandAction(_prev: GradingConfigState, formData:
   await createGradeBand(user.schoolId, parsed.data);
   revalidatePath("/dashboard/results/grading");
   return { status: "success" };
-}
+});
 
 export async function deleteGradeBandAction(id: string) {
   const user = await requirePermission(PERMISSIONS.GRADING_MANAGE);
@@ -112,7 +112,7 @@ const componentSchema = z.object({
   maxScore: z.coerce.number().int().min(1).max(1000),
 });
 
-export async function createComponentAction(_prev: GradingConfigState, formData: FormData): Promise<GradingConfigState> {
+export const createComponentAction = withAuthErrors(async function createComponentAction(_prev: GradingConfigState, formData: FormData): Promise<GradingConfigState> {
   const user = await requirePermission(PERMISSIONS.GRADING_MANAGE);
   const parsed = componentSchema.safeParse({ name: formData.get("name"), maxScore: formData.get("maxScore") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Invalid component." };
@@ -120,7 +120,7 @@ export async function createComponentAction(_prev: GradingConfigState, formData:
   await createAssessmentComponent(user.schoolId, parsed.data);
   revalidatePath("/dashboard/results/grading");
   return { status: "success" };
-}
+});
 
 export async function deleteComponentAction(id: string) {
   const user = await requirePermission(PERMISSIONS.GRADING_MANAGE);
@@ -133,7 +133,7 @@ const commentSchema = z.object({
   principalComment: z.string().trim().max(2000).optional().or(z.literal("")),
 });
 
-export async function updateCommentsAction(
+export const updateCommentsAction = withAuthErrors(async function updateCommentsAction(
   studentId: string,
   termId: string,
   _prev: GradingConfigState,
@@ -158,7 +158,7 @@ export async function updateCommentsAction(
   });
   revalidatePath(`/dashboard/results/report-cards/${studentId}`);
   return { status: "success", message: "Saved." };
-}
+});
 
 export async function approveReportCardAction(studentId: string, termId: string) {
   const user = await requirePermission(PERMISSIONS.RESULTS_APPROVE);

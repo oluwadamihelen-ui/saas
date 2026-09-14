@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { createStaffDirect } from "@/lib/services/staff";
 
@@ -29,7 +29,7 @@ export interface DirectCreateState {
 /// STAFF_INVITE permission the existing "invite via link" flow already
 /// uses: both are "add a staff member" actions, just with a different
 /// activation path, not two different privileges.
-export async function createDirectStaffAction(_prev: DirectCreateState, formData: FormData): Promise<DirectCreateState> {
+export const createDirectStaffAction = withAuthErrors(async function createDirectStaffAction(_prev: DirectCreateState, formData: FormData): Promise<DirectCreateState> {
   const user = await requirePermission(PERMISSIONS.STAFF_INVITE);
 
   const parsed = schema.safeParse({
@@ -70,4 +70,4 @@ export async function createDirectStaffAction(_prev: DirectCreateState, formData
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not create the account." };
   }
-}
+});

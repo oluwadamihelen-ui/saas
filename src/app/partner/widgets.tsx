@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useActionToast } from "@/hooks/use-action-toast";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { requestWithdrawalAction, cancelWithdrawalAction, type PartnerActionState } from "./actions";
 
 const initialState: PartnerActionState = { status: "idle" };
@@ -22,7 +23,7 @@ export function RequestWithdrawalButton({ disabled }: { disabled: boolean }) {
 }
 
 export function CancelWithdrawalButton({ withdrawalId }: { withdrawalId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
 
   return (
@@ -31,7 +32,7 @@ export function CancelWithdrawalButton({ withdrawalId }: { withdrawalId: string 
       variant="ghost"
       disabled={isPending}
       onClick={() =>
-        startTransition(async () => {
+        run(async () => {
           await cancelWithdrawalAction(withdrawalId);
           router.refresh();
         })

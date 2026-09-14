@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { generateTranscriptAction } from "./actions";
 
 export function GenerateButton({ studentId, hasExisting }: { studentId: string; hasExisting: boolean }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
@@ -16,7 +17,7 @@ export function GenerateButton({ studentId, hasExisting }: { studentId: string; 
         variant={hasExisting ? "secondary" : "primary"}
         disabled={isPending}
         onClick={() =>
-          startTransition(async () => {
+          run(async () => {
             const result = await generateTranscriptAction(studentId);
             setError(result.error);
             if (!result.error) router.refresh();

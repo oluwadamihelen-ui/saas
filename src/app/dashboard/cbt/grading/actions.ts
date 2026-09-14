@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { gradeAnswer, getAnswerExamSubjectId } from "@/lib/services/cbt-grading";
@@ -23,7 +23,7 @@ export interface GradeAnswerState {
   message?: string;
 }
 
-export async function gradeAnswerAction(
+export const gradeAnswerAction = withAuthErrors(async function gradeAnswerAction(
   answerId: string,
   _prev: GradeAnswerState,
   formData: FormData
@@ -65,7 +65,7 @@ export async function gradeAnswerAction(
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "cbt_answer.graded", resourceType: "CBTAnswer", resourceId: answerId });
   revalidatePath("/dashboard/cbt/grading");
   redirect("/dashboard/cbt/grading");
-}
+});
 
 export interface GetGradingSuggestionResult {
   status: "ok" | "error";
@@ -73,7 +73,7 @@ export interface GetGradingSuggestionResult {
   message?: string;
 }
 
-export async function getGradingSuggestionAction(answerId: string): Promise<GetGradingSuggestionResult> {
+export const getGradingSuggestionAction = withAuthErrors(async function getGradingSuggestionAction(answerId: string): Promise<GetGradingSuggestionResult> {
   const user = await requirePermission(PERMISSIONS.CBT_GRADE);
   const perms = await getUserPermissions(user.id);
   try {
@@ -84,4 +84,4 @@ export async function getGradingSuggestionAction(answerId: string): Promise<GetG
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not get a suggestion." };
   }
-}
+});

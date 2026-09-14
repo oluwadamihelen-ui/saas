@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requireSchoolUser } from "@/lib/auth/require";
+import { requireSchoolUser, withAuthErrors } from "@/lib/auth/require";
 import { startConversation, replyToConversation } from "@/lib/services/messages";
 
 const startSchema = z.object({
@@ -17,7 +17,7 @@ export interface MessageFormState {
   message?: string;
 }
 
-export async function startConversationAction(_prev: MessageFormState, formData: FormData): Promise<MessageFormState> {
+export const startConversationAction = withAuthErrors(async function startConversationAction(_prev: MessageFormState, formData: FormData): Promise<MessageFormState> {
   const user = await requireSchoolUser();
 
   const parsed = startSchema.safeParse({
@@ -37,11 +37,11 @@ export async function startConversationAction(_prev: MessageFormState, formData:
 
   revalidatePath("/portal/parent/messages");
   redirect(`/portal/parent/messages/${conversation.id}`);
-}
+});
 
 const replySchema = z.object({ body: z.string().trim().min(1, "Message can't be empty").max(4000) });
 
-export async function replyAsParentAction(conversationId: string, _prev: MessageFormState, formData: FormData): Promise<MessageFormState> {
+export const replyAsParentAction = withAuthErrors(async function replyAsParentAction(conversationId: string, _prev: MessageFormState, formData: FormData): Promise<MessageFormState> {
   const user = await requireSchoolUser();
 
   const parsed = replySchema.safeParse({ body: formData.get("body") });
@@ -52,4 +52,4 @@ export async function replyAsParentAction(conversationId: string, _prev: Message
   await replyToConversation(user.schoolId, user.id, conversationId, parsed.data.body);
   revalidatePath(`/portal/parent/messages/${conversationId}`);
   return { status: "success" };
-}
+});

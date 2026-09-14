@@ -1,6 +1,6 @@
 "use server";
 
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { getStudentPerformanceAnalysis } from "@/lib/services/performance/analysis";
@@ -18,7 +18,7 @@ export interface GenerateAiSummaryState {
 /// itself already passed — never trusts that a client that could see the
 /// page is still entitled to act, the same "belt and suspenders" pattern
 /// every other server action in this app follows.
-export async function generateAiSummaryAction(studentId: string, termId?: string): Promise<GenerateAiSummaryState> {
+export const generateAiSummaryAction = withAuthErrors(async function generateAiSummaryAction(studentId: string, termId?: string): Promise<GenerateAiSummaryState> {
   const user = await requirePermission(PERMISSIONS.RESULTS_VIEW);
   const perms = await getUserPermissions(user.id);
 
@@ -35,4 +35,4 @@ export async function generateAiSummaryAction(studentId: string, termId?: string
     }
     return { status: "error", message: error instanceof Error ? error.message : "Could not generate an AI summary." };
   }
-}
+});

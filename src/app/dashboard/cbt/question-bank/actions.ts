@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import {
@@ -108,7 +108,7 @@ function buildQuestionInput(formData: FormData): QuestionInput {
   };
 }
 
-export async function createQuestionAction(
+export const createQuestionAction = withAuthErrors(async function createQuestionAction(
   _prev: QuestionFormState,
   formData: FormData
 ): Promise<QuestionFormState> {
@@ -146,9 +146,9 @@ export async function createQuestionAction(
 
   revalidatePath("/dashboard/cbt/question-bank");
   redirect("/dashboard/cbt/question-bank");
-}
+});
 
-export async function updateQuestionAction(
+export const updateQuestionAction = withAuthErrors(async function updateQuestionAction(
   questionId: string,
   _prev: QuestionFormState,
   formData: FormData
@@ -190,7 +190,7 @@ export async function updateQuestionAction(
   revalidatePath("/dashboard/cbt/question-bank");
   revalidatePath(`/dashboard/cbt/question-bank/${questionId}/edit`);
   redirect("/dashboard/cbt/question-bank");
-}
+});
 
 export async function archiveQuestionAction(questionId: string) {
   const user = await requirePermission(PERMISSIONS.CBT_MANAGE_QUESTION_BANK);
@@ -230,7 +230,7 @@ export interface ImportPreviewState {
   fileName?: string;
 }
 
-export async function previewImportAction(
+export const previewImportAction = withAuthErrors(async function previewImportAction(
   _prev: ImportPreviewState,
   formData: FormData
 ): Promise<ImportPreviewState> {
@@ -263,7 +263,7 @@ export async function previewImportAction(
     validRowsJson: JSON.stringify(validRows),
     fileName: file.name,
   };
-}
+});
 
 export interface ImportConfirmState {
   status: "idle" | "error" | "done";
@@ -271,7 +271,7 @@ export interface ImportConfirmState {
   created?: number;
 }
 
-export async function confirmImportAction(
+export const confirmImportAction = withAuthErrors(async function confirmImportAction(
   _prev: ImportConfirmState,
   formData: FormData
 ): Promise<ImportConfirmState> {
@@ -329,7 +329,7 @@ export async function confirmImportAction(
   revalidatePath("/dashboard/cbt/question-bank");
   revalidatePath("/dashboard/data/history");
   return { status: "done", created };
-}
+});
 
 export async function approveQuestionAction(questionId: string) {
   const user = await requirePermission(PERMISSIONS.CBT_MANAGE_QUESTION_BANK);
@@ -356,7 +356,7 @@ export interface GenerateQuestionsState {
   skipped?: { prompt: string; reason: string }[];
 }
 
-export async function generateQuestionsAction(
+export const generateQuestionsAction = withAuthErrors(async function generateQuestionsAction(
   _prev: GenerateQuestionsState,
   formData: FormData
 ): Promise<GenerateQuestionsState> {
@@ -397,4 +397,4 @@ export async function generateQuestionsAction(
 
   revalidatePath("/dashboard/cbt/question-bank");
   return { status: "done", created: result.created, skipped: result.skipped };
-}
+});

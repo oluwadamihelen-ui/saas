@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { createHostel, addHostelRoom, assignStudentToRoom, unassignStudentFromRoom } from "@/lib/services/hostel";
 import { logAudit } from "@/lib/audit";
@@ -19,7 +19,7 @@ const hostelSchema = z.object({
   wardenPhone: z.string().trim().optional().or(z.literal("")),
 });
 
-export async function createHostelAction(_prev: HostelFormState, formData: FormData): Promise<HostelFormState> {
+export const createHostelAction = withAuthErrors(async function createHostelAction(_prev: HostelFormState, formData: FormData): Promise<HostelFormState> {
   const user = await requirePermission(PERMISSIONS.HOSTEL_MANAGE);
   const parsed = hostelSchema.safeParse({
     name: formData.get("name"),
@@ -37,7 +37,7 @@ export async function createHostelAction(_prev: HostelFormState, formData: FormD
   });
   revalidatePath("/dashboard/hostel");
   return { status: "success" };
-}
+});
 
 const roomSchema = z.object({
   hostelId: z.string().trim().min(1),
@@ -45,7 +45,7 @@ const roomSchema = z.object({
   capacity: z.coerce.number().int().positive("Enter a capacity greater than 0"),
 });
 
-export async function addHostelRoomAction(_prev: HostelFormState, formData: FormData): Promise<HostelFormState> {
+export const addHostelRoomAction = withAuthErrors(async function addHostelRoomAction(_prev: HostelFormState, formData: FormData): Promise<HostelFormState> {
   const user = await requirePermission(PERMISSIONS.HOSTEL_MANAGE);
   const parsed = roomSchema.safeParse({
     hostelId: formData.get("hostelId"),
@@ -61,7 +61,7 @@ export async function addHostelRoomAction(_prev: HostelFormState, formData: Form
   }
   revalidatePath(`/dashboard/hostel/${parsed.data.hostelId}`);
   return { status: "success" };
-}
+});
 
 const assignSchema = z.object({
   hostelId: z.string().trim().min(1),
@@ -69,7 +69,7 @@ const assignSchema = z.object({
   studentId: z.string().trim().min(1, "Choose a student"),
 });
 
-export async function assignStudentToRoomAction(_prev: HostelFormState, formData: FormData): Promise<HostelFormState> {
+export const assignStudentToRoomAction = withAuthErrors(async function assignStudentToRoomAction(_prev: HostelFormState, formData: FormData): Promise<HostelFormState> {
   const user = await requirePermission(PERMISSIONS.HOSTEL_MANAGE);
   const parsed = assignSchema.safeParse({
     hostelId: formData.get("hostelId"),
@@ -87,7 +87,7 @@ export async function assignStudentToRoomAction(_prev: HostelFormState, formData
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "hostel.student_assigned", resourceType: "HostelBedAssignment" });
   revalidatePath(`/dashboard/hostel/${parsed.data.hostelId}`);
   return { status: "success" };
-}
+});
 
 export async function unassignStudentFromRoomAction(assignmentId: string, hostelId: string) {
   const user = await requirePermission(PERMISSIONS.HOSTEL_MANAGE);

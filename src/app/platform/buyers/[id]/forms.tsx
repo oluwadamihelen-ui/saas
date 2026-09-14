@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useActionToast } from "@/hooks/use-action-toast";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { CopyCredentialsButton } from "@/components/dashboard/copy-credentials-button";
 import {
   suspendBuyerAction,
@@ -132,10 +133,10 @@ export function ResetBuyerPasswordButton({ buyerId }: { buyerId: string }) {
 }
 
 export function ReactivateBuyerButton({ buyerId }: { buyerId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
   return (
-    <Button size="sm" disabled={isPending} onClick={() => startTransition(async () => { await reactivateBuyerAction(buyerId); router.refresh(); })}>
+    <Button size="sm" disabled={isPending} onClick={() => run(async () => { await reactivateBuyerAction(buyerId); router.refresh(); })}>
       Reactivate Buyer
     </Button>
   );
@@ -175,13 +176,13 @@ export function CreateBuyerAgreementForm({ buyerId, partners }: { buyerId: strin
 }
 
 export function ApproveBuyerAgreementButton({ agreementId, buyerId }: { agreementId: string; buyerId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
   return (
     <Button
       size="sm"
       disabled={isPending}
-      onClick={() => startTransition(async () => { await approveBuyerAgreementAction(agreementId, buyerId); router.refresh(); })}
+      onClick={() => run(async () => { await approveBuyerAgreementAction(agreementId, buyerId); router.refresh(); })}
     >
       Approve &amp; activate
     </Button>
@@ -210,14 +211,14 @@ export function CancelBuyerAgreementForm({ agreementId, buyerId }: { agreementId
 }
 
 export function CompleteBuyerAgreementButton({ agreementId, buyerId }: { agreementId: string; buyerId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
   return (
     <Button
       size="sm"
       variant="secondary"
       disabled={isPending}
-      onClick={() => startTransition(async () => { await markBuyerAgreementCompletedAction(agreementId, buyerId); router.refresh(); })}
+      onClick={() => run(async () => { await markBuyerAgreementCompletedAction(agreementId, buyerId); router.refresh(); })}
     >
       Mark completed
     </Button>
@@ -286,7 +287,7 @@ export function CreateBuyerInvoiceForm({ agreementId, buyerId }: { agreementId: 
 }
 
 export function BuyerInvoiceActions({ invoiceId, buyerId, status }: { invoiceId: string; buyerId: string; status: "PENDING" | "PAID" | "OVERDUE" | "VOID" }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
 
   if (status === "PAID" || status === "VOID") return null;
@@ -296,7 +297,7 @@ export function BuyerInvoiceActions({ invoiceId, buyerId, status }: { invoiceId:
       <Button
         size="sm"
         disabled={isPending}
-        onClick={() => startTransition(async () => { await markBuyerInvoicePaidAction(invoiceId, buyerId); router.refresh(); })}
+        onClick={() => run(async () => { await markBuyerInvoicePaidAction(invoiceId, buyerId); router.refresh(); })}
       >
         Mark paid
       </Button>
@@ -304,7 +305,7 @@ export function BuyerInvoiceActions({ invoiceId, buyerId, status }: { invoiceId:
         size="sm"
         variant="ghost"
         disabled={isPending}
-        onClick={() => startTransition(async () => { await voidBuyerInvoiceAction(invoiceId, buyerId); router.refresh(); })}
+        onClick={() => run(async () => { await voidBuyerInvoiceAction(invoiceId, buyerId); router.refresh(); })}
       >
         Void
       </Button>

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { parseStudentImportCsv, commitStudentImport } from "@/lib/services/student-import";
 import type { StudentInput } from "@/lib/services/students";
@@ -16,7 +16,7 @@ export interface StudentImportPreviewState {
   fileName?: string;
 }
 
-export async function previewStudentImportAction(
+export const previewStudentImportAction = withAuthErrors(async function previewStudentImportAction(
   _prev: StudentImportPreviewState,
   formData: FormData
 ): Promise<StudentImportPreviewState> {
@@ -51,7 +51,7 @@ export async function previewStudentImportAction(
     validRowsJson: JSON.stringify(validRows),
     fileName: file.name,
   };
-}
+});
 
 export interface StudentImportConfirmState {
   status: "idle" | "error" | "done";
@@ -60,7 +60,7 @@ export interface StudentImportConfirmState {
   failed?: { rowNumber: number; name: string; error: string }[];
 }
 
-export async function confirmStudentImportAction(
+export const confirmStudentImportAction = withAuthErrors(async function confirmStudentImportAction(
   _prev: StudentImportConfirmState,
   formData: FormData
 ): Promise<StudentImportConfirmState> {
@@ -108,4 +108,4 @@ export async function confirmStudentImportAction(
   revalidatePath("/dashboard/students");
   revalidatePath("/dashboard/data/history");
   return { status: "done", created: outcome.created, failed: outcome.failed };
-}
+});

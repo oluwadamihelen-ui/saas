@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import {
   createSalaryComponent,
@@ -24,7 +24,7 @@ const componentSchema = z.object({
   type: z.enum(["EARNING", "DEDUCTION"]),
 });
 
-export async function createSalaryComponentAction(_prev: PayrollFormState, formData: FormData): Promise<PayrollFormState> {
+export const createSalaryComponentAction = withAuthErrors(async function createSalaryComponentAction(_prev: PayrollFormState, formData: FormData): Promise<PayrollFormState> {
   const user = await requirePermission(PERMISSIONS.PAYROLL_MANAGE);
   const parsed = componentSchema.safeParse({ name: formData.get("name"), type: formData.get("type") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
@@ -32,9 +32,9 @@ export async function createSalaryComponentAction(_prev: PayrollFormState, formD
   await createSalaryComponent(user.schoolId, parsed.data.name, parsed.data.type);
   revalidatePath("/dashboard/payroll");
   return { status: "success" };
-}
+});
 
-export async function saveStaffSalaryStructureAction(_prev: PayrollFormState, formData: FormData): Promise<PayrollFormState> {
+export const saveStaffSalaryStructureAction = withAuthErrors(async function saveStaffSalaryStructureAction(_prev: PayrollFormState, formData: FormData): Promise<PayrollFormState> {
   const user = await requirePermission(PERMISSIONS.PAYROLL_MANAGE);
 
   const userId = String(formData.get("userId") ?? "");
@@ -55,14 +55,14 @@ export async function saveStaffSalaryStructureAction(_prev: PayrollFormState, fo
   revalidatePath(`/dashboard/payroll/staff/${userId}`);
   revalidatePath("/dashboard/payroll");
   return { status: "success" };
-}
+});
 
 const runSchema = z.object({
   month: z.coerce.number().int().min(1).max(12),
   year: z.coerce.number().int().min(2000).max(2100),
 });
 
-export async function generatePayrollRunAction(_prev: PayrollFormState, formData: FormData): Promise<PayrollFormState> {
+export const generatePayrollRunAction = withAuthErrors(async function generatePayrollRunAction(_prev: PayrollFormState, formData: FormData): Promise<PayrollFormState> {
   const user = await requirePermission(PERMISSIONS.PAYROLL_MANAGE);
   const parsed = runSchema.safeParse({ month: formData.get("month"), year: formData.get("year") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check the month/year." };
@@ -78,7 +78,7 @@ export async function generatePayrollRunAction(_prev: PayrollFormState, formData
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "payroll.run_generated", resourceType: "PayrollRun", resourceId: runId });
   revalidatePath("/dashboard/payroll");
   return { status: "success", message: "Payroll run generated." };
-}
+});
 
 export async function approvePayrollRunAction(id: string) {
   const user = await requirePermission(PERMISSIONS.PAYROLL_APPROVE);

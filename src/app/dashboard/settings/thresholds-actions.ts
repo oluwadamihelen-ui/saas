@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
@@ -17,7 +17,7 @@ export interface ThresholdsState {
 /// schema doc comments) and were fully wired into risk-engine.ts,
 /// health-score.ts and expenses.ts before this UI existed — this action
 /// is purely the first way to edit them without a direct DB write.
-export async function saveThresholdsAction(_prev: ThresholdsState, formData: FormData): Promise<ThresholdsState> {
+export const saveThresholdsAction = withAuthErrors(async function saveThresholdsAction(_prev: ThresholdsState, formData: FormData): Promise<ThresholdsState> {
   const user = await requirePermission(PERMISSIONS.SCHOOL_SETTINGS_MANAGE);
 
   const parsed = thresholdsSchema.safeParse({
@@ -76,4 +76,4 @@ export async function saveThresholdsAction(_prev: ThresholdsState, formData: For
 
   revalidatePath("/dashboard/settings");
   return { status: "success", message: "Saved." };
-}
+});

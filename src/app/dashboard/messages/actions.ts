@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { replyToConversation, closeConversation, reopenConversation } from "@/lib/services/messages";
 
@@ -13,7 +13,7 @@ export interface ReplyState {
   message?: string;
 }
 
-export async function replyAsStaffAction(conversationId: string, _prev: ReplyState, formData: FormData): Promise<ReplyState> {
+export const replyAsStaffAction = withAuthErrors(async function replyAsStaffAction(conversationId: string, _prev: ReplyState, formData: FormData): Promise<ReplyState> {
   const user = await requirePermission(PERMISSIONS.MESSAGES_MANAGE);
 
   const parsed = schema.safeParse({ body: formData.get("body") });
@@ -25,7 +25,7 @@ export async function replyAsStaffAction(conversationId: string, _prev: ReplySta
   revalidatePath(`/dashboard/messages/${conversationId}`);
   revalidatePath("/dashboard/messages");
   return { status: "success" };
-}
+});
 
 export async function closeConversationAction(conversationId: string) {
   const user = await requirePermission(PERMISSIONS.MESSAGES_MANAGE);

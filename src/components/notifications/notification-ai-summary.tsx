@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { generateNotificationsAiSummaryAction, type NotificationsAiSummaryResult } from "@/lib/actions/notifications";
 
 /// Only renders the trigger — no AI call happens until the user explicitly
@@ -13,13 +14,13 @@ import { generateNotificationsAiSummaryAction, type NotificationsAiSummaryResult
 /// error — the rest of the notification center stays fully usable either
 /// way.
 export function NotificationAiSummary({ aiConfigured }: { aiConfigured: boolean }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const [result, setResult] = useState<NotificationsAiSummaryResult | null>(null);
 
   if (!aiConfigured) return null;
 
   function handleGenerate() {
-    startTransition(async () => {
+    run(async () => {
       const res = await generateNotificationsAiSummaryAction();
       setResult(res);
     });

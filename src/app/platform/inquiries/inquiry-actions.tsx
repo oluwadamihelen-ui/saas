@@ -1,16 +1,16 @@
 "use client";
 
-import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { markInquiryReviewedAction } from "./actions";
 
 export function InquiryActions({ inquiryId }: { inquiryId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
 
   function mark(status: "CONTACTED" | "CONVERTED" | "DECLINED") {
-    startTransition(async () => {
+    run(async () => {
       await markInquiryReviewedAction(inquiryId, status);
       router.refresh();
     });

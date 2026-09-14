@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { saveGatewayCredentialAction, removeGatewayCredentialAction, type Gatewa
 import type { PaymentGatewayProvider } from "@/generated/prisma/client";
 
 import { useActionToast } from "@/hooks/use-action-toast";
+import { useSafeAction } from "@/hooks/use-safe-action";
 
 const initialState: GatewayFormState = { status: "idle" };
 
@@ -85,7 +86,7 @@ export function GatewayForm({
 }
 
 function DisconnectButton({ provider }: { provider: PaymentGatewayProvider }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
 
   return (
@@ -95,7 +96,7 @@ function DisconnectButton({ provider }: { provider: PaymentGatewayProvider }) {
       variant="secondary"
       disabled={isPending}
       onClick={() =>
-        startTransition(async () => {
+        run(async () => {
           await removeGatewayCredentialAction(provider);
           router.refresh();
         })

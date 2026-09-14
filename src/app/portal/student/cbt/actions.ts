@@ -1,6 +1,6 @@
 "use server";
 
-import { requireSchoolUser } from "@/lib/auth/require";
+import { requireSchoolUser, withAuthErrors } from "@/lib/auth/require";
 import { getStudentForUser } from "@/lib/services/portal";
 import { startAttempt, saveAnswer, submitAttempt } from "@/lib/services/cbt-attempts";
 import { generateRevisionPlan, type RevisionPlanResult } from "@/lib/services/cbt-ai";
@@ -23,7 +23,7 @@ export interface StartAttemptResult {
   attemptId?: string;
 }
 
-export async function startAttemptAction(examId: string): Promise<StartAttemptResult> {
+export const startAttemptAction = withAuthErrors(async function startAttemptAction(examId: string): Promise<StartAttemptResult> {
   const { user, student } = await currentStudent();
   try {
     const attempt = await startAttempt(user.schoolId, student.id, examId);
@@ -31,14 +31,14 @@ export async function startAttemptAction(examId: string): Promise<StartAttemptRe
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not start the exam." };
   }
-}
+});
 
 export interface SaveAnswerResult {
   status: "ok" | "error";
   message?: string;
 }
 
-export async function saveAnswerAction(
+export const saveAnswerAction = withAuthErrors(async function saveAnswerAction(
   attemptId: string,
   questionId: string,
   response: Prisma.InputJsonValue
@@ -50,14 +50,14 @@ export async function saveAnswerAction(
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not save your answer." };
   }
-}
+});
 
 export interface SubmitAttemptResult {
   status: "ok" | "error";
   message?: string;
 }
 
-export async function submitAttemptAction(attemptId: string): Promise<SubmitAttemptResult> {
+export const submitAttemptAction = withAuthErrors(async function submitAttemptAction(attemptId: string): Promise<SubmitAttemptResult> {
   const { user, student } = await currentStudent();
   try {
     const attempt = await submitAttempt(user.schoolId, student.id, attemptId);
@@ -68,13 +68,13 @@ export async function submitAttemptAction(attemptId: string): Promise<SubmitAtte
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not submit the exam." };
   }
-}
+});
 
 /// Best-effort by design: a logging failure (network blip, race with the
 /// attempt just having been submitted) must never surface as an error to
 /// the student or interrupt them mid-exam — it's a side channel, not part
 /// of the exam-taking flow itself.
-export async function logSecurityEventAction(
+export const logSecurityEventAction = withAuthErrors(async function logSecurityEventAction(
   attemptId: string,
   type: CBTSecurityEventType,
   metadata?: Record<string, unknown>
@@ -86,7 +86,7 @@ export async function logSecurityEventAction(
     // swallow — see note above
   }
   return { status: "ok" };
-}
+});
 
 export interface RevisionPlanActionResult {
   status: "ok" | "error";
@@ -94,7 +94,7 @@ export interface RevisionPlanActionResult {
   plan?: RevisionPlanResult;
 }
 
-export async function generateRevisionPlanAction(examId: string): Promise<RevisionPlanActionResult> {
+export const generateRevisionPlanAction = withAuthErrors(async function generateRevisionPlanAction(examId: string): Promise<RevisionPlanActionResult> {
   const { user, student } = await currentStudent();
   try {
     const plan = await generateRevisionPlan(user.schoolId, student.id, examId);
@@ -102,4 +102,4 @@ export async function generateRevisionPlanAction(examId: string): Promise<Revisi
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not generate a revision plan." };
   }
-}
+});

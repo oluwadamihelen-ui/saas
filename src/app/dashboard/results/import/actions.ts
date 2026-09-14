@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { parseResultsImportCsv, commitResultsImport, type ScoreImportEntry } from "@/lib/services/results-import";
 import { logAudit } from "@/lib/audit";
@@ -15,7 +15,7 @@ export interface ResultsImportPreviewState {
   fileName?: string;
 }
 
-export async function previewResultsImportAction(
+export const previewResultsImportAction = withAuthErrors(async function previewResultsImportAction(
   _prev: ResultsImportPreviewState,
   formData: FormData
 ): Promise<ResultsImportPreviewState> {
@@ -43,7 +43,7 @@ export async function previewResultsImportAction(
     validRowsJson: JSON.stringify(validRows),
     fileName: file.name,
   };
-}
+});
 
 export interface ResultsImportConfirmState {
   status: "idle" | "error" | "done";
@@ -51,7 +51,7 @@ export interface ResultsImportConfirmState {
   imported?: number;
 }
 
-export async function confirmResultsImportAction(
+export const confirmResultsImportAction = withAuthErrors(async function confirmResultsImportAction(
   _prev: ResultsImportConfirmState,
   formData: FormData
 ): Promise<ResultsImportConfirmState> {
@@ -114,4 +114,4 @@ export async function confirmResultsImportAction(
   revalidatePath("/dashboard/results");
   revalidatePath("/dashboard/data/history");
   return { status: "done", imported: outcome.imported };
-}
+});

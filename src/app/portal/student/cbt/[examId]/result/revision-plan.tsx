@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { generateRevisionPlanAction } from "../../actions";
 import type { RevisionPlanResult } from "@/lib/services/cbt-ai";
 
 export function RevisionPlan({ examId, aiConfigured }: { examId: string; aiConfigured: boolean }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const [plan, setPlan] = useState<RevisionPlanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,7 +27,7 @@ export function RevisionPlan({ examId, aiConfigured }: { examId: string; aiConfi
             variant="secondary"
             disabled={isPending}
             onClick={() =>
-              startTransition(async () => {
+              run(async () => {
                 setError(null);
                 const result = await generateRevisionPlanAction(examId);
                 if (result.status === "error") {

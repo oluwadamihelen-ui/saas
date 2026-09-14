@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import {
   saveNotificationProviderCredential,
@@ -28,7 +28,7 @@ const saveSchema = z.object({
   isEnabled: z.literal("on").optional(),
 });
 
-export async function saveNotificationProviderCredentialAction(
+export const saveNotificationProviderCredentialAction = withAuthErrors(async function saveNotificationProviderCredentialAction(
   _prev: NotificationProviderFormState,
   formData: FormData
 ): Promise<NotificationProviderFormState> {
@@ -57,7 +57,7 @@ export async function saveNotificationProviderCredentialAction(
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "notification_provider.saved", resourceType: "NotificationProviderCredential" });
   revalidatePath("/dashboard/settings");
   return { status: "success", message: "Saved." };
-}
+});
 
 export async function removeNotificationProviderCredentialAction(provider: NotificationDeliveryProvider) {
   const user = await requirePermission(PERMISSIONS.NOTIFICATION_PROVIDERS_MANAGE);
@@ -68,7 +68,7 @@ export async function removeNotificationProviderCredentialAction(provider: Notif
 
 const activeSchema = z.object({ activeProvider: z.enum(["RESEND", "TWILIO", "SENTDM", ""]) });
 
-export async function setActiveEmailProviderAction(
+export const setActiveEmailProviderAction = withAuthErrors(async function setActiveEmailProviderAction(
   _prev: NotificationProviderFormState,
   formData: FormData
 ): Promise<NotificationProviderFormState> {
@@ -85,9 +85,9 @@ export async function setActiveEmailProviderAction(
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "notification_provider.email_activated", resourceType: "School", resourceId: user.schoolId });
   revalidatePath("/dashboard/settings");
   return { status: "success", message: "Saved." };
-}
+});
 
-export async function setActiveSmsProviderAction(
+export const setActiveSmsProviderAction = withAuthErrors(async function setActiveSmsProviderAction(
   _prev: NotificationProviderFormState,
   formData: FormData
 ): Promise<NotificationProviderFormState> {
@@ -104,4 +104,4 @@ export async function setActiveSmsProviderAction(
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "notification_provider.sms_activated", resourceType: "School", resourceId: user.schoolId });
   revalidatePath("/dashboard/settings");
   return { status: "success", message: "Saved." };
-}
+});

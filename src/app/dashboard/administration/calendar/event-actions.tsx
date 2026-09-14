@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { deleteEventAction } from "./actions";
 
 export function EventRowActions({ id }: { id: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
 
   return (
@@ -20,7 +20,7 @@ export function EventRowActions({ id }: { id: string }) {
         variant="ghost"
         disabled={isPending}
         onClick={() =>
-          startTransition(async () => {
+          run(async () => {
             await deleteEventAction(id);
             router.refresh();
           })

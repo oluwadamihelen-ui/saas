@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 import { Label, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import {
   saveReportCardDesignAction,
   removeReportCardHeaderAction,
@@ -29,7 +30,7 @@ function ImageSlot({
   currentUrl: string | null;
   onRemove: () => Promise<void>;
 }) {
-  const [isRemoving, startTransition] = useTransition();
+  const [isRemoving, run] = useSafeAction();
   const router = useRouter();
 
   return (
@@ -45,7 +46,7 @@ function ImageSlot({
             size="sm"
             disabled={isRemoving}
             onClick={() =>
-              startTransition(async () => {
+              run(async () => {
                 await onRemove();
                 router.refresh();
               })

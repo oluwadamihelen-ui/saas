@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requireSchoolUser } from "@/lib/auth/require";
+import { requireSchoolUser, withAuthErrors } from "@/lib/auth/require";
 import { prisma } from "@/lib/db";
 
 const schema = z.object({
@@ -20,7 +20,7 @@ export interface MyProfileState {
 /// the staff member themselves, the same way their name already is. This
 /// is the only way a User.dateOfBirth is ever set — never entered on a
 /// colleague's behalf, and never inferred or defaulted.
-export async function saveMyDateOfBirth(_prev: MyProfileState, formData: FormData): Promise<MyProfileState> {
+export const saveMyDateOfBirth = withAuthErrors(async function saveMyDateOfBirth(_prev: MyProfileState, formData: FormData): Promise<MyProfileState> {
   const user = await requireSchoolUser();
 
   const parsed = schema.safeParse({ dateOfBirth: formData.get("dateOfBirth") ?? "" });
@@ -37,4 +37,4 @@ export async function saveMyDateOfBirth(_prev: MyProfileState, formData: FormDat
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/birthdays");
   return { status: "success", message: "Saved." };
-}
+});

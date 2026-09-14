@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import {
@@ -26,7 +26,7 @@ const commentSchema = z.object({
   principalComment: z.string().trim().max(2000).optional().or(z.literal("")),
 });
 
-export async function updatePreschoolCommentsAction(
+export const updatePreschoolCommentsAction = withAuthErrors(async function updatePreschoolCommentsAction(
   studentId: string,
   termId: string,
   _prev: PreschoolReportState,
@@ -50,7 +50,7 @@ export async function updatePreschoolCommentsAction(
   });
   revalidatePath(`/dashboard/results/preschool/reports/${studentId}`);
   return { status: "success", message: "Saved." };
-}
+});
 
 export interface GenerateCommentState {
   status: "idle" | "error" | "success";
@@ -58,7 +58,7 @@ export interface GenerateCommentState {
   message?: string;
 }
 
-export async function generatePreschoolCommentAction(
+export const generatePreschoolCommentAction = withAuthErrors(async function generatePreschoolCommentAction(
   studentId: string,
   termId: string,
   _prev: GenerateCommentState
@@ -70,7 +70,7 @@ export async function generatePreschoolCommentAction(
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not generate a comment." };
   }
-}
+});
 
 export async function submitPreschoolReportAction(studentId: string, termId: string) {
   const user = await requirePermission(PERMISSIONS.RESULTS_ENTER);

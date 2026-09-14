@@ -1,11 +1,11 @@
 "use client";
 
 import { useActionState } from "react";
-import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useActionToast } from "@/hooks/use-action-toast";
+import { useSafeAction } from "@/hooks/use-safe-action";
 
 import {
   updateSchoolStatusAction,
@@ -115,7 +115,7 @@ export function SubscriptionStatusForm({
 }
 
 export function GenerateInvoiceButton({ schoolId }: { schoolId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
 
   return (
@@ -123,7 +123,7 @@ export function GenerateInvoiceButton({ schoolId }: { schoolId: string }) {
       size="sm"
       disabled={isPending}
       onClick={() =>
-        startTransition(async () => {
+        run(async () => {
           await generatePlatformInvoiceAction(schoolId);
           router.refresh();
         })
@@ -135,7 +135,7 @@ export function GenerateInvoiceButton({ schoolId }: { schoolId: string }) {
 }
 
 export function InvoiceActions({ invoiceId, schoolId, status }: { invoiceId: string; schoolId: string; status: "PENDING" | "PAID" | "OVERDUE" | "VOID" }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
 
   if (status === "PAID" || status === "VOID") return null;
@@ -146,7 +146,7 @@ export function InvoiceActions({ invoiceId, schoolId, status }: { invoiceId: str
         size="sm"
         disabled={isPending}
         onClick={() =>
-          startTransition(async () => {
+          run(async () => {
             await markPlatformInvoicePaidAction(invoiceId, schoolId);
             router.refresh();
           })
@@ -159,7 +159,7 @@ export function InvoiceActions({ invoiceId, schoolId, status }: { invoiceId: str
         variant="ghost"
         disabled={isPending}
         onClick={() =>
-          startTransition(async () => {
+          run(async () => {
             await voidPlatformInvoiceAction(invoiceId, schoolId);
             router.refresh();
           })

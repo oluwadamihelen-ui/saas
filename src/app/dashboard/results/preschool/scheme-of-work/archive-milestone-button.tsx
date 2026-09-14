@@ -1,12 +1,12 @@
 "use client";
 
-import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { archiveMilestoneAction, restoreMilestoneAction } from "../actions";
 
 export function ArchiveMilestoneButton({ milestoneId, status }: { milestoneId: string; status: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
 
   if (status === "ARCHIVED") {
@@ -15,7 +15,7 @@ export function ArchiveMilestoneButton({ milestoneId, status }: { milestoneId: s
         variant="ghost"
         size="sm"
         disabled={isPending}
-        onClick={() => startTransition(async () => {
+        onClick={() => run(async () => {
           await restoreMilestoneAction(milestoneId);
           router.refresh();
         })}
@@ -30,7 +30,7 @@ export function ArchiveMilestoneButton({ milestoneId, status }: { milestoneId: s
       variant="ghost"
       size="sm"
       disabled={isPending}
-      onClick={() => startTransition(async () => {
+      onClick={() => run(async () => {
         await archiveMilestoneAction(milestoneId);
         router.refresh();
       })}

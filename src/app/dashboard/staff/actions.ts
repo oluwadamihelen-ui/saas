@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { inviteStaffMember, convertInviteToDirect, regeneratePasswordSetupLink } from "@/lib/services/staff";
@@ -17,7 +17,7 @@ export interface InviteStaffState {
   message?: string;
 }
 
-export async function sendStaffInvite(_prev: InviteStaffState, formData: FormData): Promise<InviteStaffState> {
+export const sendStaffInvite = withAuthErrors(async function sendStaffInvite(_prev: InviteStaffState, formData: FormData): Promise<InviteStaffState> {
   const user = await requirePermission(PERMISSIONS.STAFF_INVITE);
 
   const parsed = schema.safeParse({
@@ -37,7 +37,7 @@ export async function sendStaffInvite(_prev: InviteStaffState, formData: FormDat
 
   revalidatePath("/dashboard/staff");
   return { status: "success" };
-}
+});
 
 /// Refreshes a pending ACCOUNT_INVITATION's token/expiry in place —
 /// inviteStaffMember already upserts onto the same row when the email
@@ -65,7 +65,7 @@ export interface ConvertInviteState {
 /// "Create account now" on a pending invitation — see
 /// convertInviteToDirect in lib/services/staff.ts for how this avoids a
 /// duplicate User.
-export async function convertInviteAction(_prev: ConvertInviteState, formData: FormData): Promise<ConvertInviteState> {
+export const convertInviteAction = withAuthErrors(async function convertInviteAction(_prev: ConvertInviteState, formData: FormData): Promise<ConvertInviteState> {
   const user = await requirePermission(PERMISSIONS.STAFF_INVITE);
 
   const parsed = convertSchema.safeParse({ inviteId: formData.get("inviteId"), name: formData.get("name") });
@@ -82,7 +82,7 @@ export async function convertInviteAction(_prev: ConvertInviteState, formData: F
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not create the account." };
   }
-}
+});
 
 /// Regenerates the password-setup link for a staff member who was
 /// created directly but hasn't set a password yet.

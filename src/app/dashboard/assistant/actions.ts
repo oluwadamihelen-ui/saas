@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import {
@@ -26,7 +26,7 @@ export interface AssistantMessageState {
   message?: string;
 }
 
-export async function sendAiMessageAction(
+export const sendAiMessageAction = withAuthErrors(async function sendAiMessageAction(
   conversationId: string,
   _prev: AssistantMessageState,
   formData: FormData
@@ -49,7 +49,7 @@ export async function sendAiMessageAction(
   revalidatePath(`/dashboard/assistant/${conversationId}`);
   revalidatePath("/dashboard/assistant");
   return { status: "success" };
-}
+});
 
 export async function confirmAiToolCallAction(conversationId: string, aiMessageId: string) {
   const user = await requirePermission(PERMISSIONS.ASSISTANT_USE);

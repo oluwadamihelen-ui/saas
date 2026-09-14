@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { generateExamInsightsAction } from "./actions";
 
 export function ExamInsights({ examId, aiConfigured }: { examId: string; aiConfigured: boolean }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const [insights, setInsights] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +28,7 @@ export function ExamInsights({ examId, aiConfigured }: { examId: string; aiConfi
             variant="secondary"
             disabled={isPending}
             onClick={() =>
-              startTransition(async () => {
+              run(async () => {
                 setError(null);
                 const result = await generateExamInsightsAction(examId);
                 if (result.status === "error") {

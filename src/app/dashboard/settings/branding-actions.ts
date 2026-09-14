@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { fileToLogoDataUrl } from "@/lib/logo-upload";
@@ -13,7 +13,7 @@ export interface BrandingFormState {
   message?: string;
 }
 
-export async function saveBrandingAction(_prev: BrandingFormState, formData: FormData): Promise<BrandingFormState> {
+export const saveBrandingAction = withAuthErrors(async function saveBrandingAction(_prev: BrandingFormState, formData: FormData): Promise<BrandingFormState> {
   const user = await requirePermission(PERMISSIONS.SCHOOL_SETTINGS_MANAGE);
 
   const colorRaw = String(formData.get("brandColor") ?? "").trim();
@@ -36,7 +36,7 @@ export async function saveBrandingAction(_prev: BrandingFormState, formData: For
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "branding.updated", resourceType: "School", resourceId: user.schoolId });
   revalidatePath("/dashboard/settings");
   return { status: "success", message: "Saved." };
-}
+});
 
 export async function removeLogoAction() {
   const user = await requirePermission(PERMISSIONS.SCHOOL_SETTINGS_MANAGE);

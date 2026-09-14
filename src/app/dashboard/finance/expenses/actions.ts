@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { createVendor, createExpenseCategory, recordExpense, approveExpense, rejectExpense } from "@/lib/services/expenses";
 import { toMinorUnits } from "@/lib/money";
@@ -13,7 +13,7 @@ export interface FinanceFormState {
   message?: string;
 }
 
-export async function createVendorAction(_prev: FinanceFormState, formData: FormData): Promise<FinanceFormState> {
+export const createVendorAction = withAuthErrors(async function createVendorAction(_prev: FinanceFormState, formData: FormData): Promise<FinanceFormState> {
   const user = await requirePermission(PERMISSIONS.EXPENSES_CREATE);
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { status: "error", message: "Enter a vendor name." };
@@ -21,9 +21,9 @@ export async function createVendorAction(_prev: FinanceFormState, formData: Form
   await createVendor(user.schoolId, name, String(formData.get("contactInfo") ?? "").trim() || null);
   revalidatePath("/dashboard/finance/expenses");
   return { status: "success" };
-}
+});
 
-export async function createExpenseCategoryAction(_prev: FinanceFormState, formData: FormData): Promise<FinanceFormState> {
+export const createExpenseCategoryAction = withAuthErrors(async function createExpenseCategoryAction(_prev: FinanceFormState, formData: FormData): Promise<FinanceFormState> {
   const user = await requirePermission(PERMISSIONS.EXPENSES_CREATE);
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { status: "error", message: "Enter a category name." };
@@ -31,7 +31,7 @@ export async function createExpenseCategoryAction(_prev: FinanceFormState, formD
   await createExpenseCategory(user.schoolId, name);
   revalidatePath("/dashboard/finance/expenses");
   return { status: "success" };
-}
+});
 
 const expenseSchema = z.object({
   categoryId: z.string().trim().min(1, "Choose a category"),
@@ -41,7 +41,7 @@ const expenseSchema = z.object({
   incurredAt: z.coerce.date(),
 });
 
-export async function recordExpenseAction(_prev: FinanceFormState, formData: FormData): Promise<FinanceFormState> {
+export const recordExpenseAction = withAuthErrors(async function recordExpenseAction(_prev: FinanceFormState, formData: FormData): Promise<FinanceFormState> {
   const user = await requirePermission(PERMISSIONS.EXPENSES_CREATE);
   const parsed = expenseSchema.safeParse({
     categoryId: formData.get("categoryId"),
@@ -69,7 +69,7 @@ export async function recordExpenseAction(_prev: FinanceFormState, formData: For
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "expense.recorded", resourceType: "Expense", resourceId: expenseId });
   revalidatePath("/dashboard/finance/expenses");
   return { status: "success" };
-}
+});
 
 export async function approveExpenseAction(id: string) {
   const user = await requirePermission(PERMISSIONS.EXPENSES_APPROVE);

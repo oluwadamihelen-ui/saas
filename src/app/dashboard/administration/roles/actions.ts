@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS, PERMISSION_CATALOG, type PermissionKey } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { updateRolePermissions, RolePermissionUpdateError } from "@/lib/services/role-permissions";
@@ -19,7 +19,7 @@ export interface RolePermissionsState {
   message?: string;
 }
 
-export async function saveRolePermissions(_prev: RolePermissionsState, formData: FormData): Promise<RolePermissionsState> {
+export const saveRolePermissions = withAuthErrors(async function saveRolePermissions(_prev: RolePermissionsState, formData: FormData): Promise<RolePermissionsState> {
   const user = await requirePermission(PERMISSIONS.ROLES_MANAGE);
 
   const parsed = schema.safeParse({
@@ -53,4 +53,4 @@ export async function saveRolePermissions(_prev: RolePermissionsState, formData:
 
   revalidatePath("/dashboard/administration/roles");
   return { status: "success", message: "Saved." };
-}
+});

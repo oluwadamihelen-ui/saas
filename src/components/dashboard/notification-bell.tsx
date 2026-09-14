@@ -1,6 +1,5 @@
 "use client";
 
-import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -30,6 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { markNotificationReadAction, markAllNotificationsReadAction } from "@/lib/actions/notifications";
 
 export type NotificationPriorityValue = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
@@ -113,7 +113,7 @@ export function NotificationBell({
   viewAllHref: string;
 }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
 
   const sorted = [...notifications].sort(
     (a, b) => PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority] || b.createdAt.valueOf() - a.createdAt.valueOf()
@@ -131,7 +131,7 @@ export function NotificationBell({
   /// shared layout's own bell count simply catches up on its next normal
   /// navigation rather than needing a forced refresh right here.
   function handleOpenNotification(id: string, readAt: Date | null, link: string | null) {
-    startTransition(async () => {
+    run(async () => {
       if (!readAt) await markNotificationReadAction(id);
       if (link) {
         router.push(link);
@@ -142,7 +142,7 @@ export function NotificationBell({
   }
 
   function handleMarkAll() {
-    startTransition(async () => {
+    run(async () => {
       await markAllNotificationsReadAction();
       router.refresh();
     });

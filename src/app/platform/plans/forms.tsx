@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { FEATURE_CATALOG, FEATURE_CATEGORIES } from "@/lib/billing/features";
 import { createPlanAction, updatePlanAction, setPlanActiveAction, togglePlanFeatureAction, type PlatformFormState } from "../actions";
 
 import { useActionToast } from "@/hooks/use-action-toast";
+import { useSafeAction } from "@/hooks/use-safe-action";
 
 const initialState: PlatformFormState = { status: "idle" };
 
@@ -234,7 +235,7 @@ function EditPlanForm({ plan, onDone }: { plan: PlanBrief; onDone: () => void })
 }
 
 export function PlanActiveToggle({ planId, isActive }: { planId: string; isActive: boolean }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
 
   return (
@@ -243,7 +244,7 @@ export function PlanActiveToggle({ planId, isActive }: { planId: string; isActiv
       variant={isActive ? "ghost" : "secondary"}
       disabled={isPending}
       onClick={() =>
-        startTransition(async () => {
+        run(async () => {
           await setPlanActiveAction(planId, !isActive);
           router.refresh();
         })
@@ -255,14 +256,14 @@ export function PlanActiveToggle({ planId, isActive }: { planId: string; isActiv
 }
 
 function FeatureMatrixEditor({ planId, features }: { planId: string; features: Record<string, boolean> }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
   const [local, setLocal] = useState(features);
 
   function toggle(key: string) {
     const next = !local[key];
     setLocal((prev) => ({ ...prev, [key]: next }));
-    startTransition(async () => {
+    run(async () => {
       await togglePlanFeatureAction(planId, key, next);
       router.refresh();
     });

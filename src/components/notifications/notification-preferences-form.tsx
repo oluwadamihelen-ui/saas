@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { setNotificationPreferenceAction, setNotificationChannelPreferenceAction } from "@/lib/actions/notifications";
 import type { NotificationCategory } from "@/generated/prisma/client";
 
@@ -43,13 +44,13 @@ export function NotificationPreferencesForm({
   const [channelState, setChannelState] = useState(initialChannels);
   const [pendingCategory, setPendingCategory] = useState<NotificationCategory | null>(null);
   const [pendingChannel, setPendingChannel] = useState<`${NotificationCategory}:${"email" | "sms"}` | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
 
   function handleToggle(category: NotificationCategory) {
     const next = !state[category];
     setState((prev) => ({ ...prev, [category]: next }));
     setPendingCategory(category);
-    startTransition(async () => {
+    run(async () => {
       await setNotificationPreferenceAction(category, next);
       setPendingCategory(null);
     });
@@ -61,7 +62,7 @@ export function NotificationPreferencesForm({
     const next = !channelState[category][field];
     setChannelState((prev) => (prev ? { ...prev, [category]: { ...prev[category], [field]: next } } : prev));
     setPendingChannel(`${category}:${channel}`);
-    startTransition(async () => {
+    run(async () => {
       await setNotificationChannelPreferenceAction(category, channel, next);
       setPendingChannel(null);
     });

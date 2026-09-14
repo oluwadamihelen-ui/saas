@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { createFeeCategory, deleteFeeCategory, createFeeStructure, deleteFeeStructure } from "@/lib/services/fee-structures";
 import { toMinorUnits } from "@/lib/money";
@@ -14,7 +14,7 @@ export interface FinanceFormState {
 
 const categorySchema = z.object({ name: z.string().trim().min(1).max(50) });
 
-export async function createFeeCategoryAction(_prev: FinanceFormState, formData: FormData): Promise<FinanceFormState> {
+export const createFeeCategoryAction = withAuthErrors(async function createFeeCategoryAction(_prev: FinanceFormState, formData: FormData): Promise<FinanceFormState> {
   const user = await requirePermission(PERMISSIONS.FINANCE_MANAGE);
   const parsed = categorySchema.safeParse({ name: formData.get("name") });
   if (!parsed.success) return { status: "error", message: "Enter a category name." };
@@ -22,7 +22,7 @@ export async function createFeeCategoryAction(_prev: FinanceFormState, formData:
   await createFeeCategory(user.schoolId, parsed.data.name);
   revalidatePath("/dashboard/finance/fee-structures");
   return { status: "success" };
-}
+});
 
 export async function deleteFeeCategoryAction(id: string) {
   const user = await requirePermission(PERMISSIONS.FINANCE_MANAGE);
@@ -39,7 +39,7 @@ const structureSchema = z.object({
   isOptional: z.literal("on").optional(),
 });
 
-export async function createFeeStructureAction(_prev: FinanceFormState, formData: FormData): Promise<FinanceFormState> {
+export const createFeeStructureAction = withAuthErrors(async function createFeeStructureAction(_prev: FinanceFormState, formData: FormData): Promise<FinanceFormState> {
   const user = await requirePermission(PERMISSIONS.FINANCE_MANAGE);
   const parsed = structureSchema.safeParse({
     name: formData.get("name"),
@@ -66,7 +66,7 @@ export async function createFeeStructureAction(_prev: FinanceFormState, formData
 
   revalidatePath("/dashboard/finance/fee-structures");
   return { status: "success" };
-}
+});
 
 export async function deleteFeeStructureAction(id: string) {
   const user = await requirePermission(PERMISSIONS.FINANCE_MANAGE);

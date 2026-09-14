@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requireAnyPermission, requirePermission } from "@/lib/auth/require";
+import { requireAnyPermission, requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { saveMilestoneAssessments, createAssessmentPeriod } from "@/lib/services/preschool-results";
@@ -27,7 +27,7 @@ export interface MilestoneGridState {
   message?: string;
 }
 
-export async function saveMilestoneGridAction(
+export const saveMilestoneGridAction = withAuthErrors(async function saveMilestoneGridAction(
   classArmId: string,
   subjectId: string,
   termId: string,
@@ -77,14 +77,14 @@ export async function saveMilestoneGridAction(
 
   revalidatePath("/dashboard/results/preschool");
   return { status: "success", message: `Saved ${entries.length} assessment${entries.length === 1 ? "" : "s"}.` };
-}
+});
 
 const periodSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(60),
   type: z.enum(["CONTINUOUS_ASSESSMENT", "TEST", "EXAMINATION", "MID_TERM", "END_OF_TERM", "OBSERVATION", "WEEKLY", "CUSTOM"]),
 });
 
-export async function createAssessmentPeriodAction(termId: string, _prev: MilestoneGridState, formData: FormData): Promise<MilestoneGridState> {
+export const createAssessmentPeriodAction = withAuthErrors(async function createAssessmentPeriodAction(termId: string, _prev: MilestoneGridState, formData: FormData): Promise<MilestoneGridState> {
   const user = await requirePermission(PERMISSIONS.RESULTS_ENTER);
   const parsed = periodSchema.safeParse({ name: formData.get("name"), type: formData.get("type") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Invalid assessment period." };
@@ -97,7 +97,7 @@ export async function createAssessmentPeriodAction(termId: string, _prev: Milest
 
   revalidatePath("/dashboard/results/preschool");
   return { status: "success" };
-}
+});
 
 // ---------------------------------------------------------------------
 // Scheme of Work management
@@ -119,7 +119,7 @@ export interface SchemeOfWorkState {
   message?: string;
 }
 
-export async function addTopicAction(schemeOfWorkId: string, _prev: SchemeOfWorkState, formData: FormData): Promise<SchemeOfWorkState> {
+export const addTopicAction = withAuthErrors(async function addTopicAction(schemeOfWorkId: string, _prev: SchemeOfWorkState, formData: FormData): Promise<SchemeOfWorkState> {
   const user = await requirePermission(PERMISSIONS.PRESCHOOL_MILESTONES_MANAGE);
   const parsed = topicSchema.safeParse({
     weekNumber: formData.get("weekNumber"),
@@ -137,9 +137,9 @@ export async function addTopicAction(schemeOfWorkId: string, _prev: SchemeOfWork
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "scheme_of_work_topic.created", resourceType: "SchemeOfWorkTopic", resourceId: schemeOfWorkId });
   revalidatePath("/dashboard/results/preschool/scheme-of-work");
   return { status: "success", message: "Topic added." };
-}
+});
 
-export async function updateTopicAction(topicId: string, _prev: SchemeOfWorkState, formData: FormData): Promise<SchemeOfWorkState> {
+export const updateTopicAction = withAuthErrors(async function updateTopicAction(topicId: string, _prev: SchemeOfWorkState, formData: FormData): Promise<SchemeOfWorkState> {
   const user = await requirePermission(PERMISSIONS.PRESCHOOL_MILESTONES_MANAGE);
   const parsed = topicSchema.partial({ weekNumber: true, title: true }).safeParse({
     weekNumber: formData.get("weekNumber") || undefined,
@@ -155,7 +155,7 @@ export async function updateTopicAction(topicId: string, _prev: SchemeOfWorkStat
   }
   revalidatePath("/dashboard/results/preschool/scheme-of-work");
   return { status: "success" };
-}
+});
 
 export async function deleteTopicAction(topicId: string) {
   const user = await requirePermission(PERMISSIONS.PRESCHOOL_MILESTONES_MANAGE);
@@ -168,7 +168,7 @@ const milestoneSchema = z.object({
   description: z.string().trim().max(500).optional().or(z.literal("")),
 });
 
-export async function addMilestoneAction(topicId: string, _prev: SchemeOfWorkState, formData: FormData): Promise<SchemeOfWorkState> {
+export const addMilestoneAction = withAuthErrors(async function addMilestoneAction(topicId: string, _prev: SchemeOfWorkState, formData: FormData): Promise<SchemeOfWorkState> {
   const user = await requirePermission(PERMISSIONS.PRESCHOOL_MILESTONES_MANAGE);
   const parsed = milestoneSchema.safeParse({ title: formData.get("title"), description: formData.get("description") ?? "" });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Invalid milestone." };
@@ -182,9 +182,9 @@ export async function addMilestoneAction(topicId: string, _prev: SchemeOfWorkSta
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "preschool_milestone.created", resourceType: "PreschoolMilestone", resourceId: topicId });
   revalidatePath("/dashboard/results/preschool/scheme-of-work");
   return { status: "success", message: "Milestone added." };
-}
+});
 
-export async function updateMilestoneAction(milestoneId: string, _prev: SchemeOfWorkState, formData: FormData): Promise<SchemeOfWorkState> {
+export const updateMilestoneAction = withAuthErrors(async function updateMilestoneAction(milestoneId: string, _prev: SchemeOfWorkState, formData: FormData): Promise<SchemeOfWorkState> {
   const user = await requirePermission(PERMISSIONS.PRESCHOOL_MILESTONES_MANAGE);
   const parsed = milestoneSchema.partial({ title: true }).safeParse({ title: formData.get("title") || undefined, description: formData.get("description") ?? "" });
   if (!parsed.success) return { status: "error", message: "Invalid milestone." };
@@ -196,7 +196,7 @@ export async function updateMilestoneAction(milestoneId: string, _prev: SchemeOf
   }
   revalidatePath("/dashboard/results/preschool/scheme-of-work");
   return { status: "success" };
-}
+});
 
 export async function archiveMilestoneAction(milestoneId: string) {
   const user = await requirePermission(PERMISSIONS.PRESCHOOL_MILESTONES_MANAGE);

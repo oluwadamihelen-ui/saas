@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { generateInvoicesForClass } from "@/lib/services/invoices";
 import { logAudit } from "@/lib/audit";
@@ -17,7 +17,7 @@ const schema = z.object({
   termId: z.string().trim().min(1, "Choose a term"),
 });
 
-export async function generateInvoicesAction(
+export const generateInvoicesAction = withAuthErrors(async function generateInvoicesAction(
   _prev: GenerateInvoicesState,
   formData: FormData
 ): Promise<GenerateInvoicesState> {
@@ -46,4 +46,4 @@ export async function generateInvoicesAction(
     status: "success",
     message: `Created ${result.created} invoice${result.created === 1 ? "" : "s"}${result.skipped ? `, ${result.skipped} already had one` : ""}.`,
   };
-}
+});

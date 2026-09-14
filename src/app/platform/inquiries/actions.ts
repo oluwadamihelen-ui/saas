@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requireSuperAdmin } from "@/lib/auth/require";
+import { requireSuperAdmin, withAuthErrors } from "@/lib/auth/require";
 import { markEnterpriseInquiryReviewed } from "@/lib/services/enterprise-inquiries";
 import { convertInquiryToBuyer } from "@/lib/services/buyer-onboarding";
 import { logAudit } from "@/lib/audit";
@@ -40,7 +40,7 @@ const convertSchema = z.object({
 /// Super Admin to copy and share with the buyer themselves — there is no
 /// email provider in this app, so this is the only place that password is
 /// ever visible.
-export async function convertInquiryToBuyerAction(_prev: ConvertToBuyerState, formData: FormData): Promise<ConvertToBuyerState> {
+export const convertInquiryToBuyerAction = withAuthErrors(async function convertInquiryToBuyerAction(_prev: ConvertToBuyerState, formData: FormData): Promise<ConvertToBuyerState> {
   const admin = await requireSuperAdmin();
   const parsed = convertSchema.safeParse({
     inquiryId: formData.get("inquiryId"),
@@ -62,4 +62,4 @@ export async function convertInquiryToBuyerAction(_prev: ConvertToBuyerState, fo
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not convert this inquiry to a Buyer account." };
   }
-}
+});

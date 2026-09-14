@@ -1,12 +1,12 @@
 "use client";
 
-import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { archiveQuestionAction, restoreQuestionAction, deleteQuestionAction, approveQuestionAction } from "./actions";
 
 export function QuestionRowActions({ id, status }: { id: string; status: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
 
   if (status === "ARCHIVED") {
@@ -15,7 +15,7 @@ export function QuestionRowActions({ id, status }: { id: string; status: string 
         variant="ghost"
         size="sm"
         disabled={isPending}
-        onClick={() => startTransition(async () => {
+        onClick={() => run(async () => {
           await restoreQuestionAction(id);
           router.refresh();
         })}
@@ -31,7 +31,7 @@ export function QuestionRowActions({ id, status }: { id: string; status: string 
         <Button
           size="sm"
           disabled={isPending}
-          onClick={() => startTransition(async () => {
+          onClick={() => run(async () => {
             await approveQuestionAction(id);
             router.refresh();
           })}
@@ -44,7 +44,7 @@ export function QuestionRowActions({ id, status }: { id: string; status: string 
           disabled={isPending}
           onClick={() => {
             if (!confirm("Reject and permanently delete this AI-generated question?")) return;
-            startTransition(async () => {
+            run(async () => {
               await deleteQuestionAction(id);
               router.refresh();
             });
@@ -65,7 +65,7 @@ export function QuestionRowActions({ id, status }: { id: string; status: string 
           disabled={isPending}
           onClick={() => {
             if (!confirm("Permanently delete this draft question? This cannot be undone.")) return;
-            startTransition(async () => {
+            run(async () => {
               await deleteQuestionAction(id);
               router.refresh();
             });
@@ -78,7 +78,7 @@ export function QuestionRowActions({ id, status }: { id: string; status: string 
         variant="ghost"
         size="sm"
         disabled={isPending}
-        onClick={() => startTransition(async () => {
+        onClick={() => run(async () => {
           await archiveQuestionAction(id);
           router.refresh();
         })}

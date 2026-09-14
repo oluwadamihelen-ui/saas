@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import {
   parseStaffImportCsv,
@@ -34,7 +34,7 @@ const manualRowSchema = z.object({
   department: z.string().optional().default(""),
 });
 
-export async function previewStaffBulkAction(_prev: StaffBulkPreviewState, formData: FormData): Promise<StaffBulkPreviewState> {
+export const previewStaffBulkAction = withAuthErrors(async function previewStaffBulkAction(_prev: StaffBulkPreviewState, formData: FormData): Promise<StaffBulkPreviewState> {
   const user = await requirePermission(PERMISSIONS.STAFF_INVITE);
   const method = String(formData.get("method") || "MANUAL");
 
@@ -97,7 +97,7 @@ export async function previewStaffBulkAction(_prev: StaffBulkPreviewState, formD
     validCount: validRows.length,
     invalidCount: rows.length - validRows.length,
   };
-}
+});
 
 export interface StaffBulkConfirmState {
   status: "idle" | "error" | "done";
@@ -108,7 +108,7 @@ export interface StaffBulkConfirmState {
   mode?: "INVITE" | "DIRECT";
 }
 
-export async function confirmStaffBulkAction(_prev: StaffBulkConfirmState, formData: FormData): Promise<StaffBulkConfirmState> {
+export const confirmStaffBulkAction = withAuthErrors(async function confirmStaffBulkAction(_prev: StaffBulkConfirmState, formData: FormData): Promise<StaffBulkConfirmState> {
   const user = await requirePermission(PERMISSIONS.STAFF_INVITE);
 
   const mode = formData.get("mode") === "DIRECT" ? "DIRECT" : "INVITE";
@@ -145,4 +145,4 @@ export async function confirmStaffBulkAction(_prev: StaffBulkConfirmState, formD
   revalidatePath("/dashboard/data/history");
 
   return { status: "done", created: outcome.created, failed: outcome.failed, results: outcome.results, mode };
-}
+});

@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission, requireAnyPermission } from "@/lib/auth/require";
+import { requirePermission, requireAnyPermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { createTeacherAssignment, deleteTeacherAssignment } from "@/lib/services/teacher-assignments";
 import { createSubject, updateSubject } from "@/lib/services/academics";
@@ -19,7 +19,7 @@ export interface TeacherAssignmentState {
   message?: string;
 }
 
-export async function createTeacherAssignmentAction(
+export const createTeacherAssignmentAction = withAuthErrors(async function createTeacherAssignmentAction(
   _prev: TeacherAssignmentState,
   formData: FormData
 ): Promise<TeacherAssignmentState> {
@@ -49,7 +49,7 @@ export async function createTeacherAssignmentAction(
 
   revalidatePath("/dashboard/academics");
   return { status: "success" };
-}
+});
 
 export async function deleteTeacherAssignmentAction(id: string) {
   const user = await requirePermission(PERMISSIONS.ACADEMICS_MANAGE);
@@ -74,7 +74,7 @@ export interface SubjectFormState {
   message?: string;
 }
 
-export async function createSubjectAction(_prev: SubjectFormState, formData: FormData): Promise<SubjectFormState> {
+export const createSubjectAction = withAuthErrors(async function createSubjectAction(_prev: SubjectFormState, formData: FormData): Promise<SubjectFormState> {
   const user = await requireAnyPermission([PERMISSIONS.ACADEMICS_MANAGE, PERMISSIONS.SUBJECTS_CREATE]);
 
   const parsed = subjectSchema.safeParse({ name: formData.get("name"), code: formData.get("code") });
@@ -101,9 +101,9 @@ export async function createSubjectAction(_prev: SubjectFormState, formData: For
   revalidatePath("/dashboard/academics");
   revalidatePath("/dashboard/online-learning/subjects");
   return { status: "success", message: `"${subject.name}" added.` };
-}
+});
 
-export async function updateSubjectAction(
+export const updateSubjectAction = withAuthErrors(async function updateSubjectAction(
   subjectId: string,
   _prev: SubjectFormState,
   formData: FormData
@@ -134,4 +134,4 @@ export async function updateSubjectAction(
   revalidatePath("/dashboard/academics");
   revalidatePath("/dashboard/online-learning/subjects");
   return { status: "success", message: `"${subject.name}" updated.` };
-}
+});

@@ -1,15 +1,15 @@
 "use client";
 
-import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { deleteFeeCategoryAction, deleteFeeStructureAction } from "./actions";
 
 export function DeleteCategoryButton({ id }: { id: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
   return (
-    <Button variant="ghost" size="sm" disabled={isPending} onClick={() => startTransition(async () => {
+    <Button variant="ghost" size="sm" disabled={isPending} onClick={() => run(async () => {
       await deleteFeeCategoryAction(id);
       router.refresh();
     })}>
@@ -19,10 +19,10 @@ export function DeleteCategoryButton({ id }: { id: string }) {
 }
 
 export function DeleteStructureButton({ id }: { id: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
   return (
-    <Button variant="ghost" size="sm" disabled={isPending} onClick={() => startTransition(async () => {
+    <Button variant="ghost" size="sm" disabled={isPending} onClick={() => run(async () => {
       await deleteFeeStructureAction(id);
       router.refresh();
     })}>

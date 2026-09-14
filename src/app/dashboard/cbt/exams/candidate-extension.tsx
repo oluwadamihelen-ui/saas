@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { grantExtensionAction } from "./actions";
 
 export function CandidateExtension({
@@ -22,7 +23,7 @@ export function CandidateExtension({
   const [minutes, setMinutes] = useState(String(extraTimeMinutes));
   const [reason, setReason] = useState(extensionReason ?? "");
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
 
   if (!canGrant) {
     return <span>{extraTimeMinutes > 0 ? `+${extraTimeMinutes} min` : "—"}</span>;
@@ -67,7 +68,7 @@ export function CandidateExtension({
           size="sm"
           disabled={isPending}
           onClick={() =>
-            startTransition(async () => {
+            run(async () => {
               setError(null);
               const parsed = Number(minutes);
               if (!Number.isFinite(parsed) || parsed < 0) {

@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { scheduleLiveClass, updateLiveClass, cancelLiveClass, startLiveClass, endLiveClass, type LiveClassInput } from "@/lib/services/live-classes";
 import { logAudit } from "@/lib/audit";
@@ -66,7 +66,7 @@ async function buildLiveClassInput(schoolId: string, formData: FormData): Promis
   };
 }
 
-export async function scheduleLiveClassAction(_prev: LiveClassFormState, formData: FormData): Promise<LiveClassFormState> {
+export const scheduleLiveClassAction = withAuthErrors(async function scheduleLiveClassAction(_prev: LiveClassFormState, formData: FormData): Promise<LiveClassFormState> {
   const user = await requirePermission(PERMISSIONS.LIVE_CLASSES_MANAGE);
   const { input, error } = await buildLiveClassInput(user.schoolId, formData);
   if (error || !input) return { status: "error", message: error ?? "Please check the class details." };
@@ -81,9 +81,9 @@ export async function scheduleLiveClassAction(_prev: LiveClassFormState, formDat
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "live_class.scheduled", resourceType: "LiveClass", resourceId: liveClass.id, newValue: { title: liveClass.title } });
   revalidatePath("/dashboard/online-learning/live-classes");
   redirect(`/dashboard/online-learning/live-classes/${liveClass.id}`);
-}
+});
 
-export async function updateLiveClassAction(liveClassId: string, _prev: LiveClassFormState, formData: FormData): Promise<LiveClassFormState> {
+export const updateLiveClassAction = withAuthErrors(async function updateLiveClassAction(liveClassId: string, _prev: LiveClassFormState, formData: FormData): Promise<LiveClassFormState> {
   const user = await requirePermission(PERMISSIONS.LIVE_CLASSES_MANAGE);
   const { input, error } = await buildLiveClassInput(user.schoolId, formData);
   if (error || !input) return { status: "error", message: error ?? "Please check the class details." };
@@ -97,7 +97,7 @@ export async function updateLiveClassAction(liveClassId: string, _prev: LiveClas
   revalidatePath("/dashboard/online-learning/live-classes");
   revalidatePath(`/dashboard/online-learning/live-classes/${liveClassId}`);
   redirect(`/dashboard/online-learning/live-classes/${liveClassId}`);
-}
+});
 
 export async function cancelLiveClassAction(liveClassId: string) {
   const user = await requirePermission(PERMISSIONS.LIVE_CLASSES_MANAGE);

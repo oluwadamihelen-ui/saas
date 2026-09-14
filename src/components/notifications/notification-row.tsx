@@ -1,9 +1,9 @@
 "use client";
 
-import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowUpCircle, Circle, Info, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { markNotificationReadAction, deleteNotificationAction } from "@/lib/actions/notifications";
 import { formatDateTime } from "@/lib/utils";
 
@@ -30,12 +30,12 @@ export interface NotificationRowData {
 
 export function NotificationRow({ notification }: { notification: NotificationRowData }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const priorityMeta = PRIORITY_META[notification.priority];
   const PriorityIcon = priorityMeta.icon;
 
   function handleOpen() {
-    startTransition(async () => {
+    run(async () => {
       if (!notification.readAt) await markNotificationReadAction(notification.id);
       if (notification.link) router.push(notification.link);
       else router.refresh();
@@ -44,7 +44,7 @@ export function NotificationRow({ notification }: { notification: NotificationRo
 
   function handleMarkRead(e: React.MouseEvent) {
     e.stopPropagation();
-    startTransition(async () => {
+    run(async () => {
       await markNotificationReadAction(notification.id);
       router.refresh();
     });
@@ -52,7 +52,7 @@ export function NotificationRow({ notification }: { notification: NotificationRo
 
   function handleDelete(e: React.MouseEvent) {
     e.stopPropagation();
-    startTransition(async () => {
+    run(async () => {
       await deleteNotificationAction(notification.id);
       router.refresh();
     });

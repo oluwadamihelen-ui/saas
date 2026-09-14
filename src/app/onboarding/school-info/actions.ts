@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { redirect } from "next/navigation";
-import { requireSchoolUser } from "@/lib/auth/require";
+import { requireSchoolUser, withAuthErrors } from "@/lib/auth/require";
 import { updateSchoolInfo } from "@/lib/services/school";
 import { prisma } from "@/lib/db";
 
@@ -30,7 +30,7 @@ export interface SchoolInfoState {
   message?: string;
 }
 
-export async function saveSchoolInfo(_prev: SchoolInfoState, formData: FormData): Promise<SchoolInfoState> {
+export const saveSchoolInfo = withAuthErrors(async function saveSchoolInfo(_prev: SchoolInfoState, formData: FormData): Promise<SchoolInfoState> {
   const user = await requireSchoolUser();
 
   const parsed = schema.safeParse({
@@ -67,4 +67,4 @@ export async function saveSchoolInfo(_prev: SchoolInfoState, formData: FormData)
   });
 
   redirect("/onboarding/academic-structure");
-}
+});

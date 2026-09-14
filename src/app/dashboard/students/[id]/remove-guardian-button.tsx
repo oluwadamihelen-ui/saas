@@ -1,12 +1,12 @@
 "use client";
 
-import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { removeGuardianAction } from "../actions";
 
 export function RemoveGuardianButton({ studentId, guardianId, guardianName }: { studentId: string; guardianId: string; guardianName: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
 
   return (
@@ -17,7 +17,7 @@ export function RemoveGuardianButton({ studentId, guardianId, guardianName }: { 
       disabled={isPending}
       onClick={() => {
         if (!confirm(`Remove ${guardianName} as a guardian of this student? Their own record is kept — this only unlinks them from this student.`)) return;
-        startTransition(async () => {
+        run(async () => {
           await removeGuardianAction(studentId, guardianId);
           router.refresh();
         });

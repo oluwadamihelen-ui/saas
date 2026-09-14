@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { saveGatewayCredential, removeGatewayCredential, setActivePaymentProvider } from "@/lib/services/payment-gateways";
 import { logAudit } from "@/lib/audit";
@@ -23,7 +23,7 @@ const saveSchema = z.object({
   isEnabled: z.literal("on").optional(),
 });
 
-export async function saveGatewayCredentialAction(_prev: GatewayFormState, formData: FormData): Promise<GatewayFormState> {
+export const saveGatewayCredentialAction = withAuthErrors(async function saveGatewayCredentialAction(_prev: GatewayFormState, formData: FormData): Promise<GatewayFormState> {
   const user = await requirePermission(PERMISSIONS.PAYMENT_GATEWAYS_MANAGE);
   const parsed = saveSchema.safeParse({
     provider: formData.get("provider"),
@@ -49,7 +49,7 @@ export async function saveGatewayCredentialAction(_prev: GatewayFormState, formD
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "payment_gateway.saved", resourceType: "PaymentGatewayCredential" });
   revalidatePath("/dashboard/settings");
   return { status: "success", message: "Saved." };
-}
+});
 
 export async function removeGatewayCredentialAction(provider: PaymentGatewayProvider) {
   const user = await requirePermission(PERMISSIONS.PAYMENT_GATEWAYS_MANAGE);
@@ -60,7 +60,7 @@ export async function removeGatewayCredentialAction(provider: PaymentGatewayProv
 
 const activeSchema = z.object({ activeProvider: z.enum(["PAYSTACK", "FLUTTERWAVE", "KORAPAY", ""]) });
 
-export async function setActivePaymentProviderAction(_prev: GatewayFormState, formData: FormData): Promise<GatewayFormState> {
+export const setActivePaymentProviderAction = withAuthErrors(async function setActivePaymentProviderAction(_prev: GatewayFormState, formData: FormData): Promise<GatewayFormState> {
   const user = await requirePermission(PERMISSIONS.PAYMENT_GATEWAYS_MANAGE);
   const parsed = activeSchema.safeParse({ activeProvider: formData.get("activeProvider") ?? "" });
   if (!parsed.success) return { status: "error", message: "Please check your details." };
@@ -74,4 +74,4 @@ export async function setActivePaymentProviderAction(_prev: GatewayFormState, fo
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "payment_gateway.activated", resourceType: "School", resourceId: user.schoolId });
   revalidatePath("/dashboard/settings");
   return { status: "success", message: "Saved." };
-}
+});

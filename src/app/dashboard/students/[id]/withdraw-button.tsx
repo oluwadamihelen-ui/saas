@@ -1,12 +1,12 @@
 "use client";
 
-import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { withdrawStudentAction } from "../actions";
 
 export function WithdrawButton({ studentId }: { studentId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
 
   return (
@@ -16,7 +16,7 @@ export function WithdrawButton({ studentId }: { studentId: string }) {
       disabled={isPending}
       onClick={() => {
         if (!confirm("Withdraw this student? Their record is kept, but they'll be marked withdrawn.")) return;
-        startTransition(async () => {
+        run(async () => {
           await withdrawStudentAction(studentId);
           router.refresh();
         });

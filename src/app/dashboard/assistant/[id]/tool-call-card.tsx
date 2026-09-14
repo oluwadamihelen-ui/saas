@@ -1,10 +1,10 @@
 "use client";
 
-import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { confirmAiToolCallAction, declineAiToolCallAction } from "../actions";
 
 const TOOL_LABELS: Record<string, string> = {
@@ -29,7 +29,7 @@ export interface ToolCallMessage {
 
 export function ToolCallCard({ conversationId, message }: { conversationId: string; message: ToolCallMessage }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const label = (message.toolName && TOOL_LABELS[message.toolName]) || message.toolName || "Tool call";
   const args = (message.toolArgs as Record<string, unknown> | null) ?? {};
   const argEntries = Object.entries(args).filter(([, v]) => v !== undefined && v !== "");
@@ -59,7 +59,7 @@ export function ToolCallCard({ conversationId, message }: { conversationId: stri
               size="sm"
               disabled={isPending}
               onClick={() =>
-                startTransition(async () => {
+                run(async () => {
                   await confirmAiToolCallAction(conversationId, message.id);
                   router.refresh();
                 })
@@ -72,7 +72,7 @@ export function ToolCallCard({ conversationId, message }: { conversationId: stri
               variant="secondary"
               disabled={isPending}
               onClick={() =>
-                startTransition(async () => {
+                run(async () => {
                   await declineAiToolCallAction(conversationId, message.id);
                   router.refresh();
                 })

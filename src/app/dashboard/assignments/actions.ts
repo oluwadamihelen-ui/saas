@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { createAssignment, gradeSubmission, getSubmissionScope } from "@/lib/services/assignments";
@@ -23,7 +23,7 @@ export interface AssignmentFormState {
   message?: string;
 }
 
-export async function createAssignmentAction(
+export const createAssignmentAction = withAuthErrors(async function createAssignmentAction(
   _prev: AssignmentFormState,
   formData: FormData
 ): Promise<AssignmentFormState> {
@@ -74,7 +74,7 @@ export async function createAssignmentAction(
 
   revalidatePath("/dashboard/assignments");
   redirect(`/dashboard/assignments/${assignmentId}`);
-}
+});
 
 const gradeSchema = z.object({
   submissionId: z.string().trim().min(1),
@@ -88,7 +88,7 @@ export interface GradeState {
   message?: string;
 }
 
-export async function gradeSubmissionAction(
+export const gradeSubmissionAction = withAuthErrors(async function gradeSubmissionAction(
   assignmentId: string,
   _prev: GradeState,
   formData: FormData
@@ -129,4 +129,4 @@ export async function gradeSubmissionAction(
 
   revalidatePath(`/dashboard/assignments/${assignmentId}`);
   return { status: "idle" };
-}
+});

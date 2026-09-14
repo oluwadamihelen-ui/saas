@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { requireBuyer } from "@/lib/auth/require";
+import { requireBuyer, withAuthErrors } from "@/lib/auth/require";
 import { prisma } from "@/lib/db";
 import { initializeBuyerInvoicePayment } from "@/lib/billing/payment-provider";
 
@@ -19,7 +19,7 @@ export interface BuyerFormState {
   message?: string;
 }
 
-export async function payBuyerInvoiceAction(invoiceId: string, _prev: BuyerFormState, _formData: FormData): Promise<BuyerFormState> {
+export const payBuyerInvoiceAction = withAuthErrors(async function payBuyerInvoiceAction(invoiceId: string, _prev: BuyerFormState, _formData: FormData): Promise<BuyerFormState> {
   const sessionUser = await requireBuyer();
   const buyer = await prisma.buyer.findUniqueOrThrow({ where: { userId: sessionUser.id } });
 
@@ -32,4 +32,4 @@ export async function payBuyerInvoiceAction(invoiceId: string, _prev: BuyerFormS
     return { status: "error", message: error instanceof Error ? error.message : "Could not start payment." };
   }
   redirect(authorizationUrl);
-}
+});

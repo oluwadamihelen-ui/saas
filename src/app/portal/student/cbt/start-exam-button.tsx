@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { startAttemptAction } from "./actions";
 
 export function StartExamButton({ examId, label }: { examId: string; label: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
@@ -15,7 +16,7 @@ export function StartExamButton({ examId, label }: { examId: string; label: stri
       <Button
         disabled={isPending}
         onClick={() =>
-          startTransition(async () => {
+          run(async () => {
             setError(null);
             const result = await startAttemptAction(examId);
             if (result.status === "error") {

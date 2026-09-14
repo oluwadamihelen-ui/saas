@@ -1,12 +1,12 @@
 "use client";
 
-import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { confirmPendingPaymentAction, rejectPendingPaymentAction } from "./actions";
 
 export function PendingPaymentButtons({ invoiceId, paymentId }: { invoiceId: string; paymentId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
 
   return (
@@ -14,7 +14,7 @@ export function PendingPaymentButtons({ invoiceId, paymentId }: { invoiceId: str
       <Button
         size="sm"
         disabled={isPending}
-        onClick={() => startTransition(async () => {
+        onClick={() => run(async () => {
           await confirmPendingPaymentAction(invoiceId, paymentId);
           router.refresh();
         })}
@@ -25,7 +25,7 @@ export function PendingPaymentButtons({ invoiceId, paymentId }: { invoiceId: str
         size="sm"
         variant="ghost"
         disabled={isPending}
-        onClick={() => startTransition(async () => {
+        onClick={() => run(async () => {
           await rejectPendingPaymentAction(invoiceId, paymentId);
           router.refresh();
         })}

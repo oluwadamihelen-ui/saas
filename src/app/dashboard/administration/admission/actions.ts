@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { updateApplicantStatus, confirmApplicationFeePaid, admitApplicant } from "@/lib/services/admission";
 import { logAudit } from "@/lib/audit";
@@ -18,7 +18,7 @@ const statusSchema = z.object({
   notes: z.string().trim().optional().or(z.literal("")),
 });
 
-export async function updateApplicantStatusAction(_prev: AdmissionActionState, formData: FormData): Promise<AdmissionActionState> {
+export const updateApplicantStatusAction = withAuthErrors(async function updateApplicantStatusAction(_prev: AdmissionActionState, formData: FormData): Promise<AdmissionActionState> {
   const user = await requirePermission(PERMISSIONS.ADMISSION_MANAGE);
   const parsed = statusSchema.safeParse({
     applicantId: formData.get("applicantId"),
@@ -43,7 +43,7 @@ export async function updateApplicantStatusAction(_prev: AdmissionActionState, f
   revalidatePath("/dashboard/administration/admission");
   revalidatePath(`/dashboard/administration/admission/${parsed.data.applicantId}`);
   return { status: "success" };
-}
+});
 
 export async function confirmApplicationFeePaidAction(applicantId: string) {
   const user = await requirePermission(PERMISSIONS.ADMISSION_MANAGE);
@@ -57,7 +57,7 @@ const admitSchema = z.object({
   classArmId: z.string().trim().optional().or(z.literal("")),
 });
 
-export async function admitApplicantAction(_prev: AdmissionActionState, formData: FormData): Promise<AdmissionActionState> {
+export const admitApplicantAction = withAuthErrors(async function admitApplicantAction(_prev: AdmissionActionState, formData: FormData): Promise<AdmissionActionState> {
   const user = await requirePermission(PERMISSIONS.ADMISSION_MANAGE);
   const parsed = admitSchema.safeParse({
     applicantId: formData.get("applicantId"),
@@ -82,4 +82,4 @@ export async function admitApplicantAction(_prev: AdmissionActionState, formData
   revalidatePath(`/dashboard/administration/admission/${parsed.data.applicantId}`);
   revalidatePath("/dashboard/students");
   return { status: "success" };
-}
+});

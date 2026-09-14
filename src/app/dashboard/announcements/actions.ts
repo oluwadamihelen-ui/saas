@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { createAnnouncement, publishAnnouncement } from "@/lib/services/announcements";
 
@@ -21,7 +21,7 @@ export interface AnnouncementFormState {
   message?: string;
 }
 
-export async function createAnnouncementAction(
+export const createAnnouncementAction = withAuthErrors(async function createAnnouncementAction(
   _prev: AnnouncementFormState,
   formData: FormData
 ): Promise<AnnouncementFormState> {
@@ -56,7 +56,7 @@ export async function createAnnouncementAction(
 
   revalidatePath("/dashboard/announcements");
   return { status: "success" };
-}
+});
 
 export async function publishAnnouncementAction(id: string) {
   const user = await requirePermission(PERMISSIONS.ANNOUNCEMENTS_MANAGE);

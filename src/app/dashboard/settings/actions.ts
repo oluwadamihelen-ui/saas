@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { updateSchoolInfo } from "@/lib/services/school";
 import { prisma } from "@/lib/db";
@@ -36,7 +36,10 @@ export interface SettingsState {
   message?: string;
 }
 
-export async function saveSchoolSettings(_prev: SettingsState, formData: FormData): Promise<SettingsState> {
+export const saveSchoolSettings = withAuthErrors(async function saveSchoolSettings(
+  _prev: SettingsState,
+  formData: FormData
+): Promise<SettingsState> {
   const user = await requirePermission(PERMISSIONS.SCHOOL_SETTINGS_MANAGE);
 
   const parsed = schema.safeParse({
@@ -102,4 +105,4 @@ export async function saveSchoolSettings(_prev: SettingsState, formData: FormDat
 
   revalidatePath("/dashboard/settings");
   return { status: "success", message: "Saved." };
-}
+});

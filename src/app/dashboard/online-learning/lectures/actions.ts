@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import {
   createLecture,
@@ -117,7 +117,7 @@ async function buildLectureInput(schoolId: string, formData: FormData): Promise<
   };
 }
 
-export async function createLectureAction(_prev: LectureFormState, formData: FormData): Promise<LectureFormState> {
+export const createLectureAction = withAuthErrors(async function createLectureAction(_prev: LectureFormState, formData: FormData): Promise<LectureFormState> {
   const user = await requirePermission(PERMISSIONS.LECTURES_MANAGE);
   const { input, error } = await buildLectureInput(user.schoolId, formData);
   if (error || !input) return { status: "error", message: error ?? "Please check the lecture details." };
@@ -132,9 +132,9 @@ export async function createLectureAction(_prev: LectureFormState, formData: For
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "lecture.created", resourceType: "Lecture", resourceId: lecture.id, newValue: { title: lecture.title } });
   revalidatePath("/dashboard/online-learning/lectures");
   redirect(`/dashboard/online-learning/lectures/${lecture.id}`);
-}
+});
 
-export async function updateLectureAction(lectureId: string, _prev: LectureFormState, formData: FormData): Promise<LectureFormState> {
+export const updateLectureAction = withAuthErrors(async function updateLectureAction(lectureId: string, _prev: LectureFormState, formData: FormData): Promise<LectureFormState> {
   const user = await requirePermission(PERMISSIONS.LECTURES_MANAGE);
   const { input, error } = await buildLectureInput(user.schoolId, formData);
   if (error || !input) return { status: "error", message: error ?? "Please check the lecture details." };
@@ -148,7 +148,7 @@ export async function updateLectureAction(lectureId: string, _prev: LectureFormS
   revalidatePath("/dashboard/online-learning/lectures");
   revalidatePath(`/dashboard/online-learning/lectures/${lectureId}`);
   redirect(`/dashboard/online-learning/lectures/${lectureId}`);
-}
+});
 
 export async function publishLectureAction(lectureId: string) {
   const user = await requirePermission(PERMISSIONS.LECTURES_MANAGE);

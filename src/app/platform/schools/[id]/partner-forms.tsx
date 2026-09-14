@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useActionToast } from "@/hooks/use-action-toast";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import {
   attributePartnerReferralAction,
   overridePartnerReferralAction,
@@ -167,7 +168,7 @@ export function CancelAgreementForm({ agreementId, schoolId }: { agreementId: st
 }
 
 export function CompleteAgreementButton({ agreementId, schoolId }: { agreementId: string; schoolId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
 
   return (
@@ -175,7 +176,7 @@ export function CompleteAgreementButton({ agreementId, schoolId }: { agreementId
       size="sm"
       variant="secondary"
       disabled={isPending}
-      onClick={() => startTransition(async () => { await markCommercialAgreementCompletedAction(agreementId, schoolId); router.refresh(); })}
+      onClick={() => run(async () => { await markCommercialAgreementCompletedAction(agreementId, schoolId); router.refresh(); })}
     >
       Mark completed
     </Button>

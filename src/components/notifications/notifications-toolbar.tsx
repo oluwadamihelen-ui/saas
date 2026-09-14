@@ -1,23 +1,23 @@
 "use client";
 
-import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { markAllNotificationsReadAction, clearExpiredNotificationsAction } from "@/lib/actions/notifications";
 
 export function NotificationsToolbar({ hasUnread, hasExpired }: { hasUnread: boolean; hasExpired: boolean }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
 
   function handleMarkAll() {
-    startTransition(async () => {
+    run(async () => {
       await markAllNotificationsReadAction();
       router.refresh();
     });
   }
 
   function handleClearExpired() {
-    startTransition(async () => {
+    run(async () => {
       await clearExpiredNotificationsAction();
       router.refresh();
     });

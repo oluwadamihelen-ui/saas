@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
@@ -9,10 +9,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { resendInviteAction, convertInviteAction, regenerateSetupLinkAction, type ConvertInviteState } from "./actions";
 
 import { useActionToast } from "@/hooks/use-action-toast";
+import { useSafeAction } from "@/hooks/use-safe-action";
 
 export function ResendInviteButton({ inviteId }: { inviteId: string }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
 
   return (
     <Button
@@ -21,7 +22,7 @@ export function ResendInviteButton({ inviteId }: { inviteId: string }) {
       size="sm"
       disabled={isPending}
       onClick={() =>
-        startTransition(async () => {
+        run(async () => {
           await resendInviteAction(inviteId);
           router.refresh();
         })
@@ -39,13 +40,13 @@ export function RegenerateSetupLinkButton({ userId, name }: { userId: string; na
   const [open, setOpen] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
     if (next && !token && !isPending) {
-      startTransition(async () => {
+      run(async () => {
         const result = await regenerateSetupLinkAction(userId);
         if ("error" in result) setError(result.error);
         else setToken(result.token);

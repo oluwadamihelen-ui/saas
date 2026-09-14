@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { releaseExamResultsAction } from "../../actions";
 
 export function ReleaseResultsButton({ examId }: { examId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
@@ -16,7 +17,7 @@ export function ReleaseResultsButton({ examId }: { examId: string }) {
         size="sm"
         disabled={isPending}
         onClick={() =>
-          startTransition(async () => {
+          run(async () => {
             setError(null);
             const result = await releaseExamResultsAction(examId);
             if (result.status === "error") {

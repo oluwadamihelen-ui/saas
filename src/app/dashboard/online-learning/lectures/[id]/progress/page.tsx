@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
-import { getLectureProgressForTeacher } from "@/lib/services/lectures";
+import { getLectureProgressForTeacher, LectureNotFoundError } from "@/lib/services/lectures";
 import { formatDate } from "@/lib/utils";
 
 const STATUS_VARIANT = { NOT_STARTED: "neutral", IN_PROGRESS: "warning", COMPLETED: "success" } as const;
@@ -18,8 +18,9 @@ export default async function LectureProgressPage({ params }: { params: Promise<
   let data;
   try {
     data = await getLectureProgressForTeacher(user.schoolId, user.id, id);
-  } catch {
-    notFound();
+  } catch (error) {
+    if (error instanceof LectureNotFoundError) notFound();
+    throw error;
   }
   const { lecture, rows, summary } = data;
 

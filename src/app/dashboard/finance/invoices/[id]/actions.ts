@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { recordManualPayment, confirmPendingPayment, rejectPendingPayment } from "@/lib/services/payments";
 import { toMinorUnits } from "@/lib/money";
@@ -19,7 +19,7 @@ const schema = z.object({
   reference: z.string().trim().max(100).optional().or(z.literal("")),
 });
 
-export async function recordPaymentAction(
+export const recordPaymentAction = withAuthErrors(async function recordPaymentAction(
   invoiceId: string,
   _prev: PaymentFormState,
   formData: FormData
@@ -52,7 +52,7 @@ export async function recordPaymentAction(
 
   revalidatePath(`/dashboard/finance/invoices/${invoiceId}`);
   return { status: "success" };
-}
+});
 
 export async function confirmPendingPaymentAction(invoiceId: string, paymentId: string) {
   const user = await requirePermission(PERMISSIONS.PAYMENTS_RECORD);

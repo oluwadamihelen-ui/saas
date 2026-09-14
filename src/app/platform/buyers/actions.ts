@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requireSuperAdmin } from "@/lib/auth/require";
+import { requireSuperAdmin, withAuthErrors } from "@/lib/auth/require";
 import { suspendBuyer, reactivateBuyer, resetBuyerPassword } from "@/lib/services/buyer-onboarding";
 import {
   createBuyerAgreement,
@@ -22,7 +22,7 @@ export interface PlatformFormState {
 
 const reasonSchema = z.object({ buyerId: z.string().trim().min(1), reason: z.string().trim().min(1, "A reason is required") });
 
-export async function suspendBuyerAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const suspendBuyerAction = withAuthErrors(async function suspendBuyerAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = reasonSchema.safeParse({ buyerId: formData.get("buyerId"), reason: formData.get("reason") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
@@ -35,7 +35,7 @@ export async function suspendBuyerAction(_prev: PlatformFormState, formData: For
   revalidatePath(`/platform/buyers/${parsed.data.buyerId}`);
   revalidatePath("/platform/buyers");
   return { status: "success" };
-}
+});
 
 export interface ResetPasswordState {
   status: "idle" | "error" | "success";
@@ -43,7 +43,7 @@ export interface ResetPasswordState {
   credentials?: { email: string; temporaryPassword: string };
 }
 
-export async function resetBuyerPasswordAction(buyerId: string, _prev: ResetPasswordState, _formData: FormData): Promise<ResetPasswordState> {
+export const resetBuyerPasswordAction = withAuthErrors(async function resetBuyerPasswordAction(buyerId: string, _prev: ResetPasswordState, _formData: FormData): Promise<ResetPasswordState> {
   const admin = await requireSuperAdmin();
   try {
     const { email, temporaryPassword } = await resetBuyerPassword(buyerId, admin.id);
@@ -51,7 +51,7 @@ export async function resetBuyerPasswordAction(buyerId: string, _prev: ResetPass
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not reset this Buyer's password." };
   }
-}
+});
 
 export async function reactivateBuyerAction(buyerId: string) {
   const admin = await requireSuperAdmin();
@@ -67,7 +67,7 @@ const attributeSchema = z.object({
 
 /// Sets the very first attribution for a Buyer that currently has none —
 /// the Buyer Program's own mirror of attributePartnerReferralAction.
-export async function attributeBuyerReferralAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const attributeBuyerReferralAction = withAuthErrors(async function attributeBuyerReferralAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = attributeSchema.safeParse({ buyerId: formData.get("buyerId"), partnerId: formData.get("partnerId") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
@@ -80,7 +80,7 @@ export async function attributeBuyerReferralAction(_prev: PlatformFormState, for
   revalidatePath(`/platform/buyers/${parsed.data.buyerId}`);
   revalidatePath("/platform/partners");
   return { status: "success" };
-}
+});
 
 const overrideSchema = z.object({
   buyerId: z.string().trim().min(1),
@@ -88,7 +88,7 @@ const overrideSchema = z.object({
   reason: z.string().trim().min(1, "A reason is required"),
 });
 
-export async function overrideBuyerReferralAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const overrideBuyerReferralAction = withAuthErrors(async function overrideBuyerReferralAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = overrideSchema.safeParse({
     buyerId: formData.get("buyerId"),
@@ -110,7 +110,7 @@ export async function overrideBuyerReferralAction(_prev: PlatformFormState, form
   revalidatePath(`/platform/buyers/${parsed.data.buyerId}`);
   revalidatePath("/platform/partners");
   return { status: "success" };
-}
+});
 
 const createAgreementSchema = z.object({
   buyerId: z.string().trim().min(1),
@@ -119,7 +119,7 @@ const createAgreementSchema = z.object({
   paymentArrangement: z.enum(["ONE_TIME", "INSTALLMENT"]).optional().or(z.literal("")),
 });
 
-export async function createBuyerAgreementAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const createBuyerAgreementAction = withAuthErrors(async function createBuyerAgreementAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = createAgreementSchema.safeParse({
     buyerId: formData.get("buyerId"),
@@ -142,7 +142,7 @@ export async function createBuyerAgreementAction(_prev: PlatformFormState, formD
   }
   revalidatePath(`/platform/buyers/${parsed.data.buyerId}`);
   return { status: "success" };
-}
+});
 
 export async function approveBuyerAgreementAction(agreementId: string, buyerId: string) {
   const admin = await requireSuperAdmin();
@@ -156,7 +156,7 @@ const agreementReasonSchema = z.object({
   reason: z.string().trim().min(1, "A reason is required"),
 });
 
-export async function cancelBuyerAgreementAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const cancelBuyerAgreementAction = withAuthErrors(async function cancelBuyerAgreementAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = agreementReasonSchema.safeParse({
     agreementId: formData.get("agreementId"),
@@ -172,7 +172,7 @@ export async function cancelBuyerAgreementAction(_prev: PlatformFormState, formD
   }
   revalidatePath(`/platform/buyers/${parsed.data.buyerId}`);
   return { status: "success" };
-}
+});
 
 export async function markBuyerAgreementCompletedAction(agreementId: string, buyerId: string) {
   const admin = await requireSuperAdmin();
@@ -187,7 +187,7 @@ const progressSchema = z.object({
   note: z.string().trim().optional().or(z.literal("")),
 });
 
-export async function postBuyerProgressUpdateAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const postBuyerProgressUpdateAction = withAuthErrors(async function postBuyerProgressUpdateAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = progressSchema.safeParse({
     agreementId: formData.get("agreementId"),
@@ -209,7 +209,7 @@ export async function postBuyerProgressUpdateAction(_prev: PlatformFormState, fo
   }
   revalidatePath(`/platform/buyers/${parsed.data.buyerId}`);
   return { status: "success" };
-}
+});
 
 const createInvoiceSchema = z.object({
   agreementId: z.string().trim().min(1),
@@ -219,7 +219,7 @@ const createInvoiceSchema = z.object({
   dueDate: z.string().trim().min(1, "A due date is required"),
 });
 
-export async function createBuyerInvoiceAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const createBuyerInvoiceAction = withAuthErrors(async function createBuyerInvoiceAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = createInvoiceSchema.safeParse({
     agreementId: formData.get("agreementId"),
@@ -243,7 +243,7 @@ export async function createBuyerInvoiceAction(_prev: PlatformFormState, formDat
   }
   revalidatePath(`/platform/buyers/${parsed.data.buyerId}`);
   return { status: "success" };
-}
+});
 
 export async function markBuyerInvoicePaidAction(invoiceId: string, buyerId: string) {
   const admin = await requireSuperAdmin();

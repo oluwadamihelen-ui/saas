@@ -1,8 +1,8 @@
 "use client";
 
-import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import {
   submitPreschoolReportAction,
   approvePreschoolReportAction,
@@ -11,12 +11,12 @@ import {
 } from "../actions";
 
 export function SubmitButton({ studentId, termId }: { studentId: string; termId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
   return (
     <Button
       disabled={isPending}
-      onClick={() => startTransition(async () => {
+      onClick={() => run(async () => {
         await submitPreschoolReportAction(studentId, termId);
         router.refresh();
       })}
@@ -27,12 +27,12 @@ export function SubmitButton({ studentId, termId }: { studentId: string; termId:
 }
 
 export function ApproveButton({ studentId, termId }: { studentId: string; termId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
   return (
     <Button
       disabled={isPending}
-      onClick={() => startTransition(async () => {
+      onClick={() => run(async () => {
         await approvePreschoolReportAction(studentId, termId);
         router.refresh();
       })}
@@ -43,12 +43,12 @@ export function ApproveButton({ studentId, termId }: { studentId: string; termId
 }
 
 export function PublishButton({ studentId, termId }: { studentId: string; termId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
   return (
     <Button
       disabled={isPending}
-      onClick={() => startTransition(async () => {
+      onClick={() => run(async () => {
         await publishPreschoolReportAction(studentId, termId);
         router.refresh();
       })}
@@ -59,13 +59,13 @@ export function PublishButton({ studentId, termId }: { studentId: string; termId
 }
 
 export function ReopenButton({ studentId, termId }: { studentId: string; termId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
   return (
     <Button
       variant="secondary"
       disabled={isPending}
-      onClick={() => startTransition(async () => {
+      onClick={() => run(async () => {
         await reopenPreschoolReportAction(studentId, termId);
         router.refresh();
       })}

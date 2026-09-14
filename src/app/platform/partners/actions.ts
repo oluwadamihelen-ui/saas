@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requireSuperAdmin } from "@/lib/auth/require";
+import { requireSuperAdmin, withAuthErrors } from "@/lib/auth/require";
 import { manuallyAttributePartnerReferral, overridePartnerReferral } from "@/lib/services/partner-referrals";
 import { approvePartnerApplication, rejectPartnerApplication, suspendPartner, reactivatePartner } from "@/lib/services/partner-onboarding";
 import {
@@ -31,7 +31,7 @@ const attributeSchema = z.object({
 });
 
 /// Sets the very first attribution for a school that currently has none.
-export async function attributePartnerReferralAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const attributePartnerReferralAction = withAuthErrors(async function attributePartnerReferralAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = attributeSchema.safeParse({ schoolId: formData.get("schoolId"), partnerId: formData.get("partnerId") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
@@ -44,7 +44,7 @@ export async function attributePartnerReferralAction(_prev: PlatformFormState, f
   revalidatePath(`/platform/schools/${parsed.data.schoolId}`);
   revalidatePath("/platform/partners");
   return { status: "success" };
-}
+});
 
 const overrideSchema = z.object({
   schoolId: z.string().trim().min(1),
@@ -54,7 +54,7 @@ const overrideSchema = z.object({
 
 /// Corrects an existing attribution — the more consequential action, since
 /// it reassigns real, already-flowing commission eligibility.
-export async function overridePartnerReferralAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const overridePartnerReferralAction = withAuthErrors(async function overridePartnerReferralAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = overrideSchema.safeParse({
     schoolId: formData.get("schoolId"),
@@ -76,12 +76,12 @@ export async function overridePartnerReferralAction(_prev: PlatformFormState, fo
   revalidatePath(`/platform/schools/${parsed.data.schoolId}`);
   revalidatePath("/platform/partners");
   return { status: "success" };
-}
+});
 
 const idSchema = z.object({ partnerId: z.string().trim().min(1) });
 const reasonSchema = z.object({ partnerId: z.string().trim().min(1), reason: z.string().trim().min(1, "A reason is required") });
 
-export async function approvePartnerApplicationAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const approvePartnerApplicationAction = withAuthErrors(async function approvePartnerApplicationAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = idSchema.safeParse({ partnerId: formData.get("partnerId") });
   if (!parsed.success) return { status: "error", message: "Please check your selection." };
@@ -94,9 +94,9 @@ export async function approvePartnerApplicationAction(_prev: PlatformFormState, 
   revalidatePath(`/platform/partners/${parsed.data.partnerId}`);
   revalidatePath("/platform/partners");
   return { status: "success" };
-}
+});
 
-export async function rejectPartnerApplicationAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const rejectPartnerApplicationAction = withAuthErrors(async function rejectPartnerApplicationAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = reasonSchema.safeParse({ partnerId: formData.get("partnerId"), reason: formData.get("reason") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
@@ -109,9 +109,9 @@ export async function rejectPartnerApplicationAction(_prev: PlatformFormState, f
   revalidatePath(`/platform/partners/${parsed.data.partnerId}`);
   revalidatePath("/platform/partners");
   return { status: "success" };
-}
+});
 
-export async function suspendPartnerAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const suspendPartnerAction = withAuthErrors(async function suspendPartnerAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = reasonSchema.safeParse({ partnerId: formData.get("partnerId"), reason: formData.get("reason") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
@@ -124,9 +124,9 @@ export async function suspendPartnerAction(_prev: PlatformFormState, formData: F
   revalidatePath(`/platform/partners/${parsed.data.partnerId}`);
   revalidatePath("/platform/partners");
   return { status: "success" };
-}
+});
 
-export async function reactivatePartnerAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const reactivatePartnerAction = withAuthErrors(async function reactivatePartnerAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = idSchema.safeParse({ partnerId: formData.get("partnerId") });
   if (!parsed.success) return { status: "error", message: "Please check your selection." };
@@ -139,7 +139,7 @@ export async function reactivatePartnerAction(_prev: PlatformFormState, formData
   revalidatePath(`/platform/partners/${parsed.data.partnerId}`);
   revalidatePath("/platform/partners");
   return { status: "success" };
-}
+});
 
 const createAgreementSchema = z.object({
   schoolId: z.string().trim().min(1),
@@ -150,7 +150,7 @@ const createAgreementSchema = z.object({
   paymentArrangement: z.enum(["ONE_TIME", "INSTALLMENT"]).optional().or(z.literal("")),
 });
 
-export async function createCommercialAgreementAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const createCommercialAgreementAction = withAuthErrors(async function createCommercialAgreementAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = createAgreementSchema.safeParse({
     schoolId: formData.get("schoolId"),
@@ -177,7 +177,7 @@ export async function createCommercialAgreementAction(_prev: PlatformFormState, 
   }
   revalidatePath(`/platform/schools/${parsed.data.schoolId}`);
   return { status: "success" };
-}
+});
 
 const approveAgreementSchema = z.object({
   agreementId: z.string().trim().min(1),
@@ -185,7 +185,7 @@ const approveAgreementSchema = z.object({
   stopRentSubscription: z.literal("on").optional(),
 });
 
-export async function approveCommercialAgreementAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const approveCommercialAgreementAction = withAuthErrors(async function approveCommercialAgreementAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = approveAgreementSchema.safeParse({
     agreementId: formData.get("agreementId"),
@@ -205,7 +205,7 @@ export async function approveCommercialAgreementAction(_prev: PlatformFormState,
   }
   revalidatePath(`/platform/schools/${parsed.data.schoolId}`);
   return { status: "success" };
-}
+});
 
 const agreementReasonSchema = z.object({
   agreementId: z.string().trim().min(1),
@@ -213,7 +213,7 @@ const agreementReasonSchema = z.object({
   reason: z.string().trim().min(1, "A reason is required"),
 });
 
-export async function cancelCommercialAgreementAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const cancelCommercialAgreementAction = withAuthErrors(async function cancelCommercialAgreementAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = agreementReasonSchema.safeParse({
     agreementId: formData.get("agreementId"),
@@ -229,7 +229,7 @@ export async function cancelCommercialAgreementAction(_prev: PlatformFormState, 
   }
   revalidatePath(`/platform/schools/${parsed.data.schoolId}`);
   return { status: "success" };
-}
+});
 
 export async function markCommercialAgreementCompletedAction(agreementId: string, schoolId: string) {
   const admin = await requireSuperAdmin();
@@ -256,7 +256,7 @@ export async function approveWithdrawalAction(withdrawalId: string) {
   revalidatePath("/platform/partners/withdrawals");
 }
 
-export async function rejectWithdrawalAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const rejectWithdrawalAction = withAuthErrors(async function rejectWithdrawalAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = withdrawalReasonSchema.safeParse({ withdrawalId: formData.get("withdrawalId"), reason: formData.get("reason") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
@@ -268,9 +268,9 @@ export async function rejectWithdrawalAction(_prev: PlatformFormState, formData:
   }
   revalidatePath("/platform/partners/withdrawals");
   return { status: "success" };
-}
+});
 
-export async function markWithdrawalPaidAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const markWithdrawalPaidAction = withAuthErrors(async function markWithdrawalPaidAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = withdrawalPaidSchema.safeParse({
     withdrawalId: formData.get("withdrawalId"),
@@ -286,7 +286,7 @@ export async function markWithdrawalPaidAction(_prev: PlatformFormState, formDat
   }
   revalidatePath("/platform/partners/withdrawals");
   return { status: "success" };
-}
+});
 
 const configSchema = z.object({
   buyCommissionRatePercent: z.string().trim().min(1),
@@ -298,7 +298,7 @@ const configSchema = z.object({
   minimumWithdrawal: z.string().trim().min(1),
 });
 
-export async function updatePartnerCommissionConfigAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const updatePartnerCommissionConfigAction = withAuthErrors(async function updatePartnerCommissionConfigAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = configSchema.safeParse({
     buyCommissionRatePercent: formData.get("buyCommissionRatePercent"),
@@ -329,4 +329,4 @@ export async function updatePartnerCommissionConfigAction(_prev: PlatformFormSta
   }
   revalidatePath("/platform/partners/settings");
   return { status: "success" };
-}
+});

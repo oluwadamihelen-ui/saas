@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { createCalendarEvent, updateCalendarEvent, deleteCalendarEvent } from "@/lib/services/calendar";
 import { logAudit } from "@/lib/audit";
@@ -22,7 +22,7 @@ const eventSchema = z.object({
   notifyAudience: z.enum(["PARENTS", "STAFF", "BOTH", ""]).optional(),
 });
 
-export async function createEventAction(_prev: CalendarFormState, formData: FormData): Promise<CalendarFormState> {
+export const createEventAction = withAuthErrors(async function createEventAction(_prev: CalendarFormState, formData: FormData): Promise<CalendarFormState> {
   const user = await requirePermission(PERMISSIONS.CALENDAR_MANAGE);
   const parsed = eventSchema.safeParse({
     title: formData.get("title"),
@@ -53,9 +53,9 @@ export async function createEventAction(_prev: CalendarFormState, formData: Form
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "calendar.event_created", resourceType: "CalendarEvent" });
   revalidatePath("/dashboard/administration/calendar");
   return { status: "success" };
-}
+});
 
-export async function updateEventAction(_prev: CalendarFormState, formData: FormData): Promise<CalendarFormState> {
+export const updateEventAction = withAuthErrors(async function updateEventAction(_prev: CalendarFormState, formData: FormData): Promise<CalendarFormState> {
   const user = await requirePermission(PERMISSIONS.CALENDAR_MANAGE);
   const id = String(formData.get("eventId") ?? "");
   const parsed = eventSchema.safeParse({
@@ -88,7 +88,7 @@ export async function updateEventAction(_prev: CalendarFormState, formData: Form
   revalidatePath("/dashboard/administration/calendar");
   revalidatePath("/dashboard/administration/calendar/archive");
   return { status: "success" };
-}
+});
 
 export async function deleteEventAction(id: string) {
   const user = await requirePermission(PERMISSIONS.CALENDAR_MANAGE);

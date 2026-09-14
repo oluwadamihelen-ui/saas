@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { changePlanSelfServe, cancelSubscriptionSelfServe, reactivateSubscriptionSelfServe, DowngradeBlockedError } from "@/lib/services/billing";
 import { initializeSubscriptionPayment } from "@/lib/billing/payment-provider";
@@ -28,7 +28,7 @@ const changePlanSchema = z.object({
   billingInterval: z.enum(["MONTHLY", "YEARLY"]),
 });
 
-export async function changePlanAction(_prev: BillingFormState, formData: FormData): Promise<BillingFormState> {
+export const changePlanAction = withAuthErrors(async function changePlanAction(_prev: BillingFormState, formData: FormData): Promise<BillingFormState> {
   const user = await requirePermission(PERMISSIONS.BILLING_MANAGE);
   const parsed = changePlanSchema.safeParse({
     planId: formData.get("planId"),
@@ -52,9 +52,9 @@ export async function changePlanAction(_prev: BillingFormState, formData: FormDa
   });
   revalidatePath("/dashboard/billing");
   return { status: "success" };
-}
+});
 
-export async function cancelSubscriptionAction(_prev: BillingFormState, _formData: FormData): Promise<BillingFormState> {
+export const cancelSubscriptionAction = withAuthErrors(async function cancelSubscriptionAction(_prev: BillingFormState, _formData: FormData): Promise<BillingFormState> {
   const user = await requirePermission(PERMISSIONS.BILLING_MANAGE);
   try {
     await cancelSubscriptionSelfServe(user.schoolId);
@@ -64,11 +64,11 @@ export async function cancelSubscriptionAction(_prev: BillingFormState, _formDat
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "billing.subscription_cancelled", resourceType: "Subscription", resourceId: user.schoolId });
   revalidatePath("/dashboard/billing");
   return { status: "success" };
-}
+});
 
 const reactivateSchema = z.object({ billingInterval: z.enum(["MONTHLY", "YEARLY"]) });
 
-export async function reactivateSubscriptionAction(_prev: BillingFormState, formData: FormData): Promise<BillingFormState> {
+export const reactivateSubscriptionAction = withAuthErrors(async function reactivateSubscriptionAction(_prev: BillingFormState, formData: FormData): Promise<BillingFormState> {
   const user = await requirePermission(PERMISSIONS.BILLING_MANAGE);
   const parsed = reactivateSchema.safeParse({ billingInterval: formData.get("billingInterval") });
   if (!parsed.success) return { status: "error", message: "Please check your selection." };
@@ -81,9 +81,9 @@ export async function reactivateSubscriptionAction(_prev: BillingFormState, form
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "billing.subscription_reactivated", resourceType: "Subscription", resourceId: user.schoolId });
   revalidatePath("/dashboard/billing");
   return { status: "success" };
-}
+});
 
-export async function payInvoiceAction(invoiceId: string, _prev: BillingFormState, _formData: FormData): Promise<BillingFormState> {
+export const payInvoiceAction = withAuthErrors(async function payInvoiceAction(invoiceId: string, _prev: BillingFormState, _formData: FormData): Promise<BillingFormState> {
   const user = await requirePermission(PERMISSIONS.BILLING_MANAGE);
   let authorizationUrl: string;
   try {
@@ -94,4 +94,4 @@ export async function payInvoiceAction(invoiceId: string, _prev: BillingFormStat
     return { status: "error", message: error instanceof Error ? error.message : "Could not start payment." };
   }
   redirect(authorizationUrl);
-}
+});

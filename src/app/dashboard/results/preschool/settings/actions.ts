@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { upsertAssessmentLevelLabel } from "@/lib/services/preschool-results";
@@ -27,7 +27,7 @@ const togglesSchema = z.object({
   preschoolStudentsCanView: z.boolean(),
 });
 
-export async function updatePreschoolTogglesAction(
+export const updatePreschoolTogglesAction = withAuthErrors(async function updatePreschoolTogglesAction(
   _prev: PreschoolSettingsState,
   formData: FormData
 ): Promise<PreschoolSettingsState> {
@@ -47,7 +47,7 @@ export async function updatePreschoolTogglesAction(
 
   revalidatePath("/dashboard/results/preschool/settings");
   return { status: "success", message: "Saved." };
-}
+});
 
 const levelLabelSchema = z.object({
   level: z.enum(ASSESSMENT_LEVELS as [PreschoolAssessmentLevel, ...PreschoolAssessmentLevel[]]),
@@ -55,7 +55,7 @@ const levelLabelSchema = z.object({
   colorVariant: z.enum(BADGE_VARIANTS),
 });
 
-export async function updateAssessmentLevelLabelAction(
+export const updateAssessmentLevelLabelAction = withAuthErrors(async function updateAssessmentLevelLabelAction(
   _prev: PreschoolSettingsState,
   formData: FormData
 ): Promise<PreschoolSettingsState> {
@@ -71,14 +71,14 @@ export async function updateAssessmentLevelLabelAction(
   await upsertAssessmentLevelLabel(user.schoolId, parsed.data.level, { label: parsed.data.label, colorVariant: parsed.data.colorVariant });
   revalidatePath("/dashboard/results/preschool/settings");
   return { status: "success", message: "Saved." };
-}
+});
 
 const classModeSchema = z.object({
   classGroupId: z.string().min(1),
   assessmentMode: z.enum(CLASS_ASSESSMENT_MODES as [ClassAssessmentMode, ...ClassAssessmentMode[]]),
 });
 
-export async function updateClassAssessmentModeAction(
+export const updateClassAssessmentModeAction = withAuthErrors(async function updateClassAssessmentModeAction(
   _prev: PreschoolSettingsState,
   formData: FormData
 ): Promise<PreschoolSettingsState> {
@@ -105,4 +105,4 @@ export async function updateClassAssessmentModeAction(
 
   revalidatePath("/dashboard/results/preschool/settings");
   return { status: "success", message: "Saved." };
-}
+});

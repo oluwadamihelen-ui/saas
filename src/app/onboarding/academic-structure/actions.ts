@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { redirect } from "next/navigation";
-import { requireSchoolUser } from "@/lib/auth/require";
+import { requireSchoolUser, withAuthErrors } from "@/lib/auth/require";
 import { setupAcademicStructure } from "@/lib/services/academics";
 
 const schema = z.object({
@@ -18,7 +18,7 @@ export interface AcademicStructureState {
   message?: string;
 }
 
-export async function saveAcademicStructure(
+export const saveAcademicStructure = withAuthErrors(async function saveAcademicStructure(
   _prev: AcademicStructureState,
   formData: FormData
 ): Promise<AcademicStructureState> {
@@ -49,4 +49,4 @@ export async function saveAcademicStructure(
   });
 
   redirect("/onboarding/invite-staff");
-}
+});

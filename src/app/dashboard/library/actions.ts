@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { createBook, issueLoan, returnLoan, markLoanLost } from "@/lib/services/library";
 import { logAudit } from "@/lib/audit";
@@ -20,7 +20,7 @@ const bookSchema = z.object({
   totalCopies: z.coerce.number().int().positive("Enter at least 1 copy"),
 });
 
-export async function createBookAction(_prev: LibraryFormState, formData: FormData): Promise<LibraryFormState> {
+export const createBookAction = withAuthErrors(async function createBookAction(_prev: LibraryFormState, formData: FormData): Promise<LibraryFormState> {
   const user = await requirePermission(PERMISSIONS.LIBRARY_MANAGE);
   const parsed = bookSchema.safeParse({
     title: formData.get("title"),
@@ -40,7 +40,7 @@ export async function createBookAction(_prev: LibraryFormState, formData: FormDa
   });
   revalidatePath("/dashboard/library");
   return { status: "success" };
-}
+});
 
 const loanSchema = z.object({
   bookId: z.string().trim().min(1, "Choose a book"),
@@ -49,7 +49,7 @@ const loanSchema = z.object({
   dueAt: z.coerce.date(),
 });
 
-export async function issueLoanAction(_prev: LibraryFormState, formData: FormData): Promise<LibraryFormState> {
+export const issueLoanAction = withAuthErrors(async function issueLoanAction(_prev: LibraryFormState, formData: FormData): Promise<LibraryFormState> {
   const user = await requirePermission(PERMISSIONS.LIBRARY_MANAGE);
   const parsed = loanSchema.safeParse({
     bookId: formData.get("bookId"),
@@ -74,7 +74,7 @@ export async function issueLoanAction(_prev: LibraryFormState, formData: FormDat
   revalidatePath("/dashboard/library/loans");
   revalidatePath("/dashboard/library");
   return { status: "success" };
-}
+});
 
 export async function returnLoanAction(id: string) {
   const user = await requirePermission(PERMISSIONS.LIBRARY_MANAGE);

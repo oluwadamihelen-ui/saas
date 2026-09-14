@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requireSuperAdmin } from "@/lib/auth/require";
+import { requireSuperAdmin, withAuthErrors } from "@/lib/auth/require";
 import {
   updateSchoolStatus,
   changeSchoolPlan,
@@ -26,7 +26,7 @@ export interface PlatformFormState {
 
 const schoolStatusSchema = z.object({ schoolId: z.string().trim().min(1), status: z.enum(["TRIAL", "ACTIVE", "SUSPENDED"]) });
 
-export async function updateSchoolStatusAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const updateSchoolStatusAction = withAuthErrors(async function updateSchoolStatusAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = schoolStatusSchema.safeParse({ schoolId: formData.get("schoolId"), status: formData.get("status") });
   if (!parsed.success) return { status: "error", message: "Please check your selection." };
@@ -37,11 +37,11 @@ export async function updateSchoolStatusAction(_prev: PlatformFormState, formDat
   revalidatePath("/platform/schools");
   revalidatePath("/platform");
   return { status: "success" };
-}
+});
 
 const planChangeSchema = z.object({ schoolId: z.string().trim().min(1), planId: z.string().trim().min(1, "Choose a plan") });
 
-export async function changeSchoolPlanAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const changeSchoolPlanAction = withAuthErrors(async function changeSchoolPlanAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = planChangeSchema.safeParse({ schoolId: formData.get("schoolId"), planId: formData.get("planId") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your selection." };
@@ -54,9 +54,9 @@ export async function changeSchoolPlanAction(_prev: PlatformFormState, formData:
   await logAudit({ schoolId: parsed.data.schoolId, userId: admin.id, action: "platform.plan_changed", resourceType: "Subscription", resourceId: parsed.data.schoolId, newValue: { planId: parsed.data.planId } });
   revalidatePath(`/platform/schools/${parsed.data.schoolId}`);
   return { status: "success" };
-}
+});
 
-export async function createSubscriptionAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const createSubscriptionAction = withAuthErrors(async function createSubscriptionAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = planChangeSchema.safeParse({ schoolId: formData.get("schoolId"), planId: formData.get("planId") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your selection." };
@@ -69,14 +69,14 @@ export async function createSubscriptionAction(_prev: PlatformFormState, formDat
   await logAudit({ schoolId: parsed.data.schoolId, userId: admin.id, action: "platform.subscription_created", resourceType: "Subscription", resourceId: parsed.data.schoolId, newValue: { planId: parsed.data.planId } });
   revalidatePath(`/platform/schools/${parsed.data.schoolId}`);
   return { status: "success" };
-}
+});
 
 const subStatusSchema = z.object({
   schoolId: z.string().trim().min(1),
   status: z.enum(["TRIALING", "ACTIVE", "PAST_DUE", "CANCELED", "EXPIRED", "SUSPENDED"]),
 });
 
-export async function updateSubscriptionStatusAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const updateSubscriptionStatusAction = withAuthErrors(async function updateSubscriptionStatusAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   const admin = await requireSuperAdmin();
   const parsed = subStatusSchema.safeParse({ schoolId: formData.get("schoolId"), status: formData.get("status") });
   if (!parsed.success) return { status: "error", message: "Please check your selection." };
@@ -89,7 +89,7 @@ export async function updateSubscriptionStatusAction(_prev: PlatformFormState, f
   await logAudit({ schoolId: parsed.data.schoolId, userId: admin.id, action: "platform.subscription_status_changed", resourceType: "Subscription", resourceId: parsed.data.schoolId, newValue: { status: parsed.data.status } });
   revalidatePath(`/platform/schools/${parsed.data.schoolId}`);
   return { status: "success" };
-}
+});
 
 export async function generatePlatformInvoiceAction(schoolId: string) {
   const admin = await requireSuperAdmin();
@@ -161,7 +161,7 @@ function planInputFromParsed(parsed: z.infer<typeof planSchema>) {
 
 const slugFromName = (name: string) => name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/(^_|_$)/g, "");
 
-export async function createPlanAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const createPlanAction = withAuthErrors(async function createPlanAction(_prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   await requireSuperAdmin();
   const parsed = parsePlanForm(formData);
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
@@ -173,9 +173,9 @@ export async function createPlanAction(_prev: PlatformFormState, formData: FormD
   }
   revalidatePath("/platform/plans");
   return { status: "success" };
-}
+});
 
-export async function updatePlanAction(planId: string, _prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
+export const updatePlanAction = withAuthErrors(async function updatePlanAction(planId: string, _prev: PlatformFormState, formData: FormData): Promise<PlatformFormState> {
   await requireSuperAdmin();
   const parsed = parsePlanForm(formData);
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
@@ -188,7 +188,7 @@ export async function updatePlanAction(planId: string, _prev: PlatformFormState,
   revalidatePath("/platform/plans");
   revalidatePath("/pricing");
   return { status: "success" };
-}
+});
 
 export async function setPlanActiveAction(planId: string, isActive: boolean) {
   await requireSuperAdmin();

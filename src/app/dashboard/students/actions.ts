@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import {
   createStudent,
@@ -86,7 +86,7 @@ function extractStudentFields(formData: FormData) {
   };
 }
 
-export async function createStudentAction(_prev: StudentFormState, formData: FormData): Promise<StudentFormState> {
+export const createStudentAction = withAuthErrors(async function createStudentAction(_prev: StudentFormState, formData: FormData): Promise<StudentFormState> {
   const user = await requirePermission(PERMISSIONS.STUDENTS_CREATE);
 
   const parsed = studentSchema.safeParse(extractStudentFields(formData));
@@ -158,9 +158,9 @@ export async function createStudentAction(_prev: StudentFormState, formData: For
 
   revalidatePath("/dashboard/students");
   redirect(`/dashboard/students/${student.id}`);
-}
+});
 
-export async function updateStudentAction(
+export const updateStudentAction = withAuthErrors(async function updateStudentAction(
   studentId: string,
   _prev: StudentFormState,
   formData: FormData
@@ -204,7 +204,7 @@ export async function updateStudentAction(
 
   revalidatePath(`/dashboard/students/${studentId}`);
   redirect(`/dashboard/students/${studentId}`);
-}
+});
 
 export async function withdrawStudentAction(studentId: string) {
   const user = await requirePermission(PERMISSIONS.STUDENTS_DELETE);
@@ -233,7 +233,7 @@ export interface AddGuardianState {
   message?: string;
 }
 
-export async function addGuardianAction(
+export const addGuardianAction = withAuthErrors(async function addGuardianAction(
   studentId: string,
   _prev: AddGuardianState,
   formData: FormData
@@ -262,7 +262,7 @@ export async function addGuardianAction(
 
   revalidatePath(`/dashboard/students/${studentId}`);
   return { status: "idle" };
-}
+});
 
 export async function searchGuardiansAction(query: string) {
   const user = await requirePermission(PERMISSIONS.GUARDIANS_MANAGE);
@@ -283,7 +283,7 @@ export interface LinkGuardianState {
   message?: string;
 }
 
-export async function linkExistingGuardianAction(
+export const linkExistingGuardianAction = withAuthErrors(async function linkExistingGuardianAction(
   studentId: string,
   _prev: LinkGuardianState,
   formData: FormData
@@ -303,7 +303,7 @@ export async function linkExistingGuardianAction(
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "guardian.linked_existing", resourceType: "Student", resourceId: studentId });
   revalidatePath(`/dashboard/students/${studentId}`);
   return { status: "idle" };
-}
+});
 
 export async function removeGuardianAction(studentId: string, guardianId: string) {
   const user = await requirePermission(PERMISSIONS.GUARDIANS_MANAGE);
@@ -317,7 +317,7 @@ export interface MergeGuardianState {
   message?: string;
 }
 
-export async function mergeGuardiansAction(
+export const mergeGuardiansAction = withAuthErrors(async function mergeGuardiansAction(
   studentId: string,
   keepGuardianId: string,
   _prev: MergeGuardianState,
@@ -345,7 +345,7 @@ export async function mergeGuardiansAction(
   });
   revalidatePath(`/dashboard/students/${studentId}`);
   return { status: "success", message: "Merged." };
-}
+});
 
 const portalInviteEmailSchema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email"),
@@ -356,7 +356,7 @@ export interface PortalInviteState {
   message?: string;
 }
 
-export async function inviteGuardianPortalAction(
+export const inviteGuardianPortalAction = withAuthErrors(async function inviteGuardianPortalAction(
   studentId: string,
   guardianId: string,
   _prev: PortalInviteState,
@@ -377,9 +377,9 @@ export async function inviteGuardianPortalAction(
 
   revalidatePath(`/dashboard/students/${studentId}`);
   return { status: "success" };
-}
+});
 
-export async function inviteStudentPortalAction(
+export const inviteStudentPortalAction = withAuthErrors(async function inviteStudentPortalAction(
   studentId: string,
   _prev: PortalInviteState,
   formData: FormData
@@ -409,4 +409,4 @@ export async function inviteStudentPortalAction(
 
   revalidatePath(`/dashboard/students/${studentId}`);
   return { status: "success" };
-}
+});

@@ -17,7 +17,17 @@ export default async function EditLiveClassPage({ params }: { params: Promise<{ 
     listTerms(user.schoolId),
   ]);
   if (!liveClass) notFound();
-  if (liveClass.status !== "SCHEDULED") notFound();
+
+  if (liveClass.status !== "SCHEDULED") {
+    return (
+      <div className="max-w-3xl space-y-4">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Edit Live Class</h1>
+        <p className="text-sm text-muted">
+          Only scheduled classes can be edited. This class is {liveClass.status === "LIVE" ? "currently live" : liveClass.status.toLowerCase()}, so its details can no longer be changed.
+        </p>
+      </div>
+    );
+  }
 
   const action = updateLiveClassAction.bind(null, liveClass.id);
   const scheduled = liveClass.scheduledStart;

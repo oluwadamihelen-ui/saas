@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { confirmApplicationFeeOnlineAction } from "../../actions";
 
 export function ConfirmButton({ reference, slug, applicantId }: { reference: string; slug: string; applicantId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const [done, setDone] = useState(false);
   const router = useRouter();
 
@@ -18,7 +19,7 @@ export function ConfirmButton({ reference, slug, applicantId }: { reference: str
     <Button
       disabled={isPending}
       onClick={() =>
-        startTransition(async () => {
+        run(async () => {
           await confirmApplicationFeeOnlineAction(reference);
           setDone(true);
           setTimeout(() => router.push(`/apply/${slug}/${applicantId}`), 1200);

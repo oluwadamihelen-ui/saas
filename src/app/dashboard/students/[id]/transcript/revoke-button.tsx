@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { revokeTranscriptAction } from "./actions";
 
 export function RevokeButton({ transcriptId, studentId }: { transcriptId: string; studentId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
@@ -19,7 +20,7 @@ export function RevokeButton({ transcriptId, studentId }: { transcriptId: string
         onClick={() => {
           const reason = window.prompt("Revoke this transcript? It stays on record but will fail verification. Optional reason:");
           if (reason === null) return;
-          startTransition(async () => {
+          run(async () => {
             const result = await revokeTranscriptAction(transcriptId, studentId, reason);
             setError(result.error);
             if (!result.error) router.refresh();

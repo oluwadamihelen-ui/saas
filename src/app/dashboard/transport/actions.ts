@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import {
   createVehicle,
@@ -26,7 +26,7 @@ const vehicleSchema = z.object({
   driverPhone: z.string().trim().optional().or(z.literal("")),
 });
 
-export async function createVehicleAction(_prev: TransportFormState, formData: FormData): Promise<TransportFormState> {
+export const createVehicleAction = withAuthErrors(async function createVehicleAction(_prev: TransportFormState, formData: FormData): Promise<TransportFormState> {
   const user = await requirePermission(PERMISSIONS.TRANSPORT_MANAGE);
   const parsed = vehicleSchema.safeParse({
     name: formData.get("name"),
@@ -50,14 +50,14 @@ export async function createVehicleAction(_prev: TransportFormState, formData: F
   }
   revalidatePath("/dashboard/transport");
   return { status: "success" };
-}
+});
 
 const routeSchema = z.object({
   name: z.string().trim().min(1, "Enter a route name"),
   vehicleId: z.string().trim().optional().or(z.literal("")),
 });
 
-export async function createRouteAction(_prev: TransportFormState, formData: FormData): Promise<TransportFormState> {
+export const createRouteAction = withAuthErrors(async function createRouteAction(_prev: TransportFormState, formData: FormData): Promise<TransportFormState> {
   const user = await requirePermission(PERMISSIONS.TRANSPORT_MANAGE);
   const parsed = routeSchema.safeParse({ name: formData.get("name"), vehicleId: formData.get("vehicleId") ?? "" });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
@@ -69,7 +69,7 @@ export async function createRouteAction(_prev: TransportFormState, formData: For
   }
   revalidatePath("/dashboard/transport");
   return { status: "success" };
-}
+});
 
 const stopSchema = z.object({
   routeId: z.string().trim().min(1),
@@ -79,7 +79,7 @@ const stopSchema = z.object({
   dropoffTime: z.string().trim().optional().or(z.literal("")),
 });
 
-export async function addRouteStopAction(_prev: TransportFormState, formData: FormData): Promise<TransportFormState> {
+export const addRouteStopAction = withAuthErrors(async function addRouteStopAction(_prev: TransportFormState, formData: FormData): Promise<TransportFormState> {
   const user = await requirePermission(PERMISSIONS.TRANSPORT_MANAGE);
   const parsed = stopSchema.safeParse({
     routeId: formData.get("routeId"),
@@ -97,7 +97,7 @@ export async function addRouteStopAction(_prev: TransportFormState, formData: Fo
   }
   revalidatePath(`/dashboard/transport/routes/${parsed.data.routeId}`);
   return { status: "success" };
-}
+});
 
 const assignSchema = z.object({
   routeId: z.string().trim().min(1),
@@ -105,7 +105,7 @@ const assignSchema = z.object({
   stopId: z.string().trim().optional().or(z.literal("")),
 });
 
-export async function assignStudentToRouteAction(_prev: TransportFormState, formData: FormData): Promise<TransportFormState> {
+export const assignStudentToRouteAction = withAuthErrors(async function assignStudentToRouteAction(_prev: TransportFormState, formData: FormData): Promise<TransportFormState> {
   const user = await requirePermission(PERMISSIONS.TRANSPORT_MANAGE);
   const parsed = assignSchema.safeParse({
     routeId: formData.get("routeId"),
@@ -123,7 +123,7 @@ export async function assignStudentToRouteAction(_prev: TransportFormState, form
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "transport.student_assigned", resourceType: "StudentTransportAssignment" });
   revalidatePath(`/dashboard/transport/routes/${parsed.data.routeId}`);
   return { status: "success" };
-}
+});
 
 export async function unassignStudentFromRouteAction(assignmentId: string, routeId: string) {
   const user = await requirePermission(PERMISSIONS.TRANSPORT_MANAGE);

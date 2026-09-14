@@ -1,12 +1,12 @@
 "use client";
 
-import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { approvePayrollRunAction, markPayrollRunPaidAction } from "./actions";
 
 export function RunActions({ id, status }: { id: string; status: "DRAFT" | "APPROVED" | "PAID" }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
 
   if (status === "PAID") return null;
@@ -18,7 +18,7 @@ export function RunActions({ id, status }: { id: string; status: "DRAFT" | "APPR
           size="sm"
           disabled={isPending}
           onClick={() =>
-            startTransition(async () => {
+            run(async () => {
               await approvePayrollRunAction(id);
               router.refresh();
             })
@@ -32,7 +32,7 @@ export function RunActions({ id, status }: { id: string; status: "DRAFT" | "APPR
           size="sm"
           disabled={isPending}
           onClick={() =>
-            startTransition(async () => {
+            run(async () => {
               await markPayrollRunPaidAction(id);
               router.refresh();
             })

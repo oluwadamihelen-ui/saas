@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import { markAttendance } from "@/lib/services/attendance";
@@ -16,7 +16,7 @@ export interface MarkAttendanceState {
   message?: string;
 }
 
-export async function markAttendanceAction(
+export const markAttendanceAction = withAuthErrors(async function markAttendanceAction(
   classArmId: string,
   date: string,
   _prev: MarkAttendanceState,
@@ -65,4 +65,4 @@ export async function markAttendanceAction(
   revalidatePath("/dashboard/attendance");
   revalidatePath("/dashboard");
   return { status: "success", message: `Saved attendance for ${entries.length} student${entries.length === 1 ? "" : "s"}.` };
-}
+});

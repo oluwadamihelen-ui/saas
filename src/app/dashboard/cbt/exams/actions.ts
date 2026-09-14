@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
 import {
@@ -70,7 +70,7 @@ export interface ExamActionResult {
   examId?: string;
 }
 
-export async function createExamAction(payload: ExamPayload): Promise<ExamActionResult> {
+export const createExamAction = withAuthErrors(async function createExamAction(payload: ExamPayload): Promise<ExamActionResult> {
   const user = await requirePermission(PERMISSIONS.CBT_CREATE);
 
   const parsed = examPayloadSchema.safeParse(payload);
@@ -93,9 +93,9 @@ export async function createExamAction(payload: ExamPayload): Promise<ExamAction
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not create exam." };
   }
-}
+});
 
-export async function updateExamAction(examId: string, payload: ExamPayload): Promise<ExamActionResult> {
+export const updateExamAction = withAuthErrors(async function updateExamAction(examId: string, payload: ExamPayload): Promise<ExamActionResult> {
   const user = await requirePermission(PERMISSIONS.CBT_EDIT);
 
   const parsed = examPayloadSchema.safeParse(payload);
@@ -127,9 +127,9 @@ export async function updateExamAction(examId: string, payload: ExamPayload): Pr
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not update exam." };
   }
-}
+});
 
-export async function publishExamAction(examId: string): Promise<ExamActionResult> {
+export const publishExamAction = withAuthErrors(async function publishExamAction(examId: string): Promise<ExamActionResult> {
   const user = await requirePermission(PERMISSIONS.CBT_PUBLISH);
   const perms = await getUserPermissions(user.id);
   try {
@@ -143,9 +143,9 @@ export async function publishExamAction(examId: string): Promise<ExamActionResul
   revalidatePath("/dashboard/cbt/exams");
   revalidatePath(`/dashboard/cbt/exams/${examId}`);
   return { status: "ok", examId };
-}
+});
 
-export async function unpublishExamAction(examId: string): Promise<ExamActionResult> {
+export const unpublishExamAction = withAuthErrors(async function unpublishExamAction(examId: string): Promise<ExamActionResult> {
   const user = await requirePermission(PERMISSIONS.CBT_PUBLISH);
   const perms = await getUserPermissions(user.id);
   try {
@@ -159,9 +159,9 @@ export async function unpublishExamAction(examId: string): Promise<ExamActionRes
   revalidatePath("/dashboard/cbt/exams");
   revalidatePath(`/dashboard/cbt/exams/${examId}`);
   return { status: "ok", examId };
-}
+});
 
-export async function archiveExamAction(examId: string): Promise<ExamActionResult> {
+export const archiveExamAction = withAuthErrors(async function archiveExamAction(examId: string): Promise<ExamActionResult> {
   const user = await requirePermission(PERMISSIONS.CBT_EDIT);
   const perms = await getUserPermissions(user.id);
   try {
@@ -174,9 +174,9 @@ export async function archiveExamAction(examId: string): Promise<ExamActionResul
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "cbt_exam.archived", resourceType: "CBTExam", resourceId: examId });
   revalidatePath("/dashboard/cbt/exams");
   return { status: "ok", examId };
-}
+});
 
-export async function deleteExamAction(examId: string): Promise<ExamActionResult> {
+export const deleteExamAction = withAuthErrors(async function deleteExamAction(examId: string): Promise<ExamActionResult> {
   const user = await requirePermission(PERMISSIONS.CBT_EDIT);
   const perms = await getUserPermissions(user.id);
   try {
@@ -189,7 +189,7 @@ export async function deleteExamAction(examId: string): Promise<ExamActionResult
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "cbt_exam.deleted", resourceType: "CBTExam", resourceId: examId });
   revalidatePath("/dashboard/cbt/exams");
   return { status: "ok" };
-}
+});
 
 export async function createExamTypeAction(label: string): Promise<{ id: string; label: string } | { status: "error"; message: string }> {
   const user = await requirePermission(PERMISSIONS.CBT_CREATE);
@@ -212,7 +212,7 @@ export async function fetchSubjectQuestionsAction(subjectId: string) {
   return listApprovedQuestionsForSubject(user.schoolId, subjectId);
 }
 
-export async function releaseExamResultsAction(examId: string): Promise<ExamActionResult> {
+export const releaseExamResultsAction = withAuthErrors(async function releaseExamResultsAction(examId: string): Promise<ExamActionResult> {
   const user = await requirePermission(PERMISSIONS.CBT_PUBLISH);
   const perms = await getUserPermissions(user.id);
   try {
@@ -226,14 +226,14 @@ export async function releaseExamResultsAction(examId: string): Promise<ExamActi
   revalidatePath(`/dashboard/cbt/exams/${examId}`);
   revalidatePath(`/dashboard/cbt/exams/${examId}/results`);
   return { status: "ok", examId };
-}
+});
 
 export interface ExtensionActionResult {
   status: "ok" | "error";
   message?: string;
 }
 
-export async function grantExtensionAction(
+export const grantExtensionAction = withAuthErrors(async function grantExtensionAction(
   candidateId: string,
   extraTimeMinutes: number,
   reason: string | null
@@ -259,4 +259,4 @@ export async function grantExtensionAction(
   });
   revalidatePath(`/dashboard/cbt/exams/${examId}`);
   return { status: "ok" };
-}
+});

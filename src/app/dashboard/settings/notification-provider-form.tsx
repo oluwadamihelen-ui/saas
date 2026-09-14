@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
 import type { NotificationDeliveryProvider } from "@/generated/prisma/client";
 
 import { useActionToast } from "@/hooks/use-action-toast";
+import { useSafeAction } from "@/hooks/use-safe-action";
 
 const initialState: NotificationProviderFormState = { status: "idle" };
 
@@ -111,7 +112,7 @@ export function NotificationProviderForm({
 }
 
 function DisconnectButton({ provider }: { provider: NotificationDeliveryProvider }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
 
   return (
@@ -121,7 +122,7 @@ function DisconnectButton({ provider }: { provider: NotificationDeliveryProvider
       variant="secondary"
       disabled={isPending}
       onClick={() =>
-        startTransition(async () => {
+        run(async () => {
           await removeNotificationProviderCredentialAction(provider);
           router.refresh();
         })

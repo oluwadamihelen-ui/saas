@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { setAdmissionFee } from "@/lib/services/admission";
 import { toMinorUnits } from "@/lib/money";
@@ -17,7 +17,7 @@ const feeSchema = z.object({
   amount: z.string().trim().optional().or(z.literal("")),
 });
 
-export async function setAdmissionFeeAction(_prev: AdmissionFeeFormState, formData: FormData): Promise<AdmissionFeeFormState> {
+export const setAdmissionFeeAction = withAuthErrors(async function setAdmissionFeeAction(_prev: AdmissionFeeFormState, formData: FormData): Promise<AdmissionFeeFormState> {
   const user = await requirePermission(PERMISSIONS.ADMISSION_MANAGE);
   const parsed = feeSchema.safeParse({ amount: formData.get("amount") ?? "" });
   if (!parsed.success) return { status: "error", message: "Enter a valid amount." };
@@ -32,4 +32,4 @@ export async function setAdmissionFeeAction(_prev: AdmissionFeeFormState, formDa
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "admission.fee_updated", resourceType: "School", resourceId: user.schoolId });
   revalidatePath("/dashboard/administration/admission/fee");
   return { status: "success", message: "Admission fee updated." };
-}
+});

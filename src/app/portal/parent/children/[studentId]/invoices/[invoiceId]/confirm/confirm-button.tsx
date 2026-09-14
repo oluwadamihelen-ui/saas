@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import { confirmMockPaymentAction } from "@/app/pay/[token]/actions";
 
 export function ConfirmButton({ reference, studentId, invoiceId }: { reference: string; studentId: string; invoiceId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const [done, setDone] = useState(false);
   const router = useRouter();
 
@@ -18,7 +19,7 @@ export function ConfirmButton({ reference, studentId, invoiceId }: { reference: 
     <Button
       disabled={isPending}
       onClick={() =>
-        startTransition(async () => {
+        run(async () => {
           await confirmMockPaymentAction(reference);
           setDone(true);
           setTimeout(() => router.push(`/portal/parent/children/${studentId}/invoices/${invoiceId}`), 1200);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Label, Select } from "@/components/ui/input";
@@ -17,6 +17,7 @@ import {
 import { changeRoleAction, setUserStatusAction, type ChangeRoleState } from "./actions";
 
 import { useActionToast } from "@/hooks/use-action-toast";
+import { useSafeAction } from "@/hooks/use-safe-action";
 
 const initialState: ChangeRoleState = { status: "idle" };
 
@@ -104,7 +105,7 @@ export function ChangeRoleDialog({
 
 export function SuspendReactivateButton({ userId, status }: { userId: string; status: "ACTIVE" | "SUSPENDED" }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const nextStatus = status === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
 
   return (
@@ -114,7 +115,7 @@ export function SuspendReactivateButton({ userId, status }: { userId: string; st
       size="sm"
       disabled={isPending}
       onClick={() =>
-        startTransition(async () => {
+        run(async () => {
           await setUserStatusAction(userId, nextStatus);
           router.refresh();
         })

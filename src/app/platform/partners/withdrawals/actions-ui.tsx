@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { useActionToast } from "@/hooks/use-action-toast";
+import { useSafeAction } from "@/hooks/use-safe-action";
 import {
   markWithdrawalUnderReviewAction,
   approveWithdrawalAction,
@@ -16,14 +17,14 @@ import {
 const initialState: PlatformFormState = { status: "idle" };
 
 export function MarkUnderReviewButton({ withdrawalId }: { withdrawalId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
   return (
     <Button
       size="sm"
       variant="secondary"
       disabled={isPending}
-      onClick={() => startTransition(async () => { await markWithdrawalUnderReviewAction(withdrawalId); router.refresh(); })}
+      onClick={() => run(async () => { await markWithdrawalUnderReviewAction(withdrawalId); router.refresh(); })}
     >
       Mark under review
     </Button>
@@ -31,13 +32,13 @@ export function MarkUnderReviewButton({ withdrawalId }: { withdrawalId: string }
 }
 
 export function ApproveWithdrawalButton({ withdrawalId }: { withdrawalId: string }) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, run] = useSafeAction();
   const router = useRouter();
   return (
     <Button
       size="sm"
       disabled={isPending}
-      onClick={() => startTransition(async () => { await approveWithdrawalAction(withdrawalId); router.refresh(); })}
+      onClick={() => run(async () => { await approveWithdrawalAction(withdrawalId); router.refresh(); })}
     >
       Approve
     </Button>

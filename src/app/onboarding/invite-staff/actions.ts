@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requireSchoolUser } from "@/lib/auth/require";
+import { requireSchoolUser, withAuthErrors } from "@/lib/auth/require";
 import { inviteStaffMember } from "@/lib/services/staff";
 import { markStaffInvitedStepDone } from "@/lib/services/school";
 
@@ -17,7 +17,7 @@ export interface InviteStaffState {
   message?: string;
 }
 
-export async function sendStaffInvite(_prev: InviteStaffState, formData: FormData): Promise<InviteStaffState> {
+export const sendStaffInvite = withAuthErrors(async function sendStaffInvite(_prev: InviteStaffState, formData: FormData): Promise<InviteStaffState> {
   const user = await requireSchoolUser();
 
   const parsed = schema.safeParse({
@@ -37,7 +37,7 @@ export async function sendStaffInvite(_prev: InviteStaffState, formData: FormDat
 
   revalidatePath("/onboarding/invite-staff");
   return { status: "success" };
-}
+});
 
 export async function finishOnboarding() {
   const user = await requireSchoolUser();

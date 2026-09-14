@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { requirePermission } from "@/lib/auth/require";
+import { requirePermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { resetUserPassword, changeUserRole, setUserStatus } from "@/lib/services/administration-users";
@@ -17,7 +17,7 @@ const schema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
-export async function resetPasswordAction(_prev: ResetPasswordState, formData: FormData): Promise<ResetPasswordState> {
+export const resetPasswordAction = withAuthErrors(async function resetPasswordAction(_prev: ResetPasswordState, formData: FormData): Promise<ResetPasswordState> {
   const admin = await requirePermission(PERMISSIONS.USERS_MANAGE);
   const parsed = schema.safeParse({ userId: formData.get("userId"), password: formData.get("password") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
@@ -30,7 +30,7 @@ export async function resetPasswordAction(_prev: ResetPasswordState, formData: F
 
   await logAudit({ schoolId: admin.schoolId, userId: admin.id, action: "administration.password_reset", resourceType: "User", resourceId: parsed.data.userId });
   return { status: "success", message: "Password reset." };
-}
+});
 
 export interface ChangeRoleState {
   status: "idle" | "error" | "success";
@@ -48,7 +48,7 @@ const changeRoleSchema = z.object({
 /// description). STAFF_MANAGE's description is literally "Edit or
 /// deactivate staff accounts" — changing which role a staff account
 /// holds is editing that account.
-export async function changeRoleAction(_prev: ChangeRoleState, formData: FormData): Promise<ChangeRoleState> {
+export const changeRoleAction = withAuthErrors(async function changeRoleAction(_prev: ChangeRoleState, formData: FormData): Promise<ChangeRoleState> {
   const admin = await requirePermission(PERMISSIONS.STAFF_MANAGE);
   const parsed = changeRoleSchema.safeParse({ userId: formData.get("userId"), roleId: formData.get("roleId") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
@@ -62,7 +62,7 @@ export async function changeRoleAction(_prev: ChangeRoleState, formData: FormDat
   revalidatePath("/dashboard/administration/users");
   revalidatePath("/dashboard/staff");
   return { status: "success", message: "Role updated." };
-}
+});
 
 export async function setUserStatusAction(userId: string, status: "ACTIVE" | "SUSPENDED") {
   const admin = await requirePermission(PERMISSIONS.STAFF_MANAGE);

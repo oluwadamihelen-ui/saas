@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { requireSchoolUser } from "@/lib/auth/require";
+import { requireSchoolUser, withAuthErrors } from "@/lib/auth/require";
 import { getChildForGuardian } from "@/lib/services/portal";
 import { getInvoice, updateInvoiceItemSelections } from "@/lib/services/invoices";
 import { initiateOnlinePayment, notifyBankTransfer } from "@/lib/services/payments";
@@ -40,7 +40,7 @@ async function requireOwnInvoice(studentId: string, invoiceId: string) {
   return invoice;
 }
 
-export async function payOnlineFromPortalAction(
+export const payOnlineFromPortalAction = withAuthErrors(async function payOnlineFromPortalAction(
   studentId: string,
   invoiceId: string,
   _prev: PortalPayFormState,
@@ -58,9 +58,9 @@ export async function payOnlineFromPortalAction(
     return { status: "error", message: error instanceof Error ? error.message : "Could not start payment." };
   }
   redirect(authorizationUrl);
-}
+});
 
-export async function notifyBankTransferFromPortalAction(
+export const notifyBankTransferFromPortalAction = withAuthErrors(async function notifyBankTransferFromPortalAction(
   studentId: string,
   invoiceId: string,
   _prev: PortalPayFormState,
@@ -74,9 +74,9 @@ export async function notifyBankTransferFromPortalAction(
     return { status: "error", message: error instanceof Error ? error.message : "Could not record your notice." };
   }
   redirect(`/portal/parent/children/${studentId}/invoices/${invoiceId}`);
-}
+});
 
-export async function updateInvoiceSelectionsAction(
+export const updateInvoiceSelectionsAction = withAuthErrors(async function updateInvoiceSelectionsAction(
   studentId: string,
   invoiceId: string,
   _prev: PortalSelectionFormState,
@@ -96,4 +96,4 @@ export async function updateInvoiceSelectionsAction(
 
   revalidatePath(`/portal/parent/children/${studentId}/invoices/${invoiceId}`);
   return { status: "success", message: "Your selections have been saved." };
-}
+});
