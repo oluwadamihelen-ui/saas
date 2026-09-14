@@ -22,6 +22,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (rawUser.role === "PARTNER") {
     redirect("/partner");
   }
+  if (rawUser.role === "BUYER") {
+    redirect("/buyer");
+  }
 
   const sessionUser = await requireSchoolUser();
 

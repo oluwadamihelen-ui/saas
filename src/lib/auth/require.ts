@@ -62,3 +62,12 @@ export async function requirePartner() {
   if (user.role !== "PARTNER") throw new ForbiddenError("Partner access required");
   return user;
 }
+
+/// The Buyer Program's global (School = null) role — checked directly
+/// against the session's role key, mirroring requireSuperAdmin()/
+/// requirePartner(). A Buyer never gains school-tenant permissions.
+export async function requireBuyer() {
+  const user = await requireUser();
+  if (user.role !== "BUYER") throw new ForbiddenError("Buyer access required");
+  return user;
+}

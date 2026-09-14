@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { SUPER_ADMIN_ROLE_KEY, PARTNER_ROLE_KEY } from "@/lib/permissions";
+import { SUPER_ADMIN_ROLE_KEY, PARTNER_ROLE_KEY, BUYER_ROLE_KEY } from "@/lib/permissions";
 import { PLAN_CATALOG, PLAN_TIERS, TRIAL_PLAN_TIER, TRIAL_PERIOD_DAYS } from "@/lib/billing/plan-catalog";
 
 /// Idempotent, global (not per-school) bootstrap for the single Super Admin
@@ -25,6 +25,17 @@ export async function ensurePartnerRole() {
   if (existing) return existing;
   return prisma.role.create({
     data: { schoolId: null, key: PARTNER_ROLE_KEY, name: "Partner", isSystem: true },
+  });
+}
+
+/// Same idempotent findFirst-then-create pattern as ensureSuperAdminRole/
+/// ensurePartnerRole, for the Buyer Program's own global (School = null)
+/// role.
+export async function ensureBuyerRole() {
+  const existing = await prisma.role.findFirst({ where: { schoolId: null, key: BUYER_ROLE_KEY } });
+  if (existing) return existing;
+  return prisma.role.create({
+    data: { schoolId: null, key: BUYER_ROLE_KEY, name: "Buyer", isSystem: true },
   });
 }
 

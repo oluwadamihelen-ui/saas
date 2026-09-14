@@ -35,7 +35,7 @@ export async function createEnterpriseInquiry(input: EnterpriseInquiryInput) {
 export async function listEnterpriseInquiries() {
   return prisma.enterpriseInquiry.findMany({
     orderBy: { createdAt: "desc" },
-    include: { reviewedBy: true },
+    include: { reviewedBy: true, buyer: true },
   });
 }
 

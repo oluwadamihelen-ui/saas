@@ -12,7 +12,9 @@ export default auth((req) => {
     pathname.startsWith("/portal") ||
     pathname.startsWith("/platform") ||
     pathname === "/partner" ||
-    pathname.startsWith("/partner/");
+    pathname.startsWith("/partner/") ||
+    pathname === "/buyer" ||
+    pathname.startsWith("/buyer/");
 
   if (!isProtected) {
     return NextResponse.next();
@@ -30,5 +32,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/onboarding/:path*", "/portal/:path*", "/platform/:path*", "/partner", "/partner/:path*"],
+  matcher: ["/dashboard/:path*", "/onboarding/:path*", "/portal/:path*", "/platform/:path*", "/partner", "/partner/:path*", "/buyer", "/buyer/:path*"],
 };

@@ -440,6 +440,22 @@ model User {
   partnerWithdrawalsReviewed    PartnerWithdrawal[]     @relation("PartnerWithdrawalReviewedBy")
   partnerWithdrawalsPaid        PartnerWithdrawal[]     @relation("PartnerWithdrawalPaidBy")
 
+  /// Set only for the platform-level BUYER role (User.schoolId null, same
+  /// pattern as SUPER_ADMIN/PARTNER) — a Buyer's own profile. Every other
+  /// relation in this block is the Super Admin side of Buyer Program
+  /// actions (who created/approved/cancelled/completed what).
+  buyerProfile               Buyer?                @relation("BuyerUser")
+  buyersCreated              Buyer[]               @relation("BuyerCreatedBy")
+  buyersSuspended            Buyer[]               @relation("BuyerSuspendedBy")
+  buyerAgreementsApproved    BuyerAgreement[]       @relation("BuyerAgreementApprovedBy")
+  buyerAgreementsActivated   BuyerAgreement[]       @relation("BuyerAgreementActivatedBy")
+  buyerAgreementsCancelled   BuyerAgreement[]       @relation("BuyerAgreementCancelledBy")
+  buyerAgreementsCompleted   BuyerAgreement[]       @relation("BuyerAgreementCompletedBy")
+  buyerAgreementsCreated     BuyerAgreement[]       @relation("BuyerAgreementCreatedBy")
+  buyerProgressUpdatesPosted BuyerProgressUpdate[]  @relation("BuyerProgressUpdatePostedBy")
+  buyerInvoicesMarkedPaid    BuyerInvoice[]         @relation("BuyerInvoiceMarkedPaidBy")
+  buyerInvoicesCreated       BuyerInvoice[]         @relation("BuyerInvoiceCreatedBy")
+
   applicantsReviewed    Applicant[]     @relation("ApplicantReviewedBy")
   calendarEventsCreated CalendarEvent[] @relation("CalendarEventCreatedBy")
   feedbackSubmitted     Feedback[]      @relation("FeedbackSubmittedBy")
@@ -2895,6 +2911,10 @@ model EnterpriseInquiry {
 
   createdAt DateTime @default(now())
 
+  /// Set once a Super Admin converts this inquiry into a standalone Buyer
+  /// account (see Buyer.sourceInquiryId) — most inquiries never reach this.
+  buyer Buyer?
+
   @@index([status])
 }
 
@@ -4284,6 +4304,181 @@ model PartnerCommissionConfig {
 
   updatedAt    DateTime @updatedAt
   updatedById  String?
+}
+
+// ---------------------------------------------------------------------------
+// Buyer Program — standalone (non-school) clients purchasing Schoolum
+// outright to install and run independently. A Buyer never gets a School
+// row at all: they use the platform on their own infrastructure after
+// delivery, not as a Schoolum-hosted tenant. This is distinct from an
+// existing School that buys outright via CommercialAgreement (a school that
+// keeps using Schoolum as a hosted tenant, possibly after first renting) —
+// that path is untouched by anything below.
+// ---------------------------------------------------------------------------
+
+enum BuyerStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+/// Platform-level (User.schoolId null, Role.key "BUYER") — the same
+/// global-role pattern SUPER_ADMIN/PARTNER already use. Created only by an
+/// explicit Super Admin action (convertInquiryToBuyer) after a real sales
+/// conversation — never self-serve, unlike Partner's own application flow,
+/// since a Buyer account only exists because Bridgecodes already vetted
+/// the deal through the enterprise inquiry.
+model Buyer {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation("BuyerUser", fields: [userId], references: [id])
+
+  displayName String
+  phone       String?
+  status      BuyerStatus @default(ACTIVE)
+
+  /// The EnterpriseInquiry this account was converted from. Nullable for
+  /// robustness (a future direct-creation path might not have one), but in
+  /// practice always set by the one conversion flow that exists today.
+  sourceInquiryId String?            @unique
+  sourceInquiry   EnterpriseInquiry? @relation(fields: [sourceInquiryId], references: [id])
+
+  createdById String
+  createdBy   User   @relation("BuyerCreatedBy", fields: [createdById], references: [id])
+
+  suspendedAt      DateTime?
+  suspendedById    String?
+  suspendedBy      User?     @relation("BuyerSuspendedBy", fields: [suspendedById], references: [id])
+  suspensionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  agreements BuyerAgreement[]
+  invoices   BuyerInvoice[]
+
+  @@index([status])
+}
+
+enum BuyerAgreementStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum BuyerProgressStage {
+  ORDER_CONFIRMED
+  IN_DEVELOPMENT
+  INSTALLATION
+  DELIVERED
+}
+
+/// The purchase deal itself — always an outright purchase, never a rental
+/// (a Buyer has no Subscription to rent). No commission fields: unlike a
+/// school's CommercialAgreement, a Buyer deal is not wired into the
+/// Partner Program commission engine in this version.
+model BuyerAgreement {
+  id      String @id @default(cuid())
+  buyerId String
+  buyer   Buyer  @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+
+  status BuyerAgreementStatus @default(PENDING)
+
+  agreementValueMinor Int?
+  currency            String              @default("NGN")
+  paymentArrangement  PaymentArrangement?
+
+  /// Only meaningful once ACTIVE — where the build/installation currently
+  /// stands. Advanced only by an explicit Super Admin action
+  /// (postBuyerProgressUpdate), which also appends a BuyerProgressUpdate
+  /// log row; this field always mirrors that log's latest stage.
+  progressStage BuyerProgressStage @default(ORDER_CONFIRMED)
+
+  approvedAt   DateTime?
+  approvedById String?
+  approvedBy   User?     @relation("BuyerAgreementApprovedBy", fields: [approvedById], references: [id])
+
+  startedAt     DateTime?
+  activatedById String?
+  activatedBy   User?     @relation("BuyerAgreementActivatedBy", fields: [activatedById], references: [id])
+
+  endedAt DateTime?
+
+  cancelledAt        DateTime?
+  cancelledById      String?
+  cancelledBy        User?     @relation("BuyerAgreementCancelledBy", fields: [cancelledById], references: [id])
+  cancellationReason String?
+
+  completedAt   DateTime?
+  completedById String?
+  completedBy   User?     @relation("BuyerAgreementCompletedBy", fields: [completedById], references: [id])
+
+  createdById String?
+  createdBy   User?   @relation("BuyerAgreementCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  progressUpdates BuyerProgressUpdate[]
+  invoices        BuyerInvoice[]
+
+  @@index([buyerId])
+  @@index([status])
+}
+
+/// Append-only progress log — the "progress report" a Buyer sees for their
+/// build/installation. Each row is one Super Admin-posted update; the
+/// agreement's own progressStage always mirrors the latest row's stage.
+model BuyerProgressUpdate {
+  id               String         @id @default(cuid())
+  buyerAgreementId String
+  buyerAgreement   BuyerAgreement @relation(fields: [buyerAgreementId], references: [id], onDelete: Cascade)
+
+  stage BuyerProgressStage
+  note  String?
+
+  postedById String
+  postedBy   User     @relation("BuyerProgressUpdatePostedBy", fields: [postedById], references: [id])
+  postedAt   DateTime @default(now())
+
+  createdAt DateTime @default(now())
+
+  @@index([buyerAgreementId])
+}
+
+/// A Buyer's own invoice — the same PAID/PENDING/OVERDUE/VOID lifecycle and
+/// Paystack platform-gateway flow as PlatformInvoice (a school's invoice),
+/// kept as its own model rather than folding into PlatformInvoice because a
+/// Buyer never has a schoolId to hang one off of.
+model BuyerInvoice {
+  id               String         @id @default(cuid())
+  buyerId          String
+  buyer            Buyer          @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  buyerAgreementId String
+  buyerAgreement   BuyerAgreement @relation(fields: [buyerAgreementId], references: [id])
+
+  /// e.g. "Installment 1 of 3", "Full payment" — a Buyer invoice has no
+  /// billing period to describe it the way a subscription invoice does.
+  description String?
+  amountMinor Int
+  currency    String                @default("NGN")
+  status      PlatformInvoiceStatus @default(PENDING)
+  dueDate     DateTime
+  paidAt      DateTime?
+
+  provider          PaymentGatewayProvider?
+  providerReference String?                 @unique
+
+  markedPaidById String?
+  markedPaidBy   User?   @relation("BuyerInvoiceMarkedPaidBy", fields: [markedPaidById], references: [id])
+
+  createdById String?
+  createdBy   User?   @relation("BuyerInvoiceCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([buyerId])
+  @@index([buyerAgreementId])
 }
 
 /// Deliberately holds only metadata + a storage reference (brief: "do not

@@ -1,10 +1,13 @@
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSuperAdmin } from "@/lib/auth/require";
 import { listEnterpriseInquiries } from "@/lib/services/enterprise-inquiries";
 import { formatDateTime } from "@/lib/utils";
 import { InquiryActions } from "./inquiry-actions";
+import { ConvertToBuyerForm } from "./convert-to-buyer-form";
 
 const STATUS_VARIANT = { NEW: "warning", CONTACTED: "accent", CONVERTED: "success", DECLINED: "neutral" } as const;
 
@@ -48,6 +51,13 @@ export default async function PlatformInquiriesPage() {
                   </p>
                 )}
                 {inquiry.status === "NEW" && <InquiryActions inquiryId={inquiry.id} />}
+                {inquiry.buyer ? (
+                  <Button asChild size="sm" variant="secondary">
+                    <Link href={`/platform/buyers/${inquiry.buyer.id}`}>View Buyer account</Link>
+                  </Button>
+                ) : (
+                  <ConvertToBuyerForm inquiryId={inquiry.id} />
+                )}
               </CardContent>
             </Card>
           ))}

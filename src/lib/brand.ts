@@ -19,6 +19,11 @@ export const brand = {
   supportEmail: "support@schoolum.app",
   salesEmail: "hello@schoolum.app",
   domain: "schoolum.app",
+  /// Seeded with demo logins for every role — the one thing "view a
+  /// Schoolum demo" links to for a Buyer Program account. Not a real
+  /// tenant this codebase provisions; it's a separately maintained
+  /// environment.
+  demoUrl: "https://demo.schoolum.io",
   social: {
     twitter: "@schoolum",
   },

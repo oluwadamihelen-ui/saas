@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { confirmSubscriptionPayment } from "@/lib/billing/payment-provider";
+import { confirmSubscriptionPayment, confirmBuyerInvoicePayment } from "@/lib/billing/payment-provider";
 
 /// Schoolum's own Paystack webhook — for schools paying THEIR subscription
 /// to Schoolum, distinct from /api/webhooks/paystack (a school's own
@@ -37,6 +37,11 @@ export async function POST(req: Request) {
   // idempotent, logged webhook handling).
   const externalEventId = `${event.data?.id ?? reference}:${event.event ?? "unknown"}`;
   const invoice = await prisma.platformInvoice.findUnique({ where: { providerReference: reference } });
+  // A Buyer invoice (Buyer Program — a standalone, schoolless purchasing
+  // client) uses this exact same platform Paystack merchant account and
+  // webhook, just against its own BuyerInvoice row instead of
+  // PlatformInvoice, since a Buyer has no schoolId to hang one off of.
+  const buyerInvoice = invoice ? null : await prisma.buyerInvoice.findUnique({ where: { providerReference: reference } });
 
   const existing = await prisma.billingEvent.findUnique({
     where: { provider_externalEventId: { provider: "PAYSTACK", externalEventId } },
@@ -55,14 +60,15 @@ export async function POST(req: Request) {
     },
   });
 
-  if (!invoice) {
+  if (!invoice && !buyerInvoice) {
     await prisma.billingEvent.update({ where: { id: billingEvent.id }, data: { status: "IGNORED", processedAt: new Date() } });
     return NextResponse.json({ received: true });
   }
 
   if (event.event === "charge.success") {
     try {
-      await confirmSubscriptionPayment(reference);
+      if (invoice) await confirmSubscriptionPayment(reference);
+      else await confirmBuyerInvoicePayment(reference);
       await prisma.billingEvent.update({ where: { id: billingEvent.id }, data: { status: "PROCESSED", processedAt: new Date() } });
     } catch (error) {
       await prisma.billingEvent.update({

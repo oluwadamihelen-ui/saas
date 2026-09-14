@@ -388,3 +388,11 @@ export const SUPER_ADMIN_ROLE_KEY = "SUPER_ADMIN";
 /// Partner is never attached to a school tenant, so it never goes through
 /// the per-school RolePermission system either.
 export const PARTNER_ROLE_KEY = "PARTNER";
+
+/// The Buyer Program's global (School = null) role — a standalone client
+/// who purchased Schoolum outright to install independently. Seeded on
+/// demand (see ensureBuyerRole in src/lib/platform-provisioning.ts) and
+/// checked directly against the session's role key (requireBuyer in
+/// src/lib/auth/require.ts), same pattern as SUPER_ADMIN_ROLE_KEY/
+/// PARTNER_ROLE_KEY above.
+export const BUYER_ROLE_KEY = "BUYER";

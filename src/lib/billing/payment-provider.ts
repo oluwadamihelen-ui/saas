@@ -51,6 +51,28 @@ function resolvePlatformProvider(): ResolvedPlatformProvider {
   return { provider: platformMockProvider, providerName: null };
 }
 
+/// The mock provider's verify() reads back a PlatformInvoice — a
+/// BuyerInvoice needs its own, identical-shaped simulated round trip
+/// (see platformMockProvider's own doc comment for why this exists at all).
+const buyerMockProvider: PaymentProvider = {
+  name: "mock",
+  async initialize({ reference, callbackUrl }) {
+    return { authorizationUrl: `${callbackUrl}?reference=${reference}` };
+  },
+  async verify(reference) {
+    const invoice = await prisma.buyerInvoice.findUnique({ where: { providerReference: reference } });
+    if (!invoice) return { status: "failed", amountMinor: 0 };
+    const status = invoice.status === "PAID" ? "success" : invoice.status === "VOID" ? "failed" : "pending";
+    return { status, amountMinor: invoice.amountMinor };
+  },
+};
+
+function resolveBuyerProvider(): ResolvedPlatformProvider {
+  const credentials = getPlatformPaystackCredentials();
+  if (credentials) return { provider: paystackProvider, providerName: "PAYSTACK", credentials };
+  return { provider: buyerMockProvider, providerName: null };
+}
+
 /// Starts an online payment against one of the school's own PENDING
 /// PlatformInvoice rows (spec: schools pay Schoolum for their
 /// subscription). payerEmail is the staff member actually doing the
@@ -113,4 +135,50 @@ export async function confirmSubscriptionPayment(reference: string) {
 
   await createPartnerCommissionForInvoice(updated.id);
   return updated;
+}
+
+/// Starts an online payment against one of the Buyer's own PENDING
+/// BuyerInvoice rows — the same real-Paystack-or-simulated-mock split as
+/// initializeSubscriptionPayment, just scoped to buyerId instead of
+/// schoolId (a Buyer has no school to scope by).
+export async function initializeBuyerInvoicePayment(buyerId: string, invoiceId: string, payerEmail: string, callbackUrl: string) {
+  const invoice = await prisma.buyerInvoice.findFirst({ where: { id: invoiceId, buyerId } });
+  if (!invoice) throw new Error("Invoice not found.");
+  if (invoice.status === "PAID") throw new Error("This invoice is already paid.");
+  if (invoice.status === "VOID") throw new Error("This invoice is no longer valid — refresh the page for your current balance.");
+
+  const { provider, providerName, credentials } = resolveBuyerProvider();
+  const reference = crypto.randomBytes(12).toString("hex");
+
+  await prisma.buyerInvoice.update({
+    where: { id: invoice.id },
+    data: { provider: providerName, providerReference: reference },
+  });
+
+  const { authorizationUrl } = await provider.initialize(
+    { amountMinor: invoice.amountMinor, currency: invoice.currency, reference, callbackUrl, payerEmail },
+    credentials
+  );
+  return { authorizationUrl };
+}
+
+/// Confirms a Buyer invoice payment — same idempotent, never-trust-the-
+/// redirect-alone-for-a-real-gateway shape as confirmSubscriptionPayment.
+/// No Partner commission and no notification here: a Buyer deal isn't
+/// wired into the Partner Program, and Buyer has no school-scoped
+/// Notification row to write to (see Notification.schoolId) — the Buyer
+/// simply sees their invoice's updated status directly on their dashboard.
+export async function confirmBuyerInvoicePayment(reference: string) {
+  const invoice = await prisma.buyerInvoice.findUnique({ where: { providerReference: reference } });
+  if (!invoice) throw new Error("Invoice not found.");
+  if (invoice.status === "PAID") return invoice;
+
+  if (invoice.provider) {
+    const credentials = getPlatformPaystackCredentials();
+    if (!credentials) throw new Error("Schoolum's payment gateway is not configured — contact support.");
+    const result = await paystackProvider.verify(reference, credentials);
+    if (result.status !== "success") return invoice;
+  }
+
+  return prisma.buyerInvoice.update({ where: { id: invoice.id }, data: { status: "PAID", paidAt: new Date() } });
 }
