@@ -11,6 +11,7 @@ const NAV_LINKS = [
   { href: "#features", label: "Features" },
   { href: "#why-schoolum", label: "Solutions" },
   { href: "/pricing", label: "Pricing" },
+  { href: "/partners", label: "Partners" },
   { href: "#how-it-works", label: "Resources" },
 ];
 

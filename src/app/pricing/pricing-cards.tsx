@@ -90,9 +90,10 @@ export function PricingCards({ plans }: { plans: PublicPlan[] }) {
       </div>
 
       <div id="enterprise" className="space-y-4 pt-6 text-center">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground">Running more than one school?</h2>
+        <h2 className="text-2xl font-semibold tracking-tight text-foreground">Running more than one school, or want to buy outright?</h2>
         <p className="mx-auto max-w-xl text-muted">
-          Enterprise plans are built around your group&apos;s campuses, student count and required modules — talk to us and we&apos;ll put a plan together.
+          Enterprise plans are built around your group&apos;s campuses, student count and required modules — and if you&apos;d rather
+          purchase Schoolum outright instead of a subscription, that&apos;s available too. Talk to us and we&apos;ll put a plan together.
         </p>
         <div className="flex justify-center">
           <EnterpriseInquiryForm />

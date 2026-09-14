@@ -20,6 +20,12 @@ export default function PartnerApplyPage() {
             Sign in
           </Link>
         </p>
+        <p className="mt-2 text-center text-sm text-muted">
+          Want to know how commissions work first?{" "}
+          <Link href="/partners" className="font-medium text-accent">
+            Learn more about the Partner Program
+          </Link>
+        </p>
       </CardContent>
     </Card>
   );
