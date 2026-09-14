@@ -1,0 +1,7 @@
+# Replace with the client's real domain before first run — Caddy uses
+# whatever hostname is here both to route requests and to request the
+# matching Let's Encrypt TLS certificate automatically. No other TLS
+# setup is needed; Caddy renews it on its own.
+app.theirschool.com {
+    reverse_proxy app:3001
+}
