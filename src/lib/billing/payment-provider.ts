@@ -2,7 +2,8 @@ import "server-only";
 import crypto from "crypto";
 import { prisma } from "@/lib/db";
 import { paystackProvider } from "@/lib/payments/paystack-provider";
-import { notifySubscriptionPaymentSuccess } from "@/lib/services/notifications";
+import { notifySubscriptionPaymentSuccess, notifyPlatformPaymentReceived } from "@/lib/services/notifications";
+import { createPartnerCommissionForInvoice } from "@/lib/services/partner-commissions";
 import type { GatewayCredentials, PaymentProvider } from "@/lib/payments/types";
 import type { PaymentGatewayProvider } from "@/generated/prisma/client";
 
@@ -94,14 +95,22 @@ export async function confirmSubscriptionPayment(reference: string) {
 
   const updated = await prisma.platformInvoice.update({ where: { id: invoice.id }, data: { status: "PAID", paidAt: new Date() } });
 
-  // A successful payment clears any PAST_DUE grace window and puts the
-  // subscription plainly back to ACTIVE — a school that pays doesn't stay
-  // flagged past-due until the next lazy reconciliation happens to run.
-  await prisma.subscription.update({
-    where: { id: invoice.subscriptionId },
-    data: { status: "ACTIVE", pastDueSince: null, graceEndsAt: null },
-  });
+  // A BUY installment (Partner Program) carries no subscriptionId at all —
+  // it isn't a subscription period and must never be forced through
+  // subscription-status/entitlement machinery that doesn't apply to it.
+  if (invoice.subscriptionId && invoice.subscription) {
+    // A successful payment clears any PAST_DUE grace window and puts the
+    // subscription plainly back to ACTIVE — a school that pays doesn't stay
+    // flagged past-due until the next lazy reconciliation happens to run.
+    await prisma.subscription.update({
+      where: { id: invoice.subscriptionId },
+      data: { status: "ACTIVE", pastDueSince: null, graceEndsAt: null },
+    });
+    await notifySubscriptionPaymentSuccess(invoice.schoolId, invoice.subscription.plan.name);
+  } else {
+    await notifyPlatformPaymentReceived(invoice.schoolId, invoice.amountMinor, invoice.currency);
+  }
 
-  await notifySubscriptionPaymentSuccess(invoice.schoolId, invoice.subscription.plan.name);
+  await createPartnerCommissionForInvoice(updated.id);
   return updated;
 }

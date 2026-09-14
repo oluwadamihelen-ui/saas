@@ -380,3 +380,11 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = 
 /// scoped to a school's data at all, so "does this role have
 /// students.view" is a meaningless question for it.
 export const SUPER_ADMIN_ROLE_KEY = "SUPER_ADMIN";
+
+/// The other platform-level role (School = null): a Partner Program
+/// affiliate. Seeded exactly once, globally (see ensurePartnerRole in
+/// src/lib/platform-provisioning.ts), and checked directly against the
+/// session's role key (requirePartner in src/lib/auth/require.ts) — a
+/// Partner is never attached to a school tenant, so it never goes through
+/// the per-school RolePermission system either.
+export const PARTNER_ROLE_KEY = "PARTNER";

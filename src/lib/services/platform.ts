@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { getOrCreateRentAgreementForInvoice } from "@/lib/services/partner-agreements";
 import type { Prisma, SchoolStatus, SubscriptionStatus, BillingInterval, PlatformInvoiceStatus } from "@/generated/prisma/client";
 
 const SCHOOL_STATUS_KEYS: SchoolStatus[] = ["TRIAL", "ACTIVE", "SUSPENDED"];
@@ -177,6 +178,8 @@ export async function getSchoolForPlatform(id: string) {
       subscription: { include: { plan: true } },
       _count: { select: { students: true, users: true } },
       platformInvoices: { orderBy: { periodStart: "desc" }, include: { markedPaidBy: true } },
+      partnerReferral: { include: { partner: true } },
+      commercialAgreements: { include: { partner: true }, orderBy: { createdAt: "desc" } },
     },
   });
 }
@@ -246,10 +249,13 @@ export async function generatePlatformInvoice(schoolId: string) {
     throw new Error("This plan has custom pricing — set an invoice amount manually rather than auto-generating one.");
   }
 
+  const commercialAgreementId = await getOrCreateRentAgreementForInvoice(schoolId, subscription.id);
+
   return prisma.platformInvoice.create({
     data: {
       schoolId,
       subscriptionId: subscription.id,
+      commercialAgreementId,
       periodStart: subscription.currentPeriodStart,
       periodEnd: subscription.currentPeriodEnd,
       amountMinor,

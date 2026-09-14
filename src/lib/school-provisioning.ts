@@ -9,6 +9,7 @@ import {
 } from "@/lib/permissions";
 import { ensureDefaultPlans, TRIAL_PLAN_TIER, TRIAL_PERIOD_DAYS } from "@/lib/platform-provisioning";
 import { notifyTrialStarted } from "@/lib/services/notifications";
+import { attributeReferralForNewSchool } from "@/lib/services/partner-referrals";
 
 /// Idempotently ensures the global permission catalog exists. Safe to call
 /// on every school creation — it's a handful of upserts, not a migration.
@@ -53,6 +54,10 @@ export async function createSchoolWithOwner(input: {
   ownerName: string;
   ownerEmail: string;
   password: string;
+  /// Already resolved server-side (see getPendingPartnerReferralFromCookie)
+  /// before this function is ever called — this function trusts it as-is
+  /// and never re-derives it from any client-controlled value itself.
+  partnerReferral?: { partnerId: string; referralCodeUsed: string } | null;
 }) {
   const email = input.ownerEmail.toLowerCase().trim();
 
@@ -157,6 +162,8 @@ export async function createSchoolWithOwner(input: {
         name,
       })),
     });
+
+    await attributeReferralForNewSchool(tx, school.id, input.partnerReferral ?? null);
 
     return { school, owner };
   });

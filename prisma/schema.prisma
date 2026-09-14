@@ -255,6 +255,14 @@ model School {
   subscription     Subscription?
   platformInvoices PlatformInvoice[]
 
+  /// Partner Program — platform-level commercial data that merely
+  /// *references* this school (see PartnerReferral/CommercialAgreement's
+  /// own doc comments). Never used for tenant-permission scoping; a
+  /// Partner never gains any access implied by these relations.
+  partnerReferral      PartnerReferral?
+  commercialAgreements CommercialAgreement[]
+  partnerCommissions   PartnerCommission[]
+
   applicants     Applicant[]
   calendarEvents CalendarEvent[]
   feedback       Feedback[]
@@ -412,6 +420,25 @@ model User {
   /// they personally confirmed as paid.
   platformInvoicesMarkedPaid  PlatformInvoice[]   @relation("PlatformInvoiceMarkedPaidBy")
   enterpriseInquiriesReviewed EnterpriseInquiry[] @relation("EnterpriseInquiryReviewedBy")
+
+  /// Set only for the platform-level PARTNER role (User.schoolId null,
+  /// same pattern as SUPER_ADMIN) — a Partner's own profile. Every other
+  /// relation in this block is the Super Admin side of Partner Program
+  /// actions (who approved/rejected/suspended/reversed what).
+  partnerProfile                Partner?               @relation("PartnerUser")
+  partnersApproved              Partner[]              @relation("PartnerApprovedBy")
+  partnersRejected              Partner[]              @relation("PartnerRejectedBy")
+  partnersSuspended             Partner[]              @relation("PartnerSuspendedBy")
+  partnerReferralsAttributed    PartnerReferral[]       @relation("PartnerReferralAttributedBy")
+  partnerReferralsOverridden    PartnerReferral[]       @relation("PartnerReferralOverriddenBy")
+  commercialAgreementsCreated   CommercialAgreement[]   @relation("CommercialAgreementCreatedBy")
+  commercialAgreementsApproved  CommercialAgreement[]   @relation("CommercialAgreementApprovedBy")
+  commercialAgreementsActivated CommercialAgreement[]   @relation("CommercialAgreementActivatedBy")
+  commercialAgreementsCancelled CommercialAgreement[]   @relation("CommercialAgreementCancelledBy")
+  commercialAgreementsCompleted CommercialAgreement[]   @relation("CommercialAgreementCompletedBy")
+  partnerCommissionsReversed    PartnerCommissionReversal[] @relation("PartnerCommissionReversedBy")
+  partnerWithdrawalsReviewed    PartnerWithdrawal[]     @relation("PartnerWithdrawalReviewedBy")
+  partnerWithdrawalsPaid        PartnerWithdrawal[]     @relation("PartnerWithdrawalPaidBy")
 
   applicantsReviewed    Applicant[]     @relation("ApplicantReviewedBy")
   calendarEventsCreated CalendarEvent[] @relation("CalendarEventCreatedBy")
@@ -2008,6 +2035,21 @@ enum NotificationType {
   PAYROLL_RUN_READY_FOR_APPROVAL
   PAYSLIP_AVAILABLE
   STAFF_INVITE_PENDING
+
+  /// Partner Program — sent to a school's billing managers when a BUY
+  /// installment (a PlatformInvoice with no Subscription attached) is
+  /// confirmed paid. SUBSCRIPTION_PAYMENT_SUCCESS's own wording assumes a
+  /// plan name, which a purchase doesn't have.
+  PLATFORM_PAYMENT_RECEIVED
+  /// Sent when a Super Admin approves+activates a CommercialAgreement
+  /// (BUY or RENT) for this school.
+  COMMERCIAL_AGREEMENT_ACTIVATED
+  /// Sent only when the RENT->BUY transition's explicit
+  /// stopRentSubscription choice actually cancelled the school's
+  /// Subscription — distinct from SUBSCRIPTION_CANCELLED (a school's own
+  /// self-serve cancellation) since the cause here is "you just bought
+  /// Schoolum outright," not a churn event.
+  RENT_SUBSCRIPTION_STOPPED
 }
 
 /// Brief section 6's category system — deliberately broader than the rules
@@ -2726,6 +2768,7 @@ model Subscription {
 
   invoices      PlatformInvoice[]
   billingEvents BillingEvent[]
+  commercialAgreements CommercialAgreement[]
 
   @@index([status])
 }
@@ -2738,11 +2781,28 @@ enum PlatformInvoiceStatus {
 }
 
 model PlatformInvoice {
-  id             String       @id @default(cuid())
+  id             String        @id @default(cuid())
   schoolId       String
-  school         School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  subscriptionId String
-  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  school         School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  /// Nullable — a RENT invoice always has one (its subscription's billing
+  /// period); a BUY invoice never does (a purchase isn't a subscription
+  /// period at all — see CommercialAgreement below). Relaxed from
+  /// required specifically for BUY; every pre-existing row keeps its
+  /// non-null value, and generatePlatformInvoice()'s own (unchanged)
+  /// RENT path always sets it, same as before this column was relaxed.
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  /// Which Partner-Program commercial deal this invoice belongs to, if
+  /// any — null for the overwhelming majority of schools (no Partner
+  /// involvement at all) and for every invoice that predates this
+  /// feature. Set once, at invoice-creation time, by whichever code path
+  /// created it (generatePlatformInvoice()'s own small additive lookup
+  /// for RENT, or createBuyInstallmentInvoice() for BUY) — never
+  /// reassigned afterward, so a later change to the agreement's status
+  /// can never retroactively alter which invoices it "owns" historically.
+  commercialAgreementId String?
+  commercialAgreement   CommercialAgreement? @relation(fields: [commercialAgreementId], references: [id])
 
   periodStart     DateTime
   periodEnd       DateTime
@@ -2761,9 +2821,12 @@ model PlatformInvoice {
 
   createdAt DateTime @default(now())
 
+  partnerCommission PartnerCommission?
+
   @@index([schoolId])
   @@index([subscriptionId])
   @@index([schoolId, status])
+  @@index([commercialAgreementId])
 }
 
 enum BillingEventStatus {
@@ -3816,6 +3879,411 @@ model ClassroomMessage {
 
   @@index([liveClassId])
   @@index([schoolId])
+}
+
+// =====================================================================
+// SCHOOLUM PARTNER PROGRAM
+//
+// Platform-level commercial data — Bridgecodes' own business records
+// about who referred which school and what Bridgecodes owes/has paid
+// that referrer, not anything belonging to a school's own tenant. None
+// of these models carry an owning schoolId (same category as AuditLog,
+// BillingEvent, SubscriptionPlan); a School is only ever *referenced*
+// from them, the same way BillingEvent already references one. See
+// ARCHITECTURE.md-equivalent design notes: PartnerReferral (permanent
+// attribution — who gets credit) is deliberately a separate table from
+// CommercialAgreement (the current commercial deal — BUY or RENT, its
+// own snapshotted rate), so a school's referring Partner can survive
+// across several commercial agreements over its lifetime (e.g. RENT,
+// then later BUY) without attribution ever being silently rewritten.
+// =====================================================================
+
+enum PartnerStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  REJECTED
+}
+
+/// A Schoolum Partner — the user-facing "Schoolum Partner Program" name
+/// for what this is internally modeled as. Deliberately NOT a duplicate
+/// identity record: name/email/phone live on the linked User exactly
+/// the way a staff member's do (see User's own "no separate Staff
+/// model" doc comment) — this table only holds what's specific to being
+/// a Partner. userId is unique: one Partner per login, and that User's
+/// schoolId is always null (Role.key = "PARTNER", same global-role
+/// pattern SUPER_ADMIN already uses) — a Partner is a platform-level
+/// account, never a member of any school's tenant.
+model Partner {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation("PartnerUser", fields: [userId], references: [id])
+
+  /// Unique, case-normalized (uppercased) before every write, URL-safe.
+  partnerCode String @unique
+  displayName String
+  phone       String?
+  status      PartnerStatus @default(PENDING)
+
+  /// Payout details — sensitive, shown only to the Partner themselves and
+  /// Super Admin, never to another Partner. No card/banking credentials,
+  /// only what's needed to reference an external manual payout (spec:
+  /// no automatic bank transfer in V1).
+  payoutBankName      String?
+  payoutAccountName   String?
+  payoutAccountNumber String?
+
+  appliedAt DateTime @default(now())
+
+  approvedAt   DateTime?
+  approvedById String?
+  approvedBy   User?     @relation("PartnerApprovedBy", fields: [approvedById], references: [id])
+
+  rejectedAt      DateTime?
+  rejectedById    String?
+  rejectedBy      User?     @relation("PartnerRejectedBy", fields: [rejectedById], references: [id])
+  rejectionReason String?
+
+  suspendedAt      DateTime?
+  suspendedById    String?
+  suspendedBy      User?     @relation("PartnerSuspendedBy", fields: [suspendedById], references: [id])
+  suspensionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  referrals   PartnerReferral[]
+  agreements  CommercialAgreement[]
+  commissions PartnerCommission[]
+  withdrawals PartnerWithdrawal[]
+
+  @@index([status])
+}
+
+enum ReferralSource {
+  LINK
+  MANUAL
+}
+
+enum ReferralStatus {
+  ACTIVE
+  OVERRIDDEN
+}
+
+/// PERMANENT attribution — "who gets credit for bringing this school to
+/// Schoolum" — deliberately separate from CommercialAgreement ("what
+/// deal is currently active"). One row per school ever (schoolId
+/// unique): the first valid attribution wins, enforced by the database,
+/// not just application logic — a second attempt to attribute an
+/// already-referred school fails at the unique constraint rather than
+/// silently overwriting anything. A correction is made by UPDATING this
+/// same row (never inserting a second one) and is only ever done by an
+/// explicit, audited Super Admin action (see overriddenAt/By/Reason).
+model PartnerReferral {
+  id        String  @id @default(cuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id])
+  schoolId  String  @unique
+  school    School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  source           ReferralSource
+  /// The exact code text at the moment of capture, kept even if the
+  /// Partner's own code is later changed — a historical fact about how
+  /// this attribution happened, not a live pointer.
+  referralCodeUsed String?
+  status           ReferralStatus @default(ACTIVE)
+
+  attributedAt   DateTime  @default(now())
+  attributedById String?
+  attributedBy   User?     @relation("PartnerReferralAttributedBy", fields: [attributedById], references: [id])
+
+  overriddenAt     DateTime?
+  overriddenById   String?
+  overriddenBy     User?     @relation("PartnerReferralOverriddenBy", fields: [overriddenById], references: [id])
+  overrideReason   String?
+  previousPartnerId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([partnerId])
+}
+
+enum CommercialMode {
+  BUY
+  RENT
+}
+
+enum CommercialAgreementStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  SUPERSEDED
+  CANCELLED
+}
+
+enum PaymentArrangement {
+  ONE_TIME
+  INSTALLMENT
+}
+
+enum PartnerCommissionPolicy {
+  RECURRING
+  FIRST_PAYMENT_ONLY
+}
+
+/// The current (or historical) commercial deal for a school — separate
+/// from PartnerReferral (see file header). A school may have several of
+/// these over its lifetime (e.g. RENT, later superseded by BUY); only
+/// one may be ACTIVE at a time per school, enforced by a partial unique
+/// index in the migration (`WHERE status = 'ACTIVE'`), not just here.
+///
+/// Status meanings (see design notes for the full decision record):
+///  - PENDING: created, not yet approved — cannot create invoices.
+///  - ACTIVE: approved and operative — the only status that can create
+///    new PlatformInvoice rows or produce new commissions.
+///  - COMPLETED: a BUY agreement fully settled — Super Admin closes it
+///    explicitly; never inferred from summing installment amounts.
+///  - SUPERSEDED: replaced by a newer agreement (the RENT->BUY handoff).
+///  - CANCELLED: negotiation abandoned or deal terminated.
+/// Critically: an invoice already created while this agreement was
+/// ACTIVE keeps its full historical eligibility to produce a commission
+/// even after the agreement later becomes SUPERSEDED/COMPLETED/
+/// CANCELLED — status governs whether NEW invoices/commissions can be
+/// created from this point forward, never whether something already
+/// legitimately issued remains valid. Invalidating an already-created
+/// commission requires the separate, explicit PartnerCommissionReversal
+/// mechanism — never a side effect of this row's status changing.
+model CommercialAgreement {
+  id       String  @id @default(cuid())
+  schoolId String
+  school   School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  /// Null for an organic agreement Super Admin sets up with no Partner
+  /// attached (still useful for BUY/RENT reporting) — commission is only
+  /// ever created when this is non-null.
+  partnerId String?
+  partner   Partner? @relation(fields: [partnerId], references: [id])
+
+  commercialMode CommercialMode
+  status         CommercialAgreementStatus @default(PENDING)
+
+  /// Required for RENT (this agreement bills through the school's one
+  /// Subscription); always null for BUY — a purchase is deliberately not
+  /// forced through subscription/entitlement machinery it doesn't need.
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  /// Total contract value for a BUY agreement (e.g. 300000000 = 3,000,000
+  /// NGN in kobo) — informational only, never summed automatically to
+  /// infer completion. Null for RENT (its "value" is just whatever the
+  /// subscription bills each period).
+  agreementValueMinor Int?
+  currency            String              @default("NGN")
+  paymentArrangement  PaymentArrangement?
+
+  /// Snapshotted once, from PartnerCommissionConfig, at creation time —
+  /// never re-read live. A later platform-wide rate change never alters
+  /// an already-created agreement.
+  commissionRateBps Int
+  commissionPolicy  PartnerCommissionPolicy @default(RECURRING)
+  /// Null = no configured cutoff (current default: commission recurs for
+  /// as long as the agreement keeps producing verified payments). See
+  /// design notes — this is a forward-looking eligibility gate checked
+  /// only at NEW-commission-creation time, never retroactive.
+  commissionEndDate DateTime?
+
+  approvedAt   DateTime?
+  approvedById String?
+  approvedBy   User?     @relation("CommercialAgreementApprovedBy", fields: [approvedById], references: [id])
+
+  /// startedAt doubles as "when this became ACTIVE" for both a fresh
+  /// approval (which now activates atomically — see design notes) and a
+  /// RENT->BUY transition.
+  startedAt     DateTime?
+  activatedById String?
+  activatedBy   User?     @relation("CommercialAgreementActivatedBy", fields: [activatedById], references: [id])
+
+  /// Set when SUPERSEDED (by a newer agreement) or COMPLETED/CANCELLED.
+  endedAt DateTime?
+
+  cancelledAt        DateTime?
+  cancelledById      String?
+  cancelledBy        User?     @relation("CommercialAgreementCancelledBy", fields: [cancelledById], references: [id])
+  cancellationReason String?
+
+  completedAt   DateTime?
+  completedById String?
+  completedBy   User?     @relation("CommercialAgreementCompletedBy", fields: [completedById], references: [id])
+
+  createdById String?
+  createdBy   User?   @relation("CommercialAgreementCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoices    PlatformInvoice[]
+  commissions PartnerCommission[]
+
+  @@index([schoolId])
+  @@index([partnerId])
+  @@index([status])
+}
+
+enum PartnerCommissionStatus {
+  PENDING
+  AVAILABLE
+  RESERVED
+  PAID
+  REVERSED
+  CANCELLED
+}
+
+/// The commission ledger — one row per confirmed PlatformInvoice, ever.
+/// platformInvoiceId is @unique: the idempotency guarantee. A retried or
+/// duplicate webhook delivery can never produce a second commission for
+/// the same payment, enforced by the database, not just application
+/// logic. Balances shown anywhere in the Partner Program are always
+/// derived by querying this table — there is no separate mutable
+/// "partner.balance" field to drift out of sync with reality.
+model PartnerCommission {
+  id        String  @id @default(cuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id])
+  schoolId  String
+  school    School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  commercialAgreementId String
+  commercialAgreement   CommercialAgreement @relation(fields: [commercialAgreementId], references: [id])
+  platformInvoiceId     String              @unique
+  platformInvoice       PlatformInvoice     @relation(fields: [platformInvoiceId], references: [id])
+
+  /// Denormalized copy of the agreement's mode at the moment this row
+  /// was created — lets reporting/filtering avoid a join, and (like
+  /// every other snapshot in this model) stays fixed even if something
+  /// upstream were ever to change.
+  commercialMode    CommercialMode
+  commissionRateBps Int
+  eligibleAmountMinor Int
+  commissionAmountMinor Int
+  currency            String @default("NGN")
+
+  status PartnerCommissionStatus @default(PENDING)
+
+  /// The moment the underlying payment was confirmed.
+  earnedAt DateTime @default(now())
+  /// earnedAt + PartnerCommissionConfig.holdDays at the time this row was
+  /// created — the 7-day hold, snapshotted so a later config change
+  /// never alters an already-earned commission's own hold window.
+  availableAt DateTime
+
+  reversedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  reversal PartnerCommissionReversal?
+  allocation PartnerWithdrawalAllocation?
+
+  @@index([partnerId, status])
+  @@index([schoolId])
+  @@index([commercialAgreementId])
+}
+
+/// Append-only — created only by the explicit, Super Admin-only, reason-
+/// required "reverse commission" action. The parent PartnerCommission's
+/// own amount fields are NEVER edited when this is created; this row is
+/// what records why a REVERSED commission was reversed, by whom, when.
+model PartnerCommissionReversal {
+  id           String            @id @default(cuid())
+  commissionId String            @unique
+  commission   PartnerCommission @relation(fields: [commissionId], references: [id], onDelete: Cascade)
+
+  reason       String
+  reversedById String
+  reversedBy   User   @relation("PartnerCommissionReversedBy", fields: [reversedById], references: [id])
+  reversedAt   DateTime @default(now())
+
+  createdAt DateTime @default(now())
+}
+
+enum PartnerWithdrawalStatus {
+  REQUESTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  PAID
+  CANCELLED
+}
+
+model PartnerWithdrawal {
+  id        String  @id @default(cuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id])
+
+  amountMinor Int
+  currency    String                   @default("NGN")
+  status      PartnerWithdrawalStatus  @default(REQUESTED)
+
+  requestedAt DateTime @default(now())
+
+  reviewedAt     DateTime?
+  reviewedById   String?
+  reviewedBy     User?     @relation("PartnerWithdrawalReviewedBy", fields: [reviewedById], references: [id])
+  rejectionReason String?
+
+  paidAt          DateTime?
+  paidById        String?
+  paidBy          User?     @relation("PartnerWithdrawalPaidBy", fields: [paidById], references: [id])
+  payoutReference String?
+  notes           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  allocations PartnerWithdrawalAllocation[]
+
+  @@index([partnerId, status])
+}
+
+/// Pins one specific, already-AVAILABLE PartnerCommission to one
+/// withdrawal request — the reservation mechanism that makes double-
+/// spending the same commission across two concurrent withdrawals
+/// impossible. commissionId is the primary key (not just unique): a
+/// commission can be allocated to at most one withdrawal, ever, at the
+/// database level. Rejecting/cancelling a withdrawal deletes its
+/// allocation rows (reverting those commissions RESERVED -> AVAILABLE)
+/// in the same transaction — approving/paying keeps them permanently.
+model PartnerWithdrawalAllocation {
+  withdrawalId String
+  withdrawal   PartnerWithdrawal @relation(fields: [withdrawalId], references: [id], onDelete: Cascade)
+  commissionId String            @id
+  commission   PartnerCommission @relation(fields: [commissionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([withdrawalId])
+}
+
+/// Singleton (single row, fixed id) — the one place BUY/RENT default
+/// commission rates, the hold period, the attribution window and the
+/// minimum withdrawal live, instead of scattered literals. Changing a
+/// value here only affects agreements/referrals created AFTER the
+/// change — every snapshot already taken (CommercialAgreement.
+/// commissionRateBps, etc.) stays fixed.
+model PartnerCommissionConfig {
+  id String @id @default("default")
+
+  buyCommissionRateBps  Int @default(2000)
+  rentCommissionRateBps Int @default(1300)
+  buyCommissionPolicy   PartnerCommissionPolicy @default(RECURRING)
+  rentCommissionPolicy  PartnerCommissionPolicy @default(RECURRING)
+
+  holdDays               Int @default(7)
+  attributionWindowDays  Int @default(30)
+  minimumWithdrawalMinor Int @default(1000000)
+
+  updatedAt    DateTime @updatedAt
+  updatedById  String?
 }
 
 /// Deliberately holds only metadata + a storage reference (brief: "do not

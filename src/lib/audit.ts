@@ -7,7 +7,11 @@ export async function logAudit(entry: {
   /// Admin editing the shared plan catalog) — the column itself is
   /// nullable for exactly this case.
   schoolId: string | null;
-  userId: string;
+  /// Null for a system/webhook-triggered event with no human actor (e.g.
+  /// a Partner Program commission created automatically the moment a
+  /// payment is confirmed) — the column has always been nullable at the
+  /// DB level; this type just catches up to it.
+  userId: string | null;
   action: string;
   resourceType: string;
   resourceId?: string;

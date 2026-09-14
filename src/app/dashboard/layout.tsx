@@ -14,10 +14,13 @@ import { PERMISSIONS } from "@/lib/permissions";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   // Checked before requireSchoolUser(), which would otherwise throw for a
-  // Super Admin — that account has no schoolId by design.
+  // Super Admin or Partner — neither account has a schoolId by design.
   const rawUser = await requireUser();
   if (rawUser.role === "SUPER_ADMIN") {
     redirect("/platform");
+  }
+  if (rawUser.role === "PARTNER") {
+    redirect("/partner");
   }
 
   const sessionUser = await requireSchoolUser();

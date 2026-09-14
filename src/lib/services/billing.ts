@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getEffectiveSubscription, getStudentUsage, getCbtUsageSummary } from "@/lib/billing/entitlements";
 import { planPriceForInterval } from "@/lib/services/platform";
 import { notifyPlanChanged, notifySubscriptionCancelled, notifySubscriptionRenewed } from "@/lib/services/notifications";
+import { getOrCreateRentAgreementForInvoice } from "@/lib/services/partner-agreements";
 import type { BillingInterval } from "@/generated/prisma/client";
 
 /// The school's own read-only view of its platform subscription — distinct
@@ -89,10 +90,12 @@ export async function changePlanSelfServe(schoolId: string, newPlanId: string, b
 
   const amountMinor = planPriceForInterval(newPlan, billingInterval);
   if (amountMinor !== null) {
+    const commercialAgreementId = await getOrCreateRentAgreementForInvoice(schoolId, updated.id);
     await prisma.platformInvoice.create({
       data: {
         schoolId,
         subscriptionId: updated.id,
+        commercialAgreementId,
         periodStart: updated.currentPeriodStart,
         periodEnd: updated.currentPeriodEnd,
         amountMinor,
@@ -156,10 +159,12 @@ export async function reactivateSubscriptionSelfServe(schoolId: string, billingI
 
   const amountMinor = planPriceForInterval(subscription.plan, billingInterval);
   if (amountMinor !== null) {
+    const commercialAgreementId = await getOrCreateRentAgreementForInvoice(schoolId, updated.id);
     await prisma.platformInvoice.create({
       data: {
         schoolId,
         subscriptionId: updated.id,
+        commercialAgreementId,
         periodStart,
         periodEnd,
         amountMinor,

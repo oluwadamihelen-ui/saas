@@ -611,6 +611,54 @@ export async function notifySubscriptionPaymentSuccess(schoolId: string, planNam
   );
 }
 
+/// Partner Program — a BUY installment (no Subscription attached, so
+/// notifySubscriptionPaymentSuccess's plan-name wording doesn't apply).
+export async function notifyPlatformPaymentReceived(schoolId: string, amountMinor: number, currency: string) {
+  const recipients = await billingManagerUserIds(schoolId);
+  await notifyRecipients(
+    schoolId,
+    recipients,
+    "PLATFORM_PAYMENT_RECEIVED",
+    "Payment received",
+    `Your payment of ${formatMoney(amountMinor, currency)} was successful.`,
+    "/dashboard/billing",
+    { category: "SYSTEM", priority: "INFO" }
+  );
+}
+
+/// Partner Program — a Super Admin just approved+activated a
+/// CommercialAgreement (BUY or RENT) for this school.
+export async function notifyCommercialAgreementActivated(schoolId: string, commercialMode: "BUY" | "RENT") {
+  const recipients = await billingManagerUserIds(schoolId);
+  await notifyRecipients(
+    schoolId,
+    recipients,
+    "COMMERCIAL_AGREEMENT_ACTIVATED",
+    commercialMode === "BUY" ? "Your purchase agreement is now active" : "Your rental agreement is now active",
+    commercialMode === "BUY"
+      ? "Your agreement to purchase Schoolum has been approved and is now active."
+      : "Your rental agreement with Schoolum has been approved and is now active.",
+    "/dashboard/billing",
+    { category: "SYSTEM", priority: "INFO" }
+  );
+}
+
+/// Partner Program — the explicit stopRentSubscription choice, made while
+/// approving a BUY agreement that supersedes this school's RENT one,
+/// actually cancelled the Subscription.
+export async function notifyRentSubscriptionStopped(schoolId: string) {
+  const recipients = await billingManagerUserIds(schoolId);
+  await notifyRecipients(
+    schoolId,
+    recipients,
+    "RENT_SUBSCRIPTION_STOPPED",
+    "Your subscription has been stopped",
+    "Now that you've purchased Schoolum outright, your rental subscription has been cancelled.",
+    "/dashboard/billing",
+    { category: "SYSTEM", priority: "INFO" }
+  );
+}
+
 export async function notifySubscriptionPaymentFailed(schoolId: string, planName: string) {
   const recipients = await billingManagerUserIds(schoolId);
   await notifyRecipients(

@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { SUPER_ADMIN_ROLE_KEY } from "@/lib/permissions";
+import { SUPER_ADMIN_ROLE_KEY, PARTNER_ROLE_KEY } from "@/lib/permissions";
 import { PLAN_CATALOG, PLAN_TIERS, TRIAL_PLAN_TIER, TRIAL_PERIOD_DAYS } from "@/lib/billing/plan-catalog";
 
 /// Idempotent, global (not per-school) bootstrap for the single Super Admin
@@ -15,6 +15,16 @@ export async function ensureSuperAdminRole() {
   if (existing) return existing;
   return prisma.role.create({
     data: { schoolId: null, key: SUPER_ADMIN_ROLE_KEY, name: "Super Admin", isSystem: true },
+  });
+}
+
+/// Same idempotent findFirst-then-create pattern as ensureSuperAdminRole,
+/// for the other global (School = null) role: Partner Program affiliates.
+export async function ensurePartnerRole() {
+  const existing = await prisma.role.findFirst({ where: { schoolId: null, key: PARTNER_ROLE_KEY } });
+  if (existing) return existing;
+  return prisma.role.create({
+    data: { schoolId: null, key: PARTNER_ROLE_KEY, name: "Partner", isSystem: true },
   });
 }
 
@@ -51,6 +61,19 @@ export async function ensureDefaultPlans() {
     })
   );
   return prisma.subscriptionPlan.findMany({ orderBy: { sortOrder: "asc" } });
+}
+
+/// Idempotent singleton bootstrap for the Partner Program's one
+/// commission-config row (id is a fixed literal, "default" — see the
+/// model's own doc comment). Upsert with an empty `update` so calling
+/// this again after a Super Admin has edited real values never resets
+/// them back to the schema defaults.
+export async function ensurePartnerCommissionConfig() {
+  return prisma.partnerCommissionConfig.upsert({
+    where: { id: "default" },
+    create: { id: "default" },
+    update: {},
+  });
 }
 
 export { TRIAL_PLAN_TIER, TRIAL_PERIOD_DAYS };

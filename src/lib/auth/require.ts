@@ -53,3 +53,12 @@ export async function requireSuperAdmin() {
   if (user.role !== "SUPER_ADMIN") throw new ForbiddenError("Super admin access required");
   return user;
 }
+
+/// The Partner Program's global (School = null) role — checked directly
+/// against the session's role key, mirroring requireSuperAdmin(). A
+/// Partner never gains school-tenant permissions.
+export async function requirePartner() {
+  const user = await requireUser();
+  if (user.role !== "PARTNER") throw new ForbiddenError("Partner access required");
+  return user;
+}
