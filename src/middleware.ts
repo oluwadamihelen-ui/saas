@@ -13,11 +13,17 @@ const DEMO_HOSTNAME = new URL(brand.demoUrl).hostname;
 export default auth((req) => {
   const { pathname } = req.nextUrl;
 
+  // req.nextUrl.hostname does NOT reliably reflect the incoming Host
+  // header in this Next.js version (confirmed: it resolves to the
+  // server's own bind address, not the request's actual Host) — the
+  // literal `Host` request header is the only accurate source for this.
+  const requestHostname = (req.headers.get("host") ?? "").split(":")[0];
+
   // On the demo subdomain, the root path shows the "pick a role, sign in
   // instantly" landing page instead of the normal marketing homepage —
   // everything else on that host (login, /dashboard, /portal, ...) behaves
   // exactly like the main site, since it's the same deployment.
-  if (req.nextUrl.hostname === DEMO_HOSTNAME && pathname === "/") {
+  if (requestHostname === DEMO_HOSTNAME && pathname === "/") {
     return NextResponse.rewrite(new URL("/demo", req.nextUrl));
   }
 
