@@ -126,6 +126,81 @@ export async function createPartnerCommissionForInvoice(invoiceId: string): Prom
   }
 }
 
+/// Called once per confirmed BuyerInvoice (from confirmBuyerInvoicePayment,
+/// right after it's marked PAID) — the Buyer Program's own mirror of
+/// createPartnerCommissionForInvoice, same idempotency/policy/cutoff rules,
+/// just reading from BuyerAgreement/BuyerInvoice instead of
+/// CommercialAgreement/PlatformInvoice. Writes into the exact same
+/// PartnerCommission ledger (via buyerId/buyerAgreementId/buyerInvoiceId
+/// instead of schoolId/commercialAgreementId/platformInvoiceId) — a
+/// Partner's balance, withdrawal, hold and reversal machinery never needs
+/// to know or care which side a given commission came from.
+export async function createPartnerCommissionForBuyerInvoice(invoiceId: string): Promise<PartnerCommission | null> {
+  const invoice = await prisma.buyerInvoice.findUnique({
+    where: { id: invoiceId },
+    include: { buyerAgreement: true },
+  });
+  if (!invoice) return null;
+
+  const agreement = invoice.buyerAgreement;
+  if (!agreement.partnerId) return null;
+
+  if (agreement.commissionEndDate && new Date() > agreement.commissionEndDate) return null;
+
+  if (agreement.commissionPolicy === "FIRST_PAYMENT_ONLY") {
+    const alreadyEarned = await prisma.partnerCommission.findFirst({
+      where: { buyerAgreementId: agreement.id },
+      select: { id: true },
+    });
+    if (alreadyEarned) return null;
+  }
+
+  const config = await getPartnerCommissionConfig();
+  const commissionAmountMinor = Math.round((invoice.amountMinor * agreement.commissionRateBps) / 10000);
+  const earnedAt = new Date();
+  const availableAt = new Date(earnedAt);
+  availableAt.setDate(availableAt.getDate() + config.holdDays);
+
+  try {
+    const commission = await prisma.partnerCommission.create({
+      data: {
+        partnerId: agreement.partnerId,
+        buyerId: invoice.buyerId,
+        buyerAgreementId: agreement.id,
+        buyerInvoiceId: invoice.id,
+        commercialMode: "BUY",
+        commissionRateBps: agreement.commissionRateBps,
+        eligibleAmountMinor: invoice.amountMinor,
+        commissionAmountMinor,
+        currency: invoice.currency,
+        earnedAt,
+        availableAt,
+      },
+    });
+
+    await logAudit({
+      schoolId: null,
+      userId: null,
+      action: "partner_commission.created",
+      resourceType: "PartnerCommission",
+      resourceId: commission.id,
+      newValue: {
+        partnerId: agreement.partnerId,
+        buyerAgreementId: agreement.id,
+        buyerInvoiceId: invoice.id,
+        commissionAmountMinor,
+      },
+    });
+
+    return commission;
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return prisma.partnerCommission.findUnique({ where: { buyerInvoiceId: invoice.id } });
+    }
+    throw error;
+  }
+}
+
 /// The one, explicit, Super-Admin-only, reason-required way to invalidate
 /// an already-created commission (e.g. the underlying payment was
 /// refunded) — append-only: the original commission's own amount fields

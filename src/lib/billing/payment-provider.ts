@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { prisma } from "@/lib/db";
 import { paystackProvider } from "@/lib/payments/paystack-provider";
 import { notifySubscriptionPaymentSuccess, notifyPlatformPaymentReceived } from "@/lib/services/notifications";
-import { createPartnerCommissionForInvoice } from "@/lib/services/partner-commissions";
+import { createPartnerCommissionForInvoice, createPartnerCommissionForBuyerInvoice } from "@/lib/services/partner-commissions";
 import type { GatewayCredentials, PaymentProvider } from "@/lib/payments/types";
 import type { PaymentGatewayProvider } from "@/generated/prisma/client";
 
@@ -164,10 +164,12 @@ export async function initializeBuyerInvoicePayment(buyerId: string, invoiceId: 
 
 /// Confirms a Buyer invoice payment — same idempotent, never-trust-the-
 /// redirect-alone-for-a-real-gateway shape as confirmSubscriptionPayment.
-/// No Partner commission and no notification here: a Buyer deal isn't
-/// wired into the Partner Program, and Buyer has no school-scoped
-/// Notification row to write to (see Notification.schoolId) — the Buyer
-/// simply sees their invoice's updated status directly on their dashboard.
+/// Feeds the same Partner Program commission engine a school's BUY
+/// installments do (see createPartnerCommissionForBuyerInvoice) — a
+/// no-op when this Buyer has no Partner attached. No notification here:
+/// Buyer has no school-scoped Notification row to write to (see
+/// Notification.schoolId) — the Buyer simply sees their invoice's updated
+/// status directly on their dashboard.
 export async function confirmBuyerInvoicePayment(reference: string) {
   const invoice = await prisma.buyerInvoice.findUnique({ where: { providerReference: reference } });
   if (!invoice) throw new Error("Invoice not found.");
@@ -180,5 +182,7 @@ export async function confirmBuyerInvoicePayment(reference: string) {
     if (result.status !== "success") return invoice;
   }
 
-  return prisma.buyerInvoice.update({ where: { id: invoice.id }, data: { status: "PAID", paidAt: new Date() } });
+  const updated = await prisma.buyerInvoice.update({ where: { id: invoice.id }, data: { status: "PAID", paidAt: new Date() } });
+  await createPartnerCommissionForBuyerInvoice(updated.id);
+  return updated;
 }

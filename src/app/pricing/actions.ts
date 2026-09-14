@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { createEnterpriseInquiry } from "@/lib/services/enterprise-inquiries";
+import { getPendingPartnerReferralFromCookie } from "@/lib/services/partner-referrals";
 
 export interface EnterpriseFormState {
   status: "idle" | "error" | "success";
@@ -34,6 +35,8 @@ export async function submitEnterpriseInquiryAction(_prev: EnterpriseFormState, 
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your details." };
 
+  const referral = await getPendingPartnerReferralFromCookie();
+
   await createEnterpriseInquiry({
     schoolOrGroupName: parsed.data.schoolOrGroupName,
     contactName: parsed.data.contactName,
@@ -44,6 +47,8 @@ export async function submitEnterpriseInquiryAction(_prev: EnterpriseFormState, 
     currentSoftware: parsed.data.currentSoftware || null,
     requiredModules: parsed.data.requiredModules || null,
     message: parsed.data.message || null,
+    referredByPartnerId: referral?.partnerId ?? null,
+    referralCodeUsed: referral?.referralCodeUsed ?? null,
   });
 
   return { status: "success" };

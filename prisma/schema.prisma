@@ -2909,6 +2909,16 @@ model EnterpriseInquiry {
   reviewedBy   User?                   @relation("EnterpriseInquiryReviewedBy", fields: [reviewedById], references: [id])
   reviewedAt   DateTime?
 
+  /// Captured from the sp_ref referral cookie (see /r/[code]) at the
+  /// moment this inquiry was SUBMITTED — the visitor's own browser, the
+  /// only place that cookie ever legitimately lives. A Super Admin
+  /// converting this inquiry into a Buyer days or weeks later, from their
+  /// own separate browser session, has no cookie of their own to read —
+  /// this is what lets that later conversion still attribute correctly.
+  referredByPartnerId String?
+  referredByPartner   Partner? @relation(fields: [referredByPartnerId], references: [id])
+  referralCodeUsed    String?
+
   createdAt DateTime @default(now())
 
   /// Set once a Super Admin converts this inquiry into a standalone Buyer
@@ -3972,10 +3982,12 @@ model Partner {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  referrals   PartnerReferral[]
-  agreements  CommercialAgreement[]
-  commissions PartnerCommission[]
-  withdrawals PartnerWithdrawal[]
+  referrals                   PartnerReferral[]
+  agreements                  CommercialAgreement[]
+  buyerAgreements             BuyerAgreement[]
+  commissions                 PartnerCommission[]
+  withdrawals                 PartnerWithdrawal[]
+  enterpriseInquiriesReferred EnterpriseInquiry[]
 
   @@index([status])
 }
@@ -3990,21 +4002,27 @@ enum ReferralStatus {
   OVERRIDDEN
 }
 
-/// PERMANENT attribution — "who gets credit for bringing this school to
-/// Schoolum" — deliberately separate from CommercialAgreement ("what
-/// deal is currently active"). One row per school ever (schoolId
-/// unique): the first valid attribution wins, enforced by the database,
-/// not just application logic — a second attempt to attribute an
-/// already-referred school fails at the unique constraint rather than
-/// silently overwriting anything. A correction is made by UPDATING this
-/// same row (never inserting a second one) and is only ever done by an
-/// explicit, audited Super Admin action (see overriddenAt/By/Reason).
+/// PERMANENT attribution — "who gets credit for bringing this school (or
+/// standalone Buyer) to Schoolum" — deliberately separate from
+/// CommercialAgreement/BuyerAgreement ("what deal is currently active").
+/// One row per school-or-Buyer ever: the first valid attribution wins,
+/// enforced by the database, not just application logic — a second
+/// attempt to attribute an already-referred school/Buyer fails at the
+/// unique constraint rather than silently overwriting anything. A
+/// correction is made by UPDATING this same row (never inserting a
+/// second one) and is only ever done by an explicit, audited Super Admin
+/// action (see overriddenAt/By/Reason). Exactly one of schoolId/buyerId
+/// is ever set — enforced by a CHECK constraint in the migration, not
+/// just here — since a School and a standalone Buyer are mutually
+/// exclusive commercial relationships (see Buyer's own doc comment).
 model PartnerReferral {
   id        String  @id @default(cuid())
   partnerId String
   partner   Partner @relation(fields: [partnerId], references: [id])
-  schoolId  String  @unique
-  school    School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  schoolId  String? @unique
+  school    School? @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  buyerId   String? @unique
+  buyer     Buyer?  @relation(fields: [buyerId], references: [id], onDelete: Cascade)
 
   source           ReferralSource
   /// The exact code text at the moment of capture, kept even if the
@@ -4159,24 +4177,38 @@ enum PartnerCommissionStatus {
   CANCELLED
 }
 
-/// The commission ledger — one row per confirmed PlatformInvoice, ever.
-/// platformInvoiceId is @unique: the idempotency guarantee. A retried or
-/// duplicate webhook delivery can never produce a second commission for
-/// the same payment, enforced by the database, not just application
-/// logic. Balances shown anywhere in the Partner Program are always
-/// derived by querying this table — there is no separate mutable
-/// "partner.balance" field to drift out of sync with reality.
+/// The commission ledger — one row per confirmed PlatformInvoice OR
+/// BuyerInvoice, ever. Exactly one of (schoolId, commercialAgreementId,
+/// platformInvoiceId) or (buyerId, buyerAgreementId, buyerInvoiceId) is
+/// ever set — enforced by a CHECK constraint in the migration — since a
+/// commission always comes from exactly one of the two commercial
+/// relationships this app has (a School's CommercialAgreement, or a
+/// standalone Buyer's BuyerAgreement). platformInvoiceId/buyerInvoiceId
+/// are each @unique: the idempotency guarantee. A retried or duplicate
+/// webhook delivery can never produce a second commission for the same
+/// payment, enforced by the database, not just application logic.
+/// Balances shown anywhere in the Partner Program are always derived by
+/// querying this one table regardless of which side produced the row —
+/// there is no separate mutable "partner.balance" field to drift out of
+/// sync with reality, and no separate ledger for Buyer-sourced earnings.
 model PartnerCommission {
   id        String  @id @default(cuid())
   partnerId String
   partner   Partner @relation(fields: [partnerId], references: [id])
-  schoolId  String
-  school    School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  schoolId  String?
+  school    School? @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  buyerId   String?
+  buyer     Buyer?  @relation(fields: [buyerId], references: [id], onDelete: Cascade)
 
-  commercialAgreementId String
-  commercialAgreement   CommercialAgreement @relation(fields: [commercialAgreementId], references: [id])
-  platformInvoiceId     String              @unique
-  platformInvoice       PlatformInvoice     @relation(fields: [platformInvoiceId], references: [id])
+  commercialAgreementId String?
+  commercialAgreement   CommercialAgreement? @relation(fields: [commercialAgreementId], references: [id])
+  platformInvoiceId     String?              @unique
+  platformInvoice       PlatformInvoice?     @relation(fields: [platformInvoiceId], references: [id])
+
+  buyerAgreementId String?
+  buyerAgreement   BuyerAgreement? @relation(fields: [buyerAgreementId], references: [id])
+  buyerInvoiceId   String?         @unique
+  buyerInvoice     BuyerInvoice?   @relation(fields: [buyerInvoiceId], references: [id])
 
   /// Denormalized copy of the agreement's mode at the moment this row
   /// was created — lets reporting/filtering avoid a join, and (like
@@ -4207,6 +4239,8 @@ model PartnerCommission {
   @@index([partnerId, status])
   @@index([schoolId])
   @@index([commercialAgreementId])
+  @@index([buyerId])
+  @@index([buyerAgreementId])
 }
 
 /// Append-only — created only by the explicit, Super Admin-only, reason-
@@ -4356,6 +4390,13 @@ model Buyer {
   agreements BuyerAgreement[]
   invoices   BuyerInvoice[]
 
+  /// The permanent Partner attribution for this Buyer, if any — see
+  /// PartnerReferral's own doc comment for why this is a separate row
+  /// from BuyerAgreement.partnerId (the specific deal's snapshotted
+  /// partner).
+  referral    PartnerReferral?
+  commissions PartnerCommission[]
+
   @@index([status])
 }
 
@@ -4374,9 +4415,11 @@ enum BuyerProgressStage {
 }
 
 /// The purchase deal itself — always an outright purchase, never a rental
-/// (a Buyer has no Subscription to rent). No commission fields: unlike a
-/// school's CommercialAgreement, a Buyer deal is not wired into the
-/// Partner Program commission engine in this version.
+/// (a Buyer has no Subscription to rent). Wired into the Partner Program
+/// commission engine exactly like a school's BUY CommercialAgreement:
+/// partnerId + the commissionRateBps/commissionPolicy/commissionEndDate
+/// snapshot below are the same shape, just without a RENT counterpart to
+/// ever supersede (a Buyer never rents).
 model BuyerAgreement {
   id      String @id @default(cuid())
   buyerId String
@@ -4387,6 +4430,18 @@ model BuyerAgreement {
   agreementValueMinor Int?
   currency            String              @default("NGN")
   paymentArrangement  PaymentArrangement?
+
+  /// Null for an organic agreement Super Admin sets up with no Partner
+  /// attached — commission is only ever created when this is non-null.
+  partnerId String?
+  partner   Partner? @relation(fields: [partnerId], references: [id])
+
+  /// Snapshotted once, from PartnerCommissionConfig.buyCommissionRateBps,
+  /// at creation time — never re-read live, same reasoning as
+  /// CommercialAgreement's own identical fields.
+  commissionRateBps Int
+  commissionPolicy  PartnerCommissionPolicy @default(RECURRING)
+  commissionEndDate DateTime?
 
   /// Only meaningful once ACTIVE — where the build/installation currently
   /// stands. Advanced only by an explicit Super Admin action
@@ -4421,8 +4476,10 @@ model BuyerAgreement {
 
   progressUpdates BuyerProgressUpdate[]
   invoices        BuyerInvoice[]
+  commissions     PartnerCommission[]
 
   @@index([buyerId])
+  @@index([partnerId])
   @@index([status])
 }
 
@@ -4476,6 +4533,8 @@ model BuyerInvoice {
   createdBy   User?   @relation("BuyerInvoiceCreatedBy", fields: [createdById], references: [id])
 
   createdAt DateTime @default(now())
+
+  partnerCommission PartnerCommission?
 
   @@index([buyerId])
   @@index([buyerAgreementId])

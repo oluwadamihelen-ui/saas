@@ -63,8 +63,8 @@ export default async function PartnerDashboardPage() {
   const [balance, config, referrals, commissions, withdrawals] = await Promise.all([
     getPartnerBalance(partner.id),
     getPartnerCommissionConfig(),
-    prisma.partnerReferral.findMany({ where: { partnerId: partner.id }, include: { school: true }, orderBy: { attributedAt: "desc" } }),
-    prisma.partnerCommission.findMany({ where: { partnerId: partner.id }, include: { school: true }, orderBy: { earnedAt: "desc" }, take: 20 }),
+    prisma.partnerReferral.findMany({ where: { partnerId: partner.id }, include: { school: true, buyer: true }, orderBy: { attributedAt: "desc" } }),
+    prisma.partnerCommission.findMany({ where: { partnerId: partner.id }, include: { school: true, buyer: true }, orderBy: { earnedAt: "desc" }, take: 20 }),
     prisma.partnerWithdrawal.findMany({ where: { partnerId: partner.id }, orderBy: { requestedAt: "desc" } }),
   ]);
 
@@ -156,7 +156,7 @@ export default async function PartnerDashboardPage() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Referred schools</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Referrals</CardTitle></CardHeader>
         <CardContent>
           {referrals.length === 0 ? (
             <EmptyState title="No referrals yet" description="Share your referral link to start earning commissions." />
@@ -164,7 +164,8 @@ export default async function PartnerDashboardPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>School</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Name</TableHead>
                   <TableHead>Source</TableHead>
                   <TableHead>Attributed</TableHead>
                 </TableRow>
@@ -172,7 +173,8 @@ export default async function PartnerDashboardPage() {
               <TableBody>
                 {referrals.map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell>{r.school.name}</TableCell>
+                    <TableCell><Badge variant={r.school ? "secondary" : "accent"}>{r.school ? "School" : "Buyer"}</Badge></TableCell>
+                    <TableCell>{r.school?.name ?? r.buyer?.displayName}</TableCell>
                     <TableCell>{r.source}</TableCell>
                     <TableCell>{formatDate(r.attributedAt)}</TableCell>
                   </TableRow>
@@ -192,7 +194,8 @@ export default async function PartnerDashboardPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>School</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Name</TableHead>
                   <TableHead>Mode</TableHead>
                   <TableHead>Amount</TableHead>
                   <TableHead>Earned</TableHead>
@@ -203,7 +206,8 @@ export default async function PartnerDashboardPage() {
               <TableBody>
                 {commissions.map((c) => (
                   <TableRow key={c.id}>
-                    <TableCell>{c.school.name}</TableCell>
+                    <TableCell><Badge variant={c.school ? "secondary" : "accent"}>{c.school ? "School" : "Buyer"}</Badge></TableCell>
+                    <TableCell>{c.school?.name ?? c.buyer?.displayName}</TableCell>
                     <TableCell>{c.commercialMode}</TableCell>
                     <TableCell>{formatMoney(c.commissionAmountMinor, c.currency)}</TableCell>
                     <TableCell>{formatDate(c.earnedAt)}</TableCell>

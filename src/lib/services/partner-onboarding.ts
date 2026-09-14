@@ -131,8 +131,9 @@ export async function getPartnerForPlatform(id: string) {
     where: { id },
     include: {
       user: true,
-      referrals: { include: { school: true }, orderBy: { attributedAt: "desc" } },
+      referrals: { include: { school: true, buyer: true }, orderBy: { attributedAt: "desc" } },
       agreements: { include: { school: true }, orderBy: { createdAt: "desc" } },
+      buyerAgreements: { include: { buyer: true }, orderBy: { createdAt: "desc" } },
       withdrawals: { orderBy: { requestedAt: "desc" } },
       _count: { select: { commissions: true } },
     },

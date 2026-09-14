@@ -11,6 +11,13 @@ export interface EnterpriseInquiryInput {
   currentSoftware?: string | null;
   requiredModules?: string | null;
   message?: string | null;
+  /// Resolved from the visitor's own sp_ref cookie at submission time
+  /// (see submitEnterpriseInquiryAction) — the only moment that cookie is
+  /// legitimately readable. Carried on the inquiry itself so a Super Admin
+  /// converting it into a Buyer, from their own separate browser session
+  /// possibly days later, can still attribute correctly.
+  referredByPartnerId?: string | null;
+  referralCodeUsed?: string | null;
 }
 
 /// Public entry point from the pricing page's "Talk to us" form (spec: an
@@ -28,6 +35,8 @@ export async function createEnterpriseInquiry(input: EnterpriseInquiryInput) {
       currentSoftware: input.currentSoftware || null,
       requiredModules: input.requiredModules || null,
       message: input.message || null,
+      referredByPartnerId: input.referredByPartnerId ?? null,
+      referralCodeUsed: input.referralCodeUsed ?? null,
     },
   });
 }

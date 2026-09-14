@@ -7,11 +7,15 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSuperAdmin } from "@/lib/auth/require";
 import { getBuyerForPlatform } from "@/lib/services/buyer-onboarding";
+import { listPartnersForPlatform } from "@/lib/services/partner-onboarding";
 import { formatMoney } from "@/lib/money";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import {
   SuspendBuyerForm,
   ReactivateBuyerButton,
+  ResetBuyerPasswordButton,
+  AttributeBuyerReferralForm,
+  OverrideBuyerReferralForm,
   CreateBuyerAgreementForm,
   ApproveBuyerAgreementButton,
   CancelBuyerAgreementForm,
@@ -34,9 +38,10 @@ const STAGE_LABEL: Record<string, string> = {
 export default async function PlatformBuyerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireSuperAdmin();
   const { id } = await params;
-  const buyer = await getBuyerForPlatform(id);
+  const [buyer, partners] = await Promise.all([getBuyerForPlatform(id), listPartnersForPlatform()]);
   if (!buyer) notFound();
 
+  const activePartners = partners.filter((p) => p.status === "ACTIVE");
   const activeAgreement = buyer.agreements.find((a) => a.status === "ACTIVE") ?? null;
   const hasPendingAgreement = buyer.agreements.some((a) => a.status === "PENDING");
 
@@ -54,6 +59,17 @@ export default async function PlatformBuyerDetailPage({ params }: { params: Prom
       </div>
 
       <Card>
+        <CardHeader><CardTitle>Login credentials</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted">
+            Login email: <span className="font-mono text-foreground">{buyer.user.email}</span>. There is no email provider in this
+            app, so no invite was ever sent automatically — generate a password below and share both with the buyer yourself.
+          </p>
+          <ResetBuyerPasswordButton buyerId={buyer.id} />
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader><CardTitle>Account status</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           {buyer.status === "ACTIVE" && <SuspendBuyerForm buyerId={buyer.id} />}
@@ -61,6 +77,31 @@ export default async function PlatformBuyerDetailPage({ params }: { params: Prom
             <>
               {buyer.suspensionReason && <p className="text-sm text-muted">Reason: {buyer.suspensionReason}</p>}
               <ReactivateBuyerButton buyerId={buyer.id} />
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Partner attribution</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          {buyer.referral ? (
+            <>
+              <p className="text-sm text-foreground">
+                Attributed to <span className="font-medium">{buyer.referral.partner.displayName}</span>{" "}
+                <span className="text-muted">({buyer.referral.source}, {formatDate(buyer.referral.attributedAt)})</span>
+              </p>
+              {buyer.referral.overriddenAt && (
+                <p className="text-xs text-muted">
+                  Overridden {formatDate(buyer.referral.overriddenAt)}: {buyer.referral.overrideReason}
+                </p>
+              )}
+              <OverrideBuyerReferralForm buyerId={buyer.id} partners={activePartners} />
+            </>
+          ) : (
+            <>
+              <EmptyState title="No Partner attribution" description="This Buyer was not referred by a Partner, or the referral link expired before the inquiry was submitted." />
+              {activePartners.length > 0 && <AttributeBuyerReferralForm buyerId={buyer.id} partners={activePartners} />}
             </>
           )}
         </CardContent>
@@ -76,6 +117,7 @@ export default async function PlatformBuyerDetailPage({ params }: { params: Prom
               <TableHeader>
                 <TableRow>
                   <TableHead>Status</TableHead>
+                  <TableHead>Partner</TableHead>
                   <TableHead>Value</TableHead>
                   <TableHead>Progress</TableHead>
                   <TableHead>Created</TableHead>
@@ -86,6 +128,7 @@ export default async function PlatformBuyerDetailPage({ params }: { params: Prom
                 {buyer.agreements.map((a) => (
                   <TableRow key={a.id}>
                     <TableCell><Badge variant={AGREEMENT_STATUS_VARIANT[a.status]}>{a.status}</Badge></TableCell>
+                    <TableCell className="text-muted">{a.partner?.displayName ?? "—"}</TableCell>
                     <TableCell className="text-muted">{a.agreementValueMinor ? formatMoney(a.agreementValueMinor, a.currency) : "—"}</TableCell>
                     <TableCell className="text-muted">{a.status === "ACTIVE" || a.status === "COMPLETED" ? STAGE_LABEL[a.progressStage] : "—"}</TableCell>
                     <TableCell className="text-muted">{formatDate(a.createdAt)}</TableCell>
@@ -105,7 +148,7 @@ export default async function PlatformBuyerDetailPage({ params }: { params: Prom
               </TableBody>
             </Table>
           )}
-          {!hasPendingAgreement && !activeAgreement && <CreateBuyerAgreementForm buyerId={buyer.id} />}
+          {!hasPendingAgreement && !activeAgreement && <CreateBuyerAgreementForm buyerId={buyer.id} partners={activePartners} />}
         </CardContent>
       </Card>
 

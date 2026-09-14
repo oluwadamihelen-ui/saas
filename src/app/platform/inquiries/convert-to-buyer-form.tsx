@@ -1,35 +1,12 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { Copy, Check } from "lucide-react";
 import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { CopyCredentialsButton } from "@/components/dashboard/copy-credentials-button";
 import { convertInquiryToBuyerAction, type ConvertToBuyerState } from "./actions";
 
 const initialState: ConvertToBuyerState = { status: "idle" };
-
-function CopyCredentialsButton({ email, password }: { email: string; password: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <Button
-      type="button"
-      variant="secondary"
-      size="sm"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(`Email: ${email}\nTemporary password: ${password}`);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-        } catch {
-          window.prompt("Copy these credentials:", `Email: ${email}\nTemporary password: ${password}`);
-        }
-      }}
-    >
-      {copied ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}
-      {copied ? "Copied" : "Copy credentials"}
-    </Button>
-  );
-}
 
 export function ConvertToBuyerForm({ inquiryId }: { inquiryId: string }) {
   const [state, formAction, isPending] = useActionState(convertInquiryToBuyerAction, initialState);

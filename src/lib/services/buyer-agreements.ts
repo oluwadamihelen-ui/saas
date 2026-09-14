@@ -1,21 +1,39 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
+import { getPartnerCommissionConfig } from "@/lib/services/partner-commissions";
 import type { BuyerProgressStage, PaymentArrangement } from "@/generated/prisma/client";
 
+/// partnerId is deliberately a separate, explicit choice here rather than
+/// auto-copied from the Buyer's own PartnerReferral — same manual-select
+/// pattern already used for a school's CreateAgreementForm, so a Super
+/// Admin always makes this call consciously rather than it happening
+/// silently underneath them.
 export async function createBuyerAgreement(input: {
   buyerId: string;
+  partnerId?: string | null;
   agreementValueMinor?: number | null;
   currency?: string;
   paymentArrangement?: PaymentArrangement | null;
   createdById: string;
 }) {
+  // Snapshotted once, from PartnerCommissionConfig.buyCommissionRateBps, at
+  // creation time — never re-read live, same reasoning as
+  // CommercialAgreement's own identical fields. Always set regardless of
+  // whether a Partner is attached (harmless if unused — mirrors
+  // CommercialAgreement's own commissionRateBps, which isn't conditional
+  // on partnerId either).
+  const config = await getPartnerCommissionConfig();
+
   const agreement = await prisma.buyerAgreement.create({
     data: {
       buyerId: input.buyerId,
+      partnerId: input.partnerId ?? null,
       agreementValueMinor: input.agreementValueMinor ?? null,
       currency: input.currency ?? "NGN",
       paymentArrangement: input.paymentArrangement ?? null,
+      commissionRateBps: config.buyCommissionRateBps,
+      commissionPolicy: config.buyCommissionPolicy,
       createdById: input.createdById,
     },
   });
@@ -26,7 +44,7 @@ export async function createBuyerAgreement(input: {
     action: "buyer_agreement.created",
     resourceType: "BuyerAgreement",
     resourceId: agreement.id,
-    newValue: { buyerId: input.buyerId },
+    newValue: { buyerId: input.buyerId, partnerId: input.partnerId ?? null },
   });
 
   return agreement;

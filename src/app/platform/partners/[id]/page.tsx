@@ -86,7 +86,7 @@ export default async function PlatformPartnerDetailPage({ params }: { params: Pr
 
       <Card>
         <CardHeader>
-          <CardTitle>Referred schools</CardTitle>
+          <CardTitle>Referrals</CardTitle>
           <CardDescription>{partner._count.commissions} total commission{partner._count.commissions === 1 ? "" : "s"} earned</CardDescription>
         </CardHeader>
         <CardContent>
@@ -96,7 +96,8 @@ export default async function PlatformPartnerDetailPage({ params }: { params: Pr
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>School</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Name</TableHead>
                   <TableHead>Source</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Attributed</TableHead>
@@ -105,10 +106,17 @@ export default async function PlatformPartnerDetailPage({ params }: { params: Pr
               <TableBody>
                 {partner.referrals.map((r) => (
                   <TableRow key={r.id}>
+                    <TableCell><Badge variant={r.school ? "secondary" : "accent"}>{r.school ? "School" : "Buyer"}</Badge></TableCell>
                     <TableCell>
-                      <Link href={`/platform/schools/${r.schoolId}`} className="font-medium text-foreground hover:text-accent">
-                        {r.school.name}
-                      </Link>
+                      {r.school ? (
+                        <Link href={`/platform/schools/${r.schoolId}`} className="font-medium text-foreground hover:text-accent">
+                          {r.school.name}
+                        </Link>
+                      ) : (
+                        <Link href={`/platform/buyers/${r.buyerId}`} className="font-medium text-foreground hover:text-accent">
+                          {r.buyer?.displayName}
+                        </Link>
+                      )}
                     </TableCell>
                     <TableCell className="text-muted">{r.source}</TableCell>
                     <TableCell><Badge variant="neutral">{r.status}</Badge></TableCell>
@@ -146,6 +154,40 @@ export default async function PlatformPartnerDetailPage({ params }: { params: Pr
                       </Link>
                     </TableCell>
                     <TableCell className="text-muted">{a.commercialMode}</TableCell>
+                    <TableCell><Badge variant={AGREEMENT_STATUS_VARIANT[a.status]}>{a.status}</Badge></TableCell>
+                    <TableCell className="text-muted">{(a.commissionRateBps / 100).toFixed(1)}%</TableCell>
+                    <TableCell className="text-muted">{formatDate(a.createdAt)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Buyer agreements</CardTitle></CardHeader>
+        <CardContent>
+          {partner.buyerAgreements.length === 0 ? (
+            <EmptyState title="No Buyer agreements yet" />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Buyer</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Rate</TableHead>
+                  <TableHead>Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {partner.buyerAgreements.map((a) => (
+                  <TableRow key={a.id}>
+                    <TableCell>
+                      <Link href={`/platform/buyers/${a.buyerId}`} className="font-medium text-foreground hover:text-accent">
+                        {a.buyer.displayName}
+                      </Link>
+                    </TableCell>
                     <TableCell><Badge variant={AGREEMENT_STATUS_VARIANT[a.status]}>{a.status}</Badge></TableCell>
                     <TableCell className="text-muted">{(a.commissionRateBps / 100).toFixed(1)}%</TableCell>
                     <TableCell className="text-muted">{formatDate(a.createdAt)}</TableCell>

@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { ensureBuyerRole } from "@/lib/platform-provisioning";
 import { logAudit } from "@/lib/audit";
+import { attributeReferralForNewBuyer } from "@/lib/services/partner-referrals";
 
 function generateTemporaryPassword() {
   // 16 hex chars from 8 random bytes — well above the 8-char minimum used
@@ -34,6 +35,15 @@ export async function convertInquiryToBuyer(input: { inquiryId: string; createdB
   const temporaryPassword = generateTemporaryPassword();
   const passwordHash = await bcrypt.hash(temporaryPassword, 12);
 
+  // Re-validated here, not just trusted from when the inquiry was
+  // submitted — the referred Partner could have been suspended in the
+  // (often long) gap between inquiry and conversion.
+  let referral: { partnerId: string; referralCodeUsed: string } | null = null;
+  if (inquiry.referredByPartnerId) {
+    const partner = await prisma.partner.findFirst({ where: { id: inquiry.referredByPartnerId, status: "ACTIVE" } });
+    if (partner) referral = { partnerId: partner.id, referralCodeUsed: inquiry.referralCodeUsed ?? partner.partnerCode };
+  }
+
   const result = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: { schoolId: null, roleId: role.id, email, name: input.displayName, passwordHash },
@@ -47,6 +57,7 @@ export async function convertInquiryToBuyer(input: { inquiryId: string; createdB
         createdById: input.createdById,
       },
     });
+    await attributeReferralForNewBuyer(tx, buyer.id, referral);
     await tx.enterpriseInquiry.update({
       where: { id: inquiry.id },
       data: { status: "CONVERTED", reviewedById: input.createdById, reviewedAt: new Date() },
@@ -99,6 +110,25 @@ export async function reactivateBuyer(buyerId: string, reactivatedById: string) 
   return updated;
 }
 
+/// The temporary password from convertInquiryToBuyer is shown exactly
+/// once and never stored anywhere retrievable — if a Super Admin loses it
+/// before copying it to the buyer, there is no way to recover the
+/// original. This issues a brand-new one, same one-time-reveal contract,
+/// so credentials can always be re-sent without needing a forgot-password
+/// email flow this app doesn't have.
+export async function resetBuyerPassword(buyerId: string, resetById: string) {
+  const buyer = await prisma.buyer.findUnique({ where: { id: buyerId }, include: { user: true } });
+  if (!buyer) throw new Error("Buyer not found.");
+
+  const temporaryPassword = generateTemporaryPassword();
+  const passwordHash = await bcrypt.hash(temporaryPassword, 12);
+  await prisma.user.update({ where: { id: buyer.userId }, data: { passwordHash } });
+
+  await logAudit({ schoolId: null, userId: resetById, action: "buyer.password_reset", resourceType: "Buyer", resourceId: buyerId });
+
+  return { email: buyer.user.email, temporaryPassword };
+}
+
 export async function listBuyersForPlatform() {
   return prisma.buyer.findMany({
     include: { user: true, sourceInquiry: true, _count: { select: { agreements: true, invoices: true } } },
@@ -112,7 +142,8 @@ export async function getBuyerForPlatform(id: string) {
     include: {
       user: true,
       sourceInquiry: true,
-      agreements: { include: { progressUpdates: { orderBy: { postedAt: "desc" } } }, orderBy: { createdAt: "desc" } },
+      referral: { include: { partner: true } },
+      agreements: { include: { partner: true, progressUpdates: { orderBy: { postedAt: "desc" } } }, orderBy: { createdAt: "desc" } },
       invoices: { orderBy: { createdAt: "desc" } },
     },
   });
