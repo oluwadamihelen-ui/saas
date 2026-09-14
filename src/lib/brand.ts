@@ -20,9 +20,13 @@ export const brand = {
   salesEmail: "hello@schoolum.app",
   domain: "schoolum.app",
   /// Seeded with demo logins for every role — the one thing "view a
-  /// Schoolum demo" links to for a Buyer Program account. Not a real
-  /// tenant this codebase provisions; it's a separately maintained
-  /// environment.
+  /// Schoolum demo" links to for a Buyer Program account. This app serves
+  /// it directly: middleware.ts rewrites this hostname's root path to
+  /// src/app/demo/page.tsx (one-click "Continue as X" buttons, reading
+  /// from src/lib/demo.ts), and `npm run db:seed` provisions the actual
+  /// "Horizon Academy" sample school those accounts sign into. The
+  /// subdomain itself still needs to be added as a Domain on this Vercel
+  /// project (with a matching DNS record) before it resolves.
   demoUrl: "https://demo.schoolum.io",
   social: {
     twitter: "@schoolum",

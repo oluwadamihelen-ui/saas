@@ -10,9 +10,9 @@ import {
   type SystemRoleKey,
 } from "../../src/lib/permissions";
 import { PLAN_CATALOG, PLAN_TIERS, TRIAL_PERIOD_DAYS } from "../../src/lib/billing/plan-catalog";
+import { DEMO_PASSWORD, DEMO_ROLE_EMAILS } from "../../src/lib/demo";
 
 const prisma = new PrismaClient();
-const DEMO_PASSWORD = "Passw0rd!23";
 
 const FIRST_NAMES_M = [
   "Chinedu", "Emeka", "Tunde", "Ayodeji", "Ibrahim", "Segun", "Uche", "Kelechi",
@@ -123,16 +123,20 @@ async function main() {
   });
 
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
+  // teacher2 is a second, unseen-on-the-demo-landing-page teacher account
+  // (not part of DEMO_ROLE_EMAILS — the "Continue as Teacher" button always
+  // signs in as teacher1) that exists purely so the seeded data has two
+  // real teachers to split subjects/classes between.
   const staffSeeds: { name: string; email: string; role: SystemRoleKey }[] = [
-    { name: "Adaeze Nwankwo", email: "owner@horizon.demo", role: "SCHOOL_OWNER" },
-    { name: "Emeka Obi", email: "admin@horizon.demo", role: "SCHOOL_ADMIN" },
-    { name: "Funmilayo Adekunle", email: "principal@horizon.demo", role: "PRINCIPAL" },
-    { name: "Tunde Bakare", email: "teacher1@horizon.demo", role: "TEACHER" },
+    { name: "Adaeze Nwankwo", email: DEMO_ROLE_EMAILS.SCHOOL_OWNER, role: "SCHOOL_OWNER" },
+    { name: "Emeka Obi", email: DEMO_ROLE_EMAILS.SCHOOL_ADMIN, role: "SCHOOL_ADMIN" },
+    { name: "Funmilayo Adekunle", email: DEMO_ROLE_EMAILS.PRINCIPAL, role: "PRINCIPAL" },
+    { name: "Tunde Bakare", email: DEMO_ROLE_EMAILS.TEACHER, role: "TEACHER" },
     { name: "Amaka Chukwu", email: "teacher2@horizon.demo", role: "TEACHER" },
-    { name: "Ibrahim Sule", email: "accountant@horizon.demo", role: "ACCOUNTANT" },
-    { name: "Blessing Eze", email: "hr@horizon.demo", role: "HR_STAFF" },
-    { name: "Chidinma Okoro", email: "librarian@horizon.demo", role: "LIBRARIAN" },
-    { name: "Segun Afolabi", email: "transport@horizon.demo", role: "TRANSPORT_MANAGER" },
+    { name: "Ibrahim Sule", email: DEMO_ROLE_EMAILS.ACCOUNTANT, role: "ACCOUNTANT" },
+    { name: "Blessing Eze", email: DEMO_ROLE_EMAILS.HR_STAFF, role: "HR_STAFF" },
+    { name: "Chidinma Okoro", email: DEMO_ROLE_EMAILS.LIBRARIAN, role: "LIBRARIAN" },
+    { name: "Segun Afolabi", email: DEMO_ROLE_EMAILS.TRANSPORT_MANAGER, role: "TRANSPORT_MANAGER" },
   ];
   const staffUsers = await Promise.all(
     staffSeeds.map((s) =>
@@ -785,7 +789,7 @@ async function main() {
     data: {
       schoolId: school.id,
       roleId: roleByKey.get("PARENT")!.id,
-      email: "parent@horizon.demo",
+      email: DEMO_ROLE_EMAILS.PARENT,
       name: "Demo Parent",
       passwordHash: PORTAL_PASSWORD_HASH,
     },
@@ -796,7 +800,7 @@ async function main() {
     data: {
       schoolId: school.id,
       roleId: roleByKey.get("STUDENT")!.id,
-      email: "student@horizon.demo",
+      email: DEMO_ROLE_EMAILS.STUDENT,
       name: "Demo Student",
       passwordHash: PORTAL_PASSWORD_HASH,
     },
