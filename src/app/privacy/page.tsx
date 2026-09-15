@@ -1,4 +1,5 @@
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell";
+import { brand } from "@/lib/brand";
 
 export const metadata = { title: "Privacy Policy — Schoolum" };
 
@@ -17,9 +18,10 @@ export default function PrivacyPage() {
       <div className="space-y-8 rounded-lg border border-border bg-surface p-6 sm:p-8">
         <Section title="1. What this policy covers">
           <p>
-            This policy describes how Schoolum collects, uses and protects information when a school, its staff, students and
-            parents use the Schoolum platform (&quot;the Service&quot;). It applies to data submitted directly to us and data
-            generated through normal use of the Service.
+            Schoolum is owned and operated by {brand.legalName} (&quot;Schoolum,&quot; &quot;we,&quot; &quot;us,&quot; or
+            &quot;our&quot;). This policy describes how we collect, use and protect information when a school, its staff,
+            students and parents use the Schoolum platform (&quot;the Service&quot;). It applies to data submitted directly
+            to us and data generated through normal use of the Service.
           </p>
         </Section>
 

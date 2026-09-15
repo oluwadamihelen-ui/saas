@@ -1,4 +1,5 @@
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell";
+import { brand } from "@/lib/brand";
 
 export const metadata = { title: "Terms of Service — Schoolum" };
 
@@ -17,9 +18,10 @@ export default function TermsPage() {
       <div className="space-y-8 rounded-lg border border-border bg-surface p-6 sm:p-8">
         <Section title="1. Agreement to these terms">
           <p>
-            These terms govern access to and use of the Schoolum platform (&quot;the Service&quot;) by a school and its
-            authorized staff, students and parents (together, &quot;you&quot; or &quot;your school&quot;). By creating an
-            account or using the Service, you agree to these terms.
+            Schoolum is owned and operated by {brand.legalName} (&quot;Schoolum,&quot; &quot;we,&quot; &quot;us,&quot; or
+            &quot;our&quot;). These terms govern access to and use of the Schoolum platform (&quot;the Service&quot;) by a
+            school and its authorized staff, students and parents (together, &quot;you&quot; or &quot;your school&quot;).
+            By creating an account or using the Service, you agree to these terms.
           </p>
         </Section>
 

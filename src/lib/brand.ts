@@ -9,7 +9,12 @@
 export const brand = {
   name: "Schoolum",
   shortName: "Schoolum",
-  legalName: "Schoolum",
+  /// The registered company that owns and operates Schoolum — distinct
+  /// from `name` (the product/brand). Used everywhere the site needs to
+  /// name the actual legal entity: footer copyright lines, the Terms of
+  /// Service and Privacy Policy's "who you're contracting with" clauses,
+  /// and the About page.
+  legalName: "Numi Innovations LTD",
   tagline: "The intelligent operating system for modern schools.",
   shortTagline: "Manage your entire school from one intelligent platform.",
   description:

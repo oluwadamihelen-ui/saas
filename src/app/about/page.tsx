@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { GraduationCap, Heart, ShieldCheck, Sparkles } from "lucide-react";
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell";
+import { brand } from "@/lib/brand";
 
 export const metadata = { title: "About — Schoolum" };
 
@@ -61,6 +62,10 @@ export default function AboutPage() {
           .
         </p>
       </div>
+
+      <p className="text-center text-sm text-muted">
+        Schoolum is owned and operated by {brand.legalName}.
+      </p>
     </MarketingPageShell>
   );
 }

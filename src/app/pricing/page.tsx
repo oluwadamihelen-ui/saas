@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
+import { brand } from "@/lib/brand";
 import { listPlans } from "@/lib/services/platform";
 import { PricingCards } from "./pricing-cards";
 
@@ -54,7 +55,7 @@ export default async function PricingPage() {
       </main>
 
       <footer className="container-shell border-t border-border py-8 text-center text-sm text-muted">
-        &copy; {new Date().getFullYear()} Schoolum. Built for African schools.
+        Schoolum is a product of {brand.legalName} &middot; &copy; {new Date().getFullYear()} Built for African schools.
       </footer>
     </div>
   );

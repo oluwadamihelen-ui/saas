@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
+import { brand } from "@/lib/brand";
 
 const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
   {
@@ -61,7 +62,9 @@ export function SiteFooter() {
 
       <div className="border-t border-white/10">
         <div className="container-shell flex flex-col items-center justify-between gap-3 py-6 text-xs text-white/50 sm:flex-row">
-          <p>&copy; {new Date().getFullYear()} Schoolum. All rights reserved.</p>
+          <p>
+            Schoolum is a product of {brand.legalName} &middot; &copy; {new Date().getFullYear()} All rights reserved.
+          </p>
           <p>Built for schools across Africa.</p>
         </div>
       </div>
