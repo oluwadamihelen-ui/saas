@@ -116,7 +116,7 @@ export default async function PartnerDashboardPage() {
           <CardDescription>Manual payout — a Super Admin pays you and records the reference here.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted">
               {canWithdraw
                 ? "Your available balance is ready to withdraw."
@@ -127,30 +127,51 @@ export default async function PartnerDashboardPage() {
           {withdrawals.length === 0 ? (
             <EmptyState title="No withdrawals yet" />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Requested</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Reference</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              <div className="space-y-3 sm:hidden">
                 {withdrawals.map((w) => (
-                  <TableRow key={w.id}>
-                    <TableCell>{formatDate(w.requestedAt)}</TableCell>
-                    <TableCell>{formatMoney(w.amountMinor, w.currency)}</TableCell>
-                    <TableCell><Badge variant={WITHDRAWAL_STATUS_VARIANT[w.status]}>{w.status}</Badge></TableCell>
-                    <TableCell>{w.payoutReference ?? "—"}</TableCell>
-                    <TableCell>
-                      {(w.status === "REQUESTED" || w.status === "UNDER_REVIEW") && <CancelWithdrawalButton withdrawalId={w.id} />}
-                    </TableCell>
-                  </TableRow>
+                  <div key={w.id} className="rounded-lg border border-border p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium text-foreground">{formatMoney(w.amountMinor, w.currency)}</p>
+                      <Badge variant={WITHDRAWAL_STATUS_VARIANT[w.status]}>{w.status}</Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-muted">Requested {formatDate(w.requestedAt)}</p>
+                    {w.payoutReference && <p className="mt-1 text-xs text-muted">Ref: {w.payoutReference}</p>}
+                    {(w.status === "REQUESTED" || w.status === "UNDER_REVIEW") && (
+                      <div className="mt-2">
+                        <CancelWithdrawalButton withdrawalId={w.id} />
+                      </div>
+                    )}
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+              <div className="hidden sm:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Requested</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Reference</TableHead>
+                      <TableHead />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {withdrawals.map((w) => (
+                      <TableRow key={w.id}>
+                        <TableCell>{formatDate(w.requestedAt)}</TableCell>
+                        <TableCell>{formatMoney(w.amountMinor, w.currency)}</TableCell>
+                        <TableCell><Badge variant={WITHDRAWAL_STATUS_VARIANT[w.status]}>{w.status}</Badge></TableCell>
+                        <TableCell>{w.payoutReference ?? "—"}</TableCell>
+                        <TableCell>
+                          {(w.status === "REQUESTED" || w.status === "UNDER_REVIEW") && <CancelWithdrawalButton withdrawalId={w.id} />}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -161,26 +182,41 @@ export default async function PartnerDashboardPage() {
           {referrals.length === 0 ? (
             <EmptyState title="No referrals yet" description="Share your referral link to start earning commissions." />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Attributed</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              <div className="space-y-3 sm:hidden">
                 {referrals.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell><Badge variant={r.school ? "secondary" : "accent"}>{r.school ? "School" : "Buyer"}</Badge></TableCell>
-                    <TableCell>{r.school?.name ?? r.buyer?.displayName}</TableCell>
-                    <TableCell>{r.source}</TableCell>
-                    <TableCell>{formatDate(r.attributedAt)}</TableCell>
-                  </TableRow>
+                  <div key={r.id} className="rounded-lg border border-border p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium text-foreground">{r.school?.name ?? r.buyer?.displayName}</p>
+                      <Badge variant={r.school ? "secondary" : "accent"}>{r.school ? "School" : "Buyer"}</Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-muted">{r.source} · attributed {formatDate(r.attributedAt)}</p>
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+              <div className="hidden sm:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Source</TableHead>
+                      <TableHead>Attributed</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {referrals.map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell><Badge variant={r.school ? "secondary" : "accent"}>{r.school ? "School" : "Buyer"}</Badge></TableCell>
+                        <TableCell>{r.school?.name ?? r.buyer?.displayName}</TableCell>
+                        <TableCell>{r.source}</TableCell>
+                        <TableCell>{formatDate(r.attributedAt)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -191,32 +227,53 @@ export default async function PartnerDashboardPage() {
           {commissions.length === 0 ? (
             <EmptyState title="No commissions yet" />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Mode</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Earned</TableHead>
-                  <TableHead>Available from</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              <div className="space-y-3 sm:hidden">
                 {commissions.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell><Badge variant={c.school ? "secondary" : "accent"}>{c.school ? "School" : "Buyer"}</Badge></TableCell>
-                    <TableCell>{c.school?.name ?? c.buyer?.displayName}</TableCell>
-                    <TableCell>{c.commercialMode}</TableCell>
-                    <TableCell>{formatMoney(c.commissionAmountMinor, c.currency)}</TableCell>
-                    <TableCell>{formatDate(c.earnedAt)}</TableCell>
-                    <TableCell>{formatDate(c.availableAt)}</TableCell>
-                    <TableCell><Badge variant={COMMISSION_STATUS_VARIANT[c.status]}>{c.status}</Badge></TableCell>
-                  </TableRow>
+                  <div key={c.id} className="rounded-lg border border-border p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium text-foreground">{c.school?.name ?? c.buyer?.displayName}</p>
+                      <Badge variant={c.school ? "secondary" : "accent"}>{c.school ? "School" : "Buyer"}</Badge>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-foreground">{formatMoney(c.commissionAmountMinor, c.currency)}</p>
+                      <Badge variant={COMMISSION_STATUS_VARIANT[c.status]}>{c.status}</Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-muted">
+                      {c.commercialMode} · earned {formatDate(c.earnedAt)} · available {formatDate(c.availableAt)}
+                    </p>
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+              <div className="hidden sm:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Mode</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Earned</TableHead>
+                      <TableHead>Available from</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {commissions.map((c) => (
+                      <TableRow key={c.id}>
+                        <TableCell><Badge variant={c.school ? "secondary" : "accent"}>{c.school ? "School" : "Buyer"}</Badge></TableCell>
+                        <TableCell>{c.school?.name ?? c.buyer?.displayName}</TableCell>
+                        <TableCell>{c.commercialMode}</TableCell>
+                        <TableCell>{formatMoney(c.commissionAmountMinor, c.currency)}</TableCell>
+                        <TableCell>{formatDate(c.earnedAt)}</TableCell>
+                        <TableCell>{formatDate(c.availableAt)}</TableCell>
+                        <TableCell><Badge variant={COMMISSION_STATUS_VARIANT[c.status]}>{c.status}</Badge></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
