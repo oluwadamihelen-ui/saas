@@ -37,7 +37,7 @@ export default async function PartnersPage() {
       title="Earn commission for every school you bring to Schoolum"
       description="Refer schools to Schoolum and earn a share of what they actually pay us — whether they subscribe or purchase outright."
     >
-      <div className="flex justify-center gap-3">
+      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-center">
         <Button asChild size="lg">
           <Link href="/partner-apply">Apply to become a Partner</Link>
         </Button>

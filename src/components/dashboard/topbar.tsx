@@ -1,10 +1,10 @@
 "use client";
 
-import { signOut } from "next-auth/react";
 import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { NotificationBell, type NotificationItem } from "@/components/dashboard/notification-bell";
+import { useSignOut } from "@/hooks/use-sign-out";
 
 export function DashboardTopbar({
   name,
@@ -23,6 +23,7 @@ export function DashboardTopbar({
   notificationsHref?: string;
   mobileNav?: React.ReactNode;
 }) {
+  const signOut = useSignOut();
   return (
     <header className="flex h-16 items-center justify-between border-b border-border bg-surface px-4 sm:px-6">
       <div>{mobileNav}</div>
@@ -33,7 +34,7 @@ export function DashboardTopbar({
           <p className="text-xs text-muted">{roleName} · {email}</p>
         </div>
         <Avatar name={name} />
-        <Button size="sm" variant="ghost" onClick={() => signOut({ callbackUrl: "/" })}>
+        <Button size="sm" variant="ghost" onClick={signOut}>
           <LogOut className="h-4 w-4" />
         </Button>
       </div>
