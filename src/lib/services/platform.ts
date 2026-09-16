@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { getOrCreateRentAgreementForInvoice } from "@/lib/services/partner-agreements";
+import { createPartnerCommissionForInvoice } from "@/lib/services/partner-commissions";
 import type { Prisma, SchoolStatus, SubscriptionStatus, BillingInterval, PlatformInvoiceStatus } from "@/generated/prisma/client";
 
 const SCHOOL_STATUS_KEYS: SchoolStatus[] = ["TRIAL", "ACTIVE", "SUSPENDED"];
@@ -266,14 +267,22 @@ export async function generatePlatformInvoice(schoolId: string) {
   });
 }
 
+/// Manual "mark as paid" for an offline payment (bank transfer, etc.) —
+/// feeds the same commission engine confirmSubscriptionPayment's online
+/// path does (createPartnerCommissionForInvoice is a no-op when this
+/// invoice has no CommercialAgreement/Partner attached, and idempotent
+/// besides) — a Partner's commission must not depend on which of the two
+/// ways this invoice happened to get paid.
 export async function markPlatformInvoicePaid(invoiceId: string, markedPaidById: string) {
   const invoice = await prisma.platformInvoice.findUnique({ where: { id: invoiceId } });
   if (!invoice) throw new Error("Invoice not found.");
   if (invoice.status === "PAID") throw new Error("This invoice is already paid.");
-  return prisma.platformInvoice.update({
+  const updated = await prisma.platformInvoice.update({
     where: { id: invoiceId },
     data: { status: "PAID", paidAt: new Date(), markedPaidById },
   });
+  await createPartnerCommissionForInvoice(updated.id);
+  return updated;
 }
 
 export async function voidPlatformInvoice(invoiceId: string) {

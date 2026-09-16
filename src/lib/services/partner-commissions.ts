@@ -63,6 +63,17 @@ export async function createPartnerCommissionForInvoice(invoiceId: string): Prom
   });
   if (!invoice || !invoice.commercialAgreement) return null;
 
+  // Checked before the FIRST_PAYMENT_ONLY rule below, not just relied on as
+  // the race-condition fallback in the catch block at the bottom of this
+  // function: that rule's own "has this agreement already earned its one
+  // commission" check can't tell "yes, from this exact invoice" apart from
+  // "yes, from a different one" — called twice for the SAME already-
+  // committed invoice (a retried webhook, or two callers racing) it would
+  // otherwise return null on the second call instead of the row that
+  // already exists for it.
+  const existingForThisInvoice = await prisma.partnerCommission.findUnique({ where: { platformInvoiceId: invoiceId } });
+  if (existingForThisInvoice) return existingForThisInvoice;
+
   const agreement = invoice.commercialAgreement;
   if (!agreement.partnerId) return null;
 
@@ -141,6 +152,15 @@ export async function createPartnerCommissionForBuyerInvoice(invoiceId: string):
     include: { buyerAgreement: true },
   });
   if (!invoice) return null;
+
+  // Same reasoning as createPartnerCommissionForInvoice's identical check:
+  // the FIRST_PAYMENT_ONLY rule below can't distinguish "this invoice
+  // already earned it" from "a different invoice on this agreement did" —
+  // check this invoice's own commission first so a second call for it
+  // (retried webhook, or now also markBuyerInvoicePaid alongside the
+  // online confirm path) returns the existing row instead of null.
+  const existingForThisInvoice = await prisma.partnerCommission.findUnique({ where: { buyerInvoiceId: invoiceId } });
+  if (existingForThisInvoice) return existingForThisInvoice;
 
   const agreement = invoice.buyerAgreement;
   if (!agreement.partnerId) return null;

@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
+import { createPartnerCommissionForBuyerInvoice } from "@/lib/services/partner-commissions";
 
 /// A Buyer invoice may only ever be created against an ACTIVE agreement —
 /// same canCreateInvoice rule as the Partner Program's own BUY installment
@@ -42,7 +43,12 @@ export async function createBuyerInvoice(input: {
 }
 
 /// Manual "mark as paid" for an offline payment (bank transfer, etc.) —
-/// mirrors markPlatformInvoicePaid exactly.
+/// mirrors markPlatformInvoicePaid exactly, including feeding the same
+/// commission engine the online confirmBuyerInvoicePayment path does
+/// (createPartnerCommissionForBuyerInvoice is itself a no-op when this
+/// Buyer has no Partner attached, and idempotent besides) — a commission
+/// must not depend on which of the two ways this invoice happened to get
+/// paid.
 export async function markBuyerInvoicePaid(invoiceId: string, markedPaidById: string) {
   const invoice = await prisma.buyerInvoice.findUnique({ where: { id: invoiceId } });
   if (!invoice) throw new Error("Invoice not found.");
@@ -54,6 +60,7 @@ export async function markBuyerInvoicePaid(invoiceId: string, markedPaidById: st
   });
 
   await logAudit({ schoolId: null, userId: markedPaidById, action: "buyer_invoice.marked_paid", resourceType: "BuyerInvoice", resourceId: invoiceId });
+  await createPartnerCommissionForBuyerInvoice(updated.id);
   return updated;
 }
 
