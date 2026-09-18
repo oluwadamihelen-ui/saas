@@ -10,6 +10,15 @@ const { auth } = NextAuth(authConfig);
 /// src/app/demo/page.tsx) rather than a separately hosted environment.
 const DEMO_HOSTNAME = new URL(brand.demoUrl).hostname;
 
+/// The bare "<subdomain>.<root>" every per-prospect preview subdomain
+/// shares with demo.schoolum.io (e.g. steadyflow.schoolum.io) — derived
+/// from DEMO_HOSTNAME itself, not a separate hardcoded constant, so it can
+/// never drift from the one domain root actually configured on Vercel.
+/// Requires a wildcard domain (*.<root>) and matching wildcard DNS record
+/// to be added in Vercel first — see prisma/scripts/create-prospect-preview.ts.
+const PREVIEW_ROOT_DOMAIN = DEMO_HOSTNAME.replace(/^demo\./, "");
+const RESERVED_SUBDOMAINS = new Set(["demo", "www"]);
+
 export default auth((req) => {
   const { pathname } = req.nextUrl;
 
@@ -32,6 +41,20 @@ export default auth((req) => {
     // Built from the raw Host header text, not any URL derived from the
     // request object — see the note above for why.
     return NextResponse.rewrite(new URL(`${requestProtocol}://${requestHostname}/demo`));
+  }
+
+  // A per-prospect preview subdomain (e.g. steadyflow.schoolum.io) — same
+  // root-path-only rewrite as the demo subdomain above, just parameterized
+  // by whichever slug sits in front of the domain instead of a fixed
+  // target. The actual "does this School exist" lookup happens in
+  // src/app/preview/[slug]/page.tsx, not here: middleware can't safely
+  // reach Prisma/Postgres from the Edge runtime, so an unknown slug still
+  // rewrites through and that page renders the branded not-found instead.
+  if (requestHostname.endsWith(`.${PREVIEW_ROOT_DOMAIN}`) && pathname === "/") {
+    const subdomain = requestHostname.slice(0, -(PREVIEW_ROOT_DOMAIN.length + 1));
+    if (subdomain && !subdomain.includes(".") && !RESERVED_SUBDOMAINS.has(subdomain)) {
+      return NextResponse.rewrite(new URL(`${requestProtocol}://${requestHostname}/preview/${subdomain}`));
+    }
   }
 
   const isProtected =
