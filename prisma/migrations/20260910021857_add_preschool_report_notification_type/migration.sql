@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "NotificationType" ADD VALUE 'PRESCHOOL_REPORT_PUBLISHED';

@@ -5,12 +5,31 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(amount: number | string, currency = "USD"): string {
-  const value = typeof amount === "string" ? Number(amount) : amount;
-  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(value);
-}
-
 export function formatDate(date: Date | string): string {
   const d = typeof date === "string" ? new Date(date) : date;
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(d);
+}
+
+export function formatDateTime(date: Date | string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(d);
+}
+
+export function initials(name: string): string {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
+
+export function calculateAge(dateOfBirth: Date): number {
+  const now = new Date();
+  let age = now.getFullYear() - dateOfBirth.getFullYear();
+  const hadBirthdayThisYear =
+    now.getMonth() > dateOfBirth.getMonth() ||
+    (now.getMonth() === dateOfBirth.getMonth() && now.getDate() >= dateOfBirth.getDate());
+  if (!hadBirthdayThisYear) age -= 1;
+  return age;
 }

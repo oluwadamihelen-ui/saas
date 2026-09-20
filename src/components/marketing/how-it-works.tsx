@@ -1,28 +1,46 @@
+import { Reveal } from "./reveal";
+
 const STEPS = [
-  { title: "Choose an application", description: "Browse the marketplace and preview a live demo before you buy." },
-  { title: "Purchase your software", description: "Pick a license, installation, and any customization you need." },
-  { title: "Choose your deployment", description: "Use your own server, our managed hosting, or request a fully managed setup." },
-  { title: "Connect your domain", description: "Register a new domain or point an existing one — we handle the DNS." },
-  { title: "Go live", description: "We provision, install, secure with SSL, and hand you a working application." },
+  {
+    number: "01",
+    title: "Create Your School",
+    description: "Set up your school profile — name, academic terms and structure — in a guided setup wizard.",
+  },
+  {
+    number: "02",
+    title: "Add Your People",
+    description: "Add students, teachers, staff and administrators, and assign the right access to each role.",
+  },
+  {
+    number: "03",
+    title: "Start Managing",
+    description: "Begin managing academics, attendance, fees, communication and reporting — all in one place.",
+  },
 ];
 
 export function HowItWorks() {
   return (
-    <section className="border-b border-border bg-background py-20">
+    <section id="how-it-works" className="scroll-mt-20 py-20 sm:py-28">
       <div className="container-shell">
-        <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-semibold tracking-tight">How It Works</h2>
-          <p className="mt-3 text-muted">From browsing to a live, production application in five steps.</p>
-        </div>
-        <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
+        <Reveal className="mx-auto max-w-2xl text-center">
+          <p className="text-sm font-medium uppercase tracking-wide text-accent">How it works</p>
+          <h2 className="mt-2 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+            Get your school running in minutes.
+          </h2>
+        </Reveal>
+
+        <div className="mx-auto mt-14 grid max-w-5xl grid-cols-1 gap-8 sm:grid-cols-3 sm:gap-6">
           {STEPS.map((step, i) => (
-            <div key={step.title} className="relative rounded-lg border border-border bg-surface p-5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground">
-                {i + 1}
-              </span>
-              <h3 className="mt-4 text-sm font-semibold text-foreground">{step.title}</h3>
-              <p className="mt-1.5 text-sm text-muted">{step.description}</p>
-            </div>
+            <Reveal key={step.number} delayMs={i * 100} className="relative">
+              <div className="flex flex-col items-start">
+                <span className="text-4xl font-semibold tracking-tight text-accent/25">{step.number}</span>
+                <h3 className="mt-3 text-lg font-semibold text-foreground">{step.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted">{step.description}</p>
+              </div>
+              {i < STEPS.length - 1 && (
+                <div className="absolute right-0 top-6 hidden h-px w-6 -translate-y-1/2 translate-x-full bg-border sm:block" />
+              )}
+            </Reveal>
           ))}
         </div>
       </div>
