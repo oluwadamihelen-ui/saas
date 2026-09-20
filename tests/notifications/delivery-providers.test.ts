@@ -147,15 +147,16 @@ describe("registry — resolving a school's active provider", () => {
 });
 
 describe("notifyRecipients — dispatches email/SMS to opted-in recipients through the active provider", () => {
-  it("sends an email via the configured provider when the recipient opted in, and skips a recipient who didn't", async () => {
+  it("sends an email via the configured provider by default, and skips a recipient who explicitly opted out", async () => {
     const { school, guardianUser } = await makeSchool("dispatch-email");
     const otherGuardian = await prisma.user.create({
       data: { schoolId: school.id, roleId: guardianUser.roleId, email: `other-${school.id}@vitest.local`, passwordHash: "x", name: "Other Guardian", status: "ACTIVE" },
     });
     await saveNotificationProviderCredential(school.id, { provider: "RESEND", fromIdentifier: "school@example.com", apiKey: "resend_key", isEnabled: true });
     await setActiveEmailProvider(school.id, "RESEND");
-    await setNotificationChannelPreference(school.id, guardianUser.id, "FEES", "email", true);
-    // otherGuardian never opts in — should get no email despite being sent the same notification.
+    // guardianUser never sets a preference — email is on by default. otherGuardian
+    // explicitly opts out — should get no email despite being sent the same notification.
+    await setNotificationChannelPreference(school.id, otherGuardian.id, "FEES", "email", false);
 
     const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(new Response(JSON.stringify({ id: "email_123" }), { status: 200 }));
 
