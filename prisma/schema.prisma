@@ -161,14 +161,23 @@ model School {
 
   /// Which connected provider actually sends email/SMS for this school's
   /// notifications — same "null means not connected yet, purely additive"
-  /// pattern as activePaymentProvider above. Unlike payments, there is no
-  /// mock/simulated fallback: with either left null, that channel's sends
-  /// are silently skipped (NotificationPreference.emailEnabled/smsEnabled
-  /// simply have nothing to dispatch to yet), which is exactly today's
-  /// pre-existing behavior — connecting a provider here is what turns
-  /// those already-shipped preference flags from inert to live.
+  /// pattern as activePaymentProvider above. With activeSmsProvider left
+  /// null, SMS sends are silently skipped. Email is different: leaving
+  /// activeEmailProvider null doesn't skip email — it falls back to
+  /// Schoolum's own platform-wide Resend account (registry.ts), since
+  /// setting up a sending domain is too technical for most schools;
+  /// connecting a provider here just overrides that fallback with the
+  /// school's own account.
   activeEmailProvider NotificationDeliveryProvider?
   activeSmsProvider   NotificationDeliveryProvider?
+
+  /// Set whenever the most recent external email send for this school
+  /// failed — the provider's own rejection reason (e.g. "domain not
+  /// verified"), not a generic message, so whoever manages notification
+  /// delivery for this school can actually see why nothing arrived
+  /// instead of it failing silently. Cleared on the next successful send.
+  lastEmailDeliveryError   String?
+  lastEmailDeliveryErrorAt DateTime?
 
   // Onboarding wizard progress (brief section 4). Nullable timestamps double
   // as both a "is this step done" flag and a record of when it happened.

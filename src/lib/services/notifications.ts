@@ -254,7 +254,15 @@ async function notifyRecipients(
   const recipients = isCategorySuppressible(options.category)
     ? uniqueIds.filter((id) => prefByUser.get(id)?.inAppEnabled !== false)
     : uniqueIds;
-  const emailRecipients = uniqueIds.filter((id) => prefByUser.get(id)?.emailEnabled === true);
+  // A non-suppressible category (SYSTEM: trial started/ending, plan
+  // changes, payment issues) is always emailed too, the same as it's
+  // always shown in-app — there's no preference toggle for it to opt
+  // into (isCategorySuppressible's doc comment above), so gating email on
+  // one would mean these never send by email at all, including the
+  // trial-started notice that's a new school's welcome email.
+  const emailRecipients = isCategorySuppressible(options.category)
+    ? uniqueIds.filter((id) => prefByUser.get(id)?.emailEnabled === true)
+    : uniqueIds;
   const smsRecipients = uniqueIds.filter((id) => prefByUser.get(id)?.smsEnabled === true);
 
   if (recipients.length > 0) {
@@ -300,7 +308,11 @@ async function notifyRecipients(
 /// so this is purely additive on top of the in-app notification that
 /// already exists regardless. Recipients without a resolvable email/phone
 /// (e.g. a student portal account with no phone anywhere) are silently
-/// skipped rather than erroring the whole batch.
+/// skipped rather than erroring the whole batch. Email failures (the
+/// provider's own rejection reason, e.g. an unverified sending domain —
+/// not just a network-level exception) are recorded onto
+/// School.lastEmailDeliveryError so they're visible in Settings instead of
+/// only ever reaching a server log nobody but Vercel can see.
 async function dispatchExternalChannels(
   schoolId: string,
   emailRecipientIds: string[],
@@ -319,6 +331,7 @@ async function dispatchExternalChannels(
 
   const messageBody = body ?? title;
   const sends: Promise<unknown>[] = [];
+  const emailErrors: string[] = [];
 
   if (emailResolved) {
     for (const userId of emailRecipientIds) {
@@ -327,7 +340,18 @@ async function dispatchExternalChannels(
       sends.push(
         emailResolved.provider
           .send({ to: email, subject: title, body: messageBody }, emailResolved.credentials)
-          .catch((err) => console.error(`notifications: email send failed for ${userId}`, err))
+          .then((result) => {
+            if (result.status === "failed") {
+              const message = result.error ?? "The email provider rejected this send.";
+              emailErrors.push(message);
+              console.error(`notifications: email send failed for ${userId}: ${message}`);
+            }
+          })
+          .catch((err) => {
+            const message = err instanceof Error ? err.message : "The email provider could not be reached.";
+            emailErrors.push(message);
+            console.error(`notifications: email send failed for ${userId}`, err);
+          })
       );
     }
   }
@@ -343,6 +367,18 @@ async function dispatchExternalChannels(
     }
   }
   await Promise.all(sends);
+
+  if (emailResolved && emailRecipientIds.length > 0) {
+    const lastError = emailErrors.at(-1) ?? null;
+    await prisma.school
+      .update({
+        where: { id: schoolId },
+        data: lastError
+          ? { lastEmailDeliveryError: lastError.slice(0, 500), lastEmailDeliveryErrorAt: new Date() }
+          : { lastEmailDeliveryError: null, lastEmailDeliveryErrorAt: null },
+      })
+      .catch((err) => console.error("notifications: failed to record email delivery status", err));
+  }
 }
 
 /// Resolves each recipient's email/phone for external delivery. Staff

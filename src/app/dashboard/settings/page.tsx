@@ -151,12 +151,24 @@ export default async function SettingsPage() {
           <CardHeader>
             <CardTitle>Email & SMS delivery</CardTitle>
             <CardDescription>
-              Connect Resend for email and Twilio and/or Sent.dm for SMS so staff, parents and students who opt in
-              (Notifications → Preferences) receive email/SMS copies, not just in-app ones. Until you connect a
-              provider for a channel, that channel&apos;s sends are simply skipped.
+              Email already works without any setup here — Schoolum sends it on your behalf. Connect your own
+              Resend account below only if you want emails to come from your own domain instead. Connect Twilio
+              and/or Sent.dm for SMS so staff, parents and students who opt in (Notifications → Preferences)
+              receive text messages too — until you connect one, SMS sends are simply skipped.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {school.lastEmailDeliveryError && (
+              <div className="rounded-md border border-danger/30 bg-danger-soft p-3 text-sm text-danger">
+                <p className="font-medium">The last email notification failed to send</p>
+                <p className="mt-1">{school.lastEmailDeliveryError}</p>
+                {school.lastEmailDeliveryErrorAt && (
+                  <p className="mt-1 text-xs text-danger/80">
+                    {new Date(school.lastEmailDeliveryErrorAt).toLocaleString()}
+                  </p>
+                )}
+              </div>
+            )}
             {notificationCredentials.some((c) => EMAIL_PROVIDERS.includes(c.provider)) && (
               <ActiveEmailProviderForm
                 currentProvider={school.activeEmailProvider}
