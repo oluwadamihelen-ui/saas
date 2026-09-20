@@ -19,9 +19,11 @@ import { formatMoney } from "@/lib/money";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import { WithdrawButton } from "./withdraw-button";
+import { DeleteStudentButton } from "./delete-student-button";
 import { AddGuardianForm } from "./add-guardian-form";
 import { LinkExistingGuardianForm } from "./link-existing-guardian-form";
 import { RemoveGuardianButton } from "./remove-guardian-button";
+import { DeleteGuardianButton } from "./delete-guardian-button";
 import { MergeGuardianButton } from "./merge-guardian-button";
 import { PortalInviteForm } from "./portal-invite-form";
 import { inviteGuardianPortalAction, inviteStudentPortalAction } from "../actions";
@@ -106,6 +108,9 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
             </Button>
           )}
           {canDelete && student.status === "ACTIVE" && <WithdrawButton studentId={student.id} />}
+          {canDelete && (
+            <DeleteStudentButton studentId={student.id} studentName={`${student.firstName} ${student.lastName}`} />
+          )}
         </div>
       </div>
 
@@ -166,11 +171,18 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
                         <div className="flex items-center gap-2">
                           <Badge variant="accent">{sg.relationship}{sg.isPrimary ? " · Primary" : ""}</Badge>
                           {canManageGuardians && (
-                            <RemoveGuardianButton
-                              studentId={student.id}
-                              guardianId={sg.guardianId}
-                              guardianName={`${sg.guardian.firstName} ${sg.guardian.lastName}`}
-                            />
+                            <>
+                              <RemoveGuardianButton
+                                studentId={student.id}
+                                guardianId={sg.guardianId}
+                                guardianName={`${sg.guardian.firstName} ${sg.guardian.lastName}`}
+                              />
+                              <DeleteGuardianButton
+                                studentId={student.id}
+                                guardianId={sg.guardianId}
+                                guardianName={`${sg.guardian.firstName} ${sg.guardian.lastName}`}
+                              />
+                            </>
                           )}
                         </div>
                       </div>

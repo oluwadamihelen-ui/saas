@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission, requireAnyPermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { createTeacherAssignments, deleteTeacherAssignment } from "@/lib/services/teacher-assignments";
-import { createSubject, updateSubject } from "@/lib/services/academics";
+import { createSubject, updateSubject, createClassGroup, createClassArm, deleteClassArm, deleteClassGroup } from "@/lib/services/academics";
 import { logAudit } from "@/lib/audit";
 
 const schema = z.object({
@@ -142,3 +142,86 @@ export const updateSubjectAction = withAuthErrors(async function updateSubjectAc
   revalidatePath("/dashboard/online-learning/subjects");
   return { status: "success", message: `"${subject.name}" updated.` };
 });
+
+const classGroupSchema = z.object({ name: z.string().trim().min(1, "Class name is required").max(100) });
+
+export interface ClassFormState {
+  status: "idle" | "error" | "success";
+  message?: string;
+}
+
+export const createClassGroupAction = withAuthErrors(async function createClassGroupAction(_prev: ClassFormState, formData: FormData): Promise<ClassFormState> {
+  const user = await requirePermission(PERMISSIONS.ACADEMICS_MANAGE);
+
+  const parsed = classGroupSchema.safeParse({ name: formData.get("name") });
+  if (!parsed.success) {
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check the class name." };
+  }
+
+  let classGroup;
+  try {
+    classGroup = await createClassGroup(user.schoolId, parsed.data.name);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Could not create this class." };
+  }
+
+  await logAudit({
+    schoolId: user.schoolId,
+    userId: user.id,
+    action: "class.created",
+    resourceType: "ClassGroup",
+    resourceId: classGroup.id,
+    newValue: { name: classGroup.name },
+  });
+
+  revalidatePath("/dashboard/academics");
+  return { status: "success", message: `"${classGroup.name}" added.` };
+});
+
+const classArmSchema = z.object({ name: z.string().trim().min(1, "Arm name is required").max(50) });
+
+export const createClassArmAction = withAuthErrors(async function createClassArmAction(
+  classGroupId: string,
+  _prev: ClassFormState,
+  formData: FormData
+): Promise<ClassFormState> {
+  const user = await requirePermission(PERMISSIONS.ACADEMICS_MANAGE);
+
+  const parsed = classArmSchema.safeParse({ name: formData.get("name") });
+  if (!parsed.success) {
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check the arm name." };
+  }
+
+  let classArm;
+  try {
+    classArm = await createClassArm(user.schoolId, classGroupId, parsed.data.name);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Could not add this class arm." };
+  }
+
+  await logAudit({
+    schoolId: user.schoolId,
+    userId: user.id,
+    action: "class_arm.created",
+    resourceType: "ClassArm",
+    resourceId: classArm.id,
+    newValue: { name: classArm.name, classGroupId },
+  });
+
+  revalidatePath("/dashboard/academics");
+  return { status: "success", message: `Arm "${classArm.name}" added.` };
+});
+
+export async function deleteClassArmAction(id: string) {
+  const user = await requirePermission(PERMISSIONS.ACADEMICS_MANAGE);
+  await deleteClassArm(user.schoolId, id);
+  await logAudit({ schoolId: user.schoolId, userId: user.id, action: "class_arm.deleted", resourceType: "ClassArm", resourceId: id });
+  revalidatePath("/dashboard/academics");
+}
+
+export async function deleteClassGroupAction(id: string) {
+  const user = await requirePermission(PERMISSIONS.ACADEMICS_MANAGE);
+  await deleteClassGroup(user.schoolId, id);
+  await logAudit({ schoolId: user.schoolId, userId: user.id, action: "class.deleted", resourceType: "ClassGroup", resourceId: id });
+  revalidatePath("/dashboard/academics");
+}

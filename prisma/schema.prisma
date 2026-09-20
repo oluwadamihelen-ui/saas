@@ -409,6 +409,7 @@ model User {
   studentProfile  Student?  @relation("StudentUser")
 
   portalInvitesSent       PortalInvite[]           @relation("PortalInviteSentBy")
+  passwordResetTokens     PasswordResetToken[]
   notifications           Notification[]           @relation("UserNotifications")
   notificationPreferences NotificationPreference[] @relation("NotificationPreferenceUser")
   announcementsCreated    Announcement[]           @relation("AnnouncementCreatedBy")
@@ -1988,6 +1989,28 @@ model PortalInvite {
   @@index([studentId])
 }
 
+/// Self-service "forgot password" flow — a user requests a reset from the
+/// login page, gets emailed a link carrying this token, and sets a new
+/// password without an admin's involvement. Separate from the admin-driven
+/// resetUserPassword (administration-users.ts), which stays as the
+/// no-email-required path for a staff member who can't access their own
+/// inbox. One-time use: usedAt is set the moment the token resets a
+/// password, and a used or expired token is rejected exactly like a
+/// missing one — never revived or reused.
+model PasswordResetToken {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
 /// In-app only — there's no email/SMS/WhatsApp/push provider wired up yet,
 /// so a Notification only ever appears in the topbar bell for the user it
 /// belongs to (src/lib/services/notifications.ts creates these alongside
@@ -2244,6 +2267,18 @@ model Announcement {
   publishedAt DateTime?
   createdById String
   createdBy   User      @relation("AnnouncementCreatedBy", fields: [createdById], references: [id])
+
+  /// Which channels this specific announcement goes out on, chosen by the
+  /// sender at write time — independent of each recipient's own
+  /// notification-category preference (an announcement is a deliberate
+  /// one-off broadcast, e.g. an urgent closure notice, not a recurring
+  /// alert someone quietly opted out of). notifyInApp defaults true since
+  /// that's always free and always been the baseline; email/SMS default
+  /// false so an old row (before this field existed) behaves exactly as
+  /// it always did — in-app only.
+  notifyInApp Boolean @default(true)
+  notifyEmail Boolean @default(false)
+  notifySms   Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

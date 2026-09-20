@@ -3,12 +3,8 @@ import { prisma } from "@/lib/db";
 import type { NotificationType, NotificationCategory, NotificationPriority, Prisma } from "@/generated/prisma/client";
 import { formatMoney } from "@/lib/money";
 import { resolveActiveEmailProvider, resolveActiveSmsProvider } from "@/lib/notification-delivery/registry";
-import { renderNotificationEmail } from "@/lib/notification-delivery/email-template";
+import { sendBrandedEmail, absoluteUrl } from "@/lib/notification-delivery/send-email";
 import type { ActionItem, ActionPriority } from "@/lib/services/school-health/types";
-
-function appOrigin(): string {
-  return process.env.APP_URL ?? "http://localhost:3001";
-}
 
 /// Where each recipient role's own Notification Preferences page lives —
 /// staff/admins share one under /dashboard, parents and students each have
@@ -356,26 +352,18 @@ async function dispatchExternalChannels(
   const emailErrors: string[] = [];
 
   if (emailResolved && school) {
-    const origin = appOrigin();
-    const logoUrl = school.logoUrl ? `${origin}/api/branding/logo/${schoolId}` : null;
-    const actionUrl = link ? `${origin}${link}` : null;
+    const actionUrl = link ? absoluteUrl(link) : null;
 
     for (const userId of emailRecipientIds) {
       const contact = contacts.get(userId);
       if (!contact?.email) continue;
-      const html = renderNotificationEmail({
-        schoolName: school.name,
-        logoUrl,
-        brandColor: school.brandColor,
-        title,
-        body,
-        actionLabel,
-        actionUrl,
-        preferencesUrl: `${origin}${preferencesPathForRole(contact.roleKey)}`,
-      });
       sends.push(
-        emailResolved.provider
-          .send({ to: contact.email, subject: title, body: html }, emailResolved.credentials)
+        sendBrandedEmail(
+          emailResolved.provider,
+          emailResolved.credentials,
+          { id: schoolId, ...school },
+          { to: contact.email, subject: title, title, body, actionLabel, actionUrl, preferencesUrl: absoluteUrl(preferencesPathForRole(contact.roleKey)) }
+        )
           .then((result) => {
             if (result.status === "failed") {
               const message = result.error ?? "The email provider rejected this send.";
@@ -1435,4 +1423,67 @@ function isoWeekKey(date: Date): string {
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
   const weekNo = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
   return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+}
+
+export interface AnnouncementChannels {
+  inApp: boolean;
+  email: boolean;
+  sms: boolean;
+}
+
+/// Delivers a published announcement to every recipient group (staff,
+/// guardians, students each have their own in-app link) on exactly the
+/// channels the sender picked when writing it — unlike every other
+/// notify* function above, this deliberately does NOT filter by each
+/// recipient's own category preference: an announcement is a one-off
+/// broadcast the sender explicitly chose to send by email/SMS (e.g. an
+/// urgent closure notice), not a recurring alert someone can quietly opt
+/// out of. Calls dispatchExternalChannels directly (same module, so the
+/// private helper is reachable here) once per group so each group's link
+/// stays correct, rather than going through notifyRecipients, which
+/// always creates the in-app row and always checks preferences.
+export async function notifyAnnouncementPublished(
+  schoolId: string,
+  groups: { ids: string[]; link: string }[],
+  content: { title: string; body: string; entityId: string },
+  channels: AnnouncementChannels
+): Promise<void> {
+  const nonEmptyGroups = groups.map((g) => ({ ...g, ids: [...new Set(g.ids)] })).filter((g) => g.ids.length > 0);
+  if (nonEmptyGroups.length === 0) return;
+
+  if (channels.inApp) {
+    const data = nonEmptyGroups.flatMap((group) =>
+      group.ids.map((userId) => ({
+        schoolId,
+        userId,
+        type: "ANNOUNCEMENT" as const,
+        title: content.title,
+        body: content.body.slice(0, 140),
+        link: group.link,
+        category: "ANNOUNCEMENT" as const,
+        priority: "MEDIUM" as const,
+        actionLabel: "View announcement",
+        entityType: "Announcement",
+        entityId: content.entityId,
+        dedupeKey: `announcement:${content.entityId}`,
+      }))
+    );
+    await prisma.notification.createMany({ data, skipDuplicates: true });
+  }
+
+  if (channels.email || channels.sms) {
+    await Promise.all(
+      nonEmptyGroups.map((group) =>
+        dispatchExternalChannels(
+          schoolId,
+          channels.email ? group.ids : [],
+          channels.sms ? group.ids : [],
+          content.title,
+          content.body,
+          group.link,
+          "View announcement"
+        ).catch((err) => console.error("notifyAnnouncementPublished: external delivery failed", err))
+      )
+    );
+  }
 }

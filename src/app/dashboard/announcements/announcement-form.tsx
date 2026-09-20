@@ -58,6 +58,15 @@ export function AnnouncementForm({ classArms }: { classArms: { id: string; name:
             </Select>
           </div>
         )}
+        <div className="space-y-1.5">
+          <Label htmlFor="channel">Send via</Label>
+          <Select id="channel" name="channel" defaultValue="IN_APP">
+            <option value="IN_APP">In-app only</option>
+            <option value="EMAIL">In-app + Email</option>
+            <option value="SMS">In-app + SMS</option>
+            <option value="ALL">All (in-app + email + SMS)</option>
+          </Select>
+        </div>
       </div>
       <label className="flex items-center gap-2 text-sm text-foreground">
         <input type="checkbox" name="publishNow" defaultChecked className="h-4 w-4 rounded border-border" />

@@ -342,6 +342,36 @@ export async function withdrawStudent(schoolId: string, id: string) {
   });
 }
 
+/// Permanently erases a student and everything scoped to them (attendance,
+/// results, assignments, invoices, guardian links, portal account, ...) —
+/// unlike withdrawStudent above, which keeps the record and just changes
+/// its status. Refuses when the student has any paid or partially-paid
+/// invoice, the same "never destroy real financial history" guard this
+/// app already applies to deleting a whole School (delete-prospect-
+/// preview.ts) — a school clearing out test data has none of those, so
+/// the guard is invisible to that use case and only ever blocks the one
+/// case that would actually be destructive.
+export async function deleteStudent(schoolId: string, id: string): Promise<void> {
+  const student = await prisma.student.findFirst({ where: { schoolId, id } });
+  if (!student) throw new Error("Student not found.");
+
+  const paidInvoices = await prisma.invoice.count({ where: { studentId: id, status: { in: ["PAID", "PARTIALLY_PAID"] } } });
+  if (paidInvoices > 0) {
+    throw new Error("This student has paid fee records and can't be permanently deleted — withdraw them instead to keep that history.");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.student.delete({ where: { id } });
+    // Student.userId points at the portal account, not the other way
+    // around, so deleting the student doesn't remove it — do that
+    // separately. Best-effort: if it's already gone for any reason, the
+    // student is still deleted either way.
+    if (student.userId) {
+      await tx.user.delete({ where: { id: student.userId } }).catch(() => {});
+    }
+  });
+}
+
 export async function addGuardianToStudent(
   schoolId: string,
   studentId: string,
@@ -423,6 +453,24 @@ export async function removeGuardianFromStudent(schoolId: string, studentId: str
   const student = await prisma.student.findFirst({ where: { schoolId, id: studentId } });
   if (!student) throw new Error("Student not found.");
   await prisma.studentGuardian.deleteMany({ where: { studentId, guardianId } });
+}
+
+/// Permanently erases a guardian's own record (and their portal account,
+/// if any) — unlike removeGuardianFromStudent above, which only unlinks
+/// them from one student and leaves the Guardian row itself behind. Every
+/// student-guardian link they hold (StudentGuardian rows for every
+/// student, not just one) is removed along with it; the linked students
+/// themselves are never touched.
+export async function deleteGuardian(schoolId: string, guardianId: string): Promise<void> {
+  const guardian = await prisma.guardian.findFirst({ where: { schoolId, id: guardianId } });
+  if (!guardian) throw new Error("Guardian not found.");
+
+  await prisma.$transaction(async (tx) => {
+    await tx.guardian.delete({ where: { id: guardianId } });
+    if (guardian.userId) {
+      await tx.user.delete({ where: { id: guardian.userId } }).catch(() => {});
+    }
+  });
 }
 
 /// Combines two Guardian records that turned out to be the same real

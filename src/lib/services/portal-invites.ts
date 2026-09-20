@@ -2,6 +2,7 @@ import "server-only";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
+import { sendSchoolEmail, absoluteUrl } from "@/lib/notification-delivery/send-email";
 
 const INVITE_TTL_DAYS = 14;
 
@@ -52,7 +53,7 @@ export async function inviteGuardianToPortal(
 
   const token = crypto.randomBytes(24).toString("hex");
 
-  return prisma.portalInvite.upsert({
+  const invite = await prisma.portalInvite.upsert({
     where: { schoolId_email_status: { schoolId, email: normalizedEmail, status: "PENDING" } },
     create: {
       schoolId,
@@ -70,6 +71,20 @@ export async function inviteGuardianToPortal(
       expiresAt: new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000),
     },
   });
+
+  // Best-effort — the invite itself is already created and its link is
+  // also shown/copyable in the dashboard, so a failed send here (no
+  // provider configured, etc.) never blocks the invite from existing.
+  await sendSchoolEmail(schoolId, {
+    to: normalizedEmail,
+    subject: "You're invited to your school's parent portal",
+    title: "You're invited to the parent portal",
+    body: `${guardian.firstName}, you've been invited to create a parent portal account — track attendance, results, fees and announcements for your child. This invite expires in ${INVITE_TTL_DAYS} days.`,
+    actionLabel: "Set up your account",
+    actionUrl: absoluteUrl(`/portal-invite/${token}`),
+  }).catch((err) => console.error("inviteGuardianToPortal: invite email failed", err));
+
+  return invite;
 }
 
 /// email is optional here (unlike inviteGuardianToPortal, where a guardian
@@ -97,7 +112,7 @@ export async function inviteStudentToPortal(
 
   const token = crypto.randomBytes(24).toString("hex");
 
-  return prisma.portalInvite.upsert({
+  const invite = await prisma.portalInvite.upsert({
     where: { schoolId_email_status: { schoolId, email: normalizedEmail, status: "PENDING" } },
     create: {
       schoolId,
@@ -115,6 +130,22 @@ export async function inviteStudentToPortal(
       expiresAt: new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000),
     },
   });
+
+  // Only when a real email was given — a generated placeholder address
+  // (student logs in with admission number instead) isn't reachable, and
+  // sending to it would just fail or, worse, silently go nowhere useful.
+  if (email) {
+    await sendSchoolEmail(schoolId, {
+      to: normalizedEmail,
+      subject: "You're invited to your school's student portal",
+      title: "You're invited to the student portal",
+      body: `${student.firstName}, you've been invited to create a student portal account — check your assignments, results, timetable and announcements. This invite expires in ${INVITE_TTL_DAYS} days.`,
+      actionLabel: "Set up your account",
+      actionUrl: absoluteUrl(`/portal-invite/${token}`),
+    }).catch((err) => console.error("inviteStudentToPortal: invite email failed", err));
+  }
+
+  return invite;
 }
 
 export async function getPortalInviteByToken(token: string) {

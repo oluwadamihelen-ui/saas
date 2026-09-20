@@ -9,10 +9,12 @@ import {
   createStudent,
   updateStudent,
   withdrawStudent,
+  deleteStudent,
   addGuardianToStudent,
   searchGuardians,
   linkExistingGuardianToStudent,
   removeGuardianFromStudent,
+  deleteGuardian,
   mergeGuardians,
 } from "@/lib/services/students";
 import { inviteGuardianToPortal, inviteStudentToPortal } from "@/lib/services/portal-invites";
@@ -220,6 +222,19 @@ export async function withdrawStudentAction(studentId: string) {
   revalidatePath(`/dashboard/students/${studentId}`);
 }
 
+export async function deleteStudentAction(studentId: string) {
+  const user = await requirePermission(PERMISSIONS.STUDENTS_DELETE);
+  await deleteStudent(user.schoolId, studentId);
+  await logAudit({
+    schoolId: user.schoolId,
+    userId: user.id,
+    action: "student.deleted",
+    resourceType: "Student",
+    resourceId: studentId,
+  });
+  revalidatePath("/dashboard/students");
+}
+
 const addGuardianSchema = z.object({
   firstName: z.string().trim().min(1, "First name is required").max(100),
   lastName: z.string().trim().min(1, "Last name is required").max(100),
@@ -309,6 +324,13 @@ export async function removeGuardianAction(studentId: string, guardianId: string
   const user = await requirePermission(PERMISSIONS.GUARDIANS_MANAGE);
   await removeGuardianFromStudent(user.schoolId, studentId, guardianId);
   await logAudit({ schoolId: user.schoolId, userId: user.id, action: "guardian.removed", resourceType: "Student", resourceId: studentId });
+  revalidatePath(`/dashboard/students/${studentId}`);
+}
+
+export async function deleteGuardianAction(studentId: string, guardianId: string) {
+  const user = await requirePermission(PERMISSIONS.GUARDIANS_MANAGE);
+  await deleteGuardian(user.schoolId, guardianId);
+  await logAudit({ schoolId: user.schoolId, userId: user.id, action: "guardian.deleted", resourceType: "Guardian", resourceId: guardianId });
   revalidatePath(`/dashboard/students/${studentId}`);
 }
 

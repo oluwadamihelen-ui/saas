@@ -7,6 +7,14 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { createAnnouncement, publishAnnouncement } from "@/lib/services/announcements";
 
 const audienceEnum = z.enum(["SCHOOL_WIDE", "STAFF_ONLY", "PARENTS_ONLY", "CLASS"]);
+const channelEnum = z.enum(["IN_APP", "EMAIL", "SMS", "ALL"]);
+
+const CHANNEL_FLAGS: Record<z.infer<typeof channelEnum>, { notifyInApp: boolean; notifyEmail: boolean; notifySms: boolean }> = {
+  IN_APP: { notifyInApp: true, notifyEmail: false, notifySms: false },
+  EMAIL: { notifyInApp: true, notifyEmail: true, notifySms: false },
+  SMS: { notifyInApp: true, notifyEmail: false, notifySms: true },
+  ALL: { notifyInApp: true, notifyEmail: true, notifySms: true },
+};
 
 const schema = z.object({
   title: z.string().trim().min(1, "Title is required").max(200),
@@ -14,6 +22,7 @@ const schema = z.object({
   audience: audienceEnum,
   classArmId: z.string().trim().optional().or(z.literal("")),
   publishNow: z.string().optional(),
+  channel: channelEnum,
 });
 
 export interface AnnouncementFormState {
@@ -33,6 +42,7 @@ export const createAnnouncementAction = withAuthErrors(async function createAnno
     audience: formData.get("audience"),
     classArmId: formData.get("classArmId") ?? "",
     publishNow: formData.get("publishNow") ?? undefined,
+    channel: formData.get("channel") ?? "IN_APP",
   });
 
   if (!parsed.success) {
@@ -50,6 +60,7 @@ export const createAnnouncementAction = withAuthErrors(async function createAnno
       body: parsed.data.body,
       audience: parsed.data.audience,
       classArmId: parsed.data.classArmId || null,
+      ...CHANNEL_FLAGS[parsed.data.channel],
     },
     parsed.data.publishNow === "on"
   );

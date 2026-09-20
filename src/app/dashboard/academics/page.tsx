@@ -4,20 +4,26 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { requireAnyPermission } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
 import { listTeacherAssignments, listTeachers } from "@/lib/services/teacher-assignments";
-import { listClassArms, listSubjects } from "@/lib/services/academics";
+import { listClassArms, listClassGroupsWithArms, listSubjects } from "@/lib/services/academics";
 import { TeacherAssignmentForm } from "./assignment-form";
 import { DeleteAssignmentButton } from "./delete-assignment-button";
 import { SubjectForm } from "./subject-form";
 import { SubjectRow } from "./subject-row";
+import { AddClassForm, ClassGroupCard } from "./class-management";
 
 export default async function AcademicsPage() {
   const user = await requireAnyPermission([PERMISSIONS.ACADEMICS_MANAGE, PERMISSIONS.SUBJECTS_CREATE]);
   const canManageAcademics = user.perms.has(PERMISSIONS.ACADEMICS_MANAGE);
 
   const subjects = await listSubjects(user.schoolId);
-  const [assignments, teachers, classArms] = canManageAcademics
-    ? await Promise.all([listTeacherAssignments(user.schoolId), listTeachers(user.schoolId), listClassArms(user.schoolId)])
-    : [[], [], []];
+  const [assignments, teachers, classArms, classGroups] = canManageAcademics
+    ? await Promise.all([
+        listTeacherAssignments(user.schoolId),
+        listTeachers(user.schoolId),
+        listClassArms(user.schoolId),
+        listClassGroupsWithArms(user.schoolId),
+      ])
+    : [[], [], [], []];
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -49,6 +55,27 @@ export default async function AcademicsPage() {
           )}
         </CardContent>
       </Card>
+
+      {canManageAcademics && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Classes</CardTitle>
+            <CardDescription>Add or remove classes and their arms. A class with students in it can&apos;t be deleted.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <AddClassForm />
+            {classGroups.length === 0 ? (
+              <EmptyState title="No classes yet" description="Add a class above to get started." />
+            ) : (
+              <div className="space-y-3">
+                {classGroups.map((cg) => (
+                  <ClassGroupCard key={cg.id} classGroup={cg} />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {canManageAcademics && (
         <Card>

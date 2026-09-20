@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { notifyAnnouncementPublished } from "@/lib/services/notifications";
 import type { AnnouncementAudience, Prisma } from "@/generated/prisma/client";
 
 export interface AnnouncementInput {
@@ -7,6 +8,9 @@ export interface AnnouncementInput {
   body: string;
   audience: AnnouncementAudience;
   classArmId?: string | null;
+  notifyInApp: boolean;
+  notifyEmail: boolean;
+  notifySms: boolean;
 }
 
 const ANNOUNCEMENT_PAGE_SIZE = 20;
@@ -109,6 +113,9 @@ export async function createAnnouncement(
       audience: input.audience,
       classArmId: input.audience === "CLASS" ? input.classArmId : null,
       publishedAt: publishNow ? new Date() : null,
+      notifyInApp: input.notifyInApp,
+      notifyEmail: input.notifyEmail,
+      notifySms: input.notifySms,
     },
   });
 
@@ -191,22 +198,10 @@ async function notifyAnnouncementRecipients(announcementId: string) {
     { ids: [...new Set(studentUserIds)], link: "/portal/student/announcements" },
   ];
 
-  const data = groups.flatMap((group) =>
-    group.ids.map((userId) => ({
-      schoolId: announcement.schoolId,
-      userId,
-      type: "ANNOUNCEMENT" as const,
-      title: announcement.title,
-      body: announcement.body.slice(0, 140),
-      link: group.link,
-      category: "ANNOUNCEMENT" as const,
-      priority: "MEDIUM" as const,
-      actionLabel: "View announcement",
-      entityType: "Announcement",
-      entityId: announcement.id,
-      dedupeKey: `announcement:${announcement.id}`,
-    }))
+  await notifyAnnouncementPublished(
+    announcement.schoolId,
+    groups,
+    { title: announcement.title, body: announcement.body.slice(0, 140), entityId: announcement.id },
+    { inApp: announcement.notifyInApp, email: announcement.notifyEmail, sms: announcement.notifySms }
   );
-  if (data.length === 0) return;
-  await prisma.notification.createMany({ data, skipDuplicates: true });
 }

@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { Prisma } from "@/generated/prisma/client";
 
 function splitList(raw: string): string[] {
   return raw
@@ -110,6 +111,96 @@ export async function listClassArms(schoolId: string) {
 
 export async function listClassGroups(schoolId: string) {
   return prisma.classGroup.findMany({ where: { schoolId }, orderBy: { order: "asc" } });
+}
+
+/// For the Academics page's class-management card — each arm's own
+/// student count, shown up front so an admin can see at a glance which
+/// arms are safe to delete without needing to try first.
+export async function listClassGroupsWithArms(schoolId: string) {
+  return prisma.classGroup.findMany({
+    where: { schoolId },
+    orderBy: { order: "asc" },
+    include: {
+      arms: {
+        orderBy: { name: "asc" },
+        include: { _count: { select: { students: true } } },
+      },
+    },
+  });
+}
+
+/// Adds one class to the school's list — creates the ClassGroup plus a
+/// default "A" arm, the same shape setupAcademicStructure produces during
+/// onboarding, so a class added later behaves identically to one added at
+/// setup. New classes sort after every existing one.
+export async function createClassGroup(schoolId: string, name: string) {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Class name is required.");
+
+  const existing = await prisma.classGroup.findFirst({ where: { schoolId, name: { equals: trimmed, mode: "insensitive" } } });
+  if (existing) throw new Error(`A class named "${trimmed}" already exists.`);
+
+  const highest = await prisma.classGroup.aggregate({ where: { schoolId }, _max: { order: true } });
+  const order = (highest._max.order ?? -1) + 1;
+
+  return prisma.$transaction(async (tx) => {
+    const classGroup = await tx.classGroup.create({ data: { schoolId, name: trimmed, order } });
+    await tx.classArm.create({ data: { schoolId, classGroupId: classGroup.id, name: "A" } });
+    return classGroup;
+  });
+}
+
+/// A second (or third, ...) stream within an existing class, e.g. "B" next
+/// to Primary 4's existing "A" — every other class-scoped feature (results,
+/// attendance, timetable) already treats each arm as its own roster.
+export async function createClassArm(schoolId: string, classGroupId: string, name: string) {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Arm name is required.");
+
+  const classGroup = await prisma.classGroup.findFirst({ where: { id: classGroupId, schoolId } });
+  if (!classGroup) throw new Error("Class not found.");
+
+  const existing = await prisma.classArm.findFirst({ where: { classGroupId, name: { equals: trimmed, mode: "insensitive" } } });
+  if (existing) throw new Error(`Arm "${trimmed}" already exists for ${classGroup.name}.`);
+
+  return prisma.classArm.create({ data: { schoolId, classGroupId, name: trimmed } });
+}
+
+/// Refuses to delete an arm with students still in it — the safety check
+/// that matters, since a cascade there would silently wipe roster history.
+/// Anything else genuinely tied to the arm (timetable slots, results, a
+/// teacher assignment) either cascades cleanly or, for the handful of
+/// relations that intentionally restrict deletion, surfaces as a friendly
+/// message instead of a raw foreign-key error.
+export async function deleteClassArm(schoolId: string, classArmId: string) {
+  const classArm = await prisma.classArm.findFirst({ where: { id: classArmId, schoolId }, include: { classGroup: true } });
+  if (!classArm) throw new Error("Class not found.");
+
+  const studentCount = await prisma.student.count({ where: { classArmId } });
+  if (studentCount > 0) {
+    throw new Error(`${classArm.classGroup.name} ${classArm.name} still has ${studentCount} student${studentCount === 1 ? "" : "s"} — move or remove them first.`);
+  }
+
+  try {
+    await prisma.classArm.delete({ where: { id: classArmId } });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+      throw new Error(`${classArm.classGroup.name} ${classArm.name} still has related records (e.g. results or a CBT exam) and can't be deleted yet.`);
+    }
+    throw error;
+  }
+}
+
+/// Only deletable once every arm under it is gone — same "empty it out
+/// first" rule as deleteClassArm, one level up.
+export async function deleteClassGroup(schoolId: string, classGroupId: string) {
+  const classGroup = await prisma.classGroup.findFirst({ where: { id: classGroupId, schoolId } });
+  if (!classGroup) throw new Error("Class not found.");
+
+  const armCount = await prisma.classArm.count({ where: { classGroupId } });
+  if (armCount > 0) throw new Error(`${classGroup.name} still has ${armCount} arm${armCount === 1 ? "" : "s"} — delete ${armCount === 1 ? "it" : "them"} first.`);
+
+  await prisma.classGroup.delete({ where: { id: classGroupId } });
 }
 
 export async function listTerms(schoolId: string) {
