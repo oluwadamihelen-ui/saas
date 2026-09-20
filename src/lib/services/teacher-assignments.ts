@@ -16,25 +16,37 @@ export async function listTeachers(schoolId: string) {
   });
 }
 
-export async function createTeacherAssignment(
+// Assigns one teacher to every subject x class combination in a single submission.
+// Combinations that already exist are skipped rather than failing the whole batch.
+export async function createTeacherAssignments(
   schoolId: string,
-  input: { teacherId: string; subjectId: string; classArmId: string }
+  input: { teacherId: string; subjectIds: string[]; classArmIds: string[] }
 ) {
-  const [teacher, subject, classArm] = await Promise.all([
+  const [teacher, subjects, classArms, existing] = await Promise.all([
     prisma.user.findFirst({ where: { id: input.teacherId, schoolId } }),
-    prisma.subject.findFirst({ where: { id: input.subjectId, schoolId } }),
-    prisma.classArm.findFirst({ where: { id: input.classArmId, schoolId } }),
+    prisma.subject.findMany({ where: { id: { in: input.subjectIds }, schoolId } }),
+    prisma.classArm.findMany({ where: { id: { in: input.classArmIds }, schoolId } }),
+    prisma.teacherAssignment.findMany({
+      where: { schoolId, teacherId: input.teacherId, subjectId: { in: input.subjectIds }, classArmId: { in: input.classArmIds } },
+      select: { subjectId: true, classArmId: true },
+    }),
   ]);
-  if (!teacher || !subject || !classArm) throw new Error("Select a valid teacher, subject and class.");
+  if (!teacher) throw new Error("Select a valid teacher.");
+  if (subjects.length !== input.subjectIds.length) throw new Error("Select valid subjects.");
+  if (classArms.length !== input.classArmIds.length) throw new Error("Select valid classes.");
 
-  const existing = await prisma.teacherAssignment.findFirst({
-    where: { schoolId, teacherId: input.teacherId, subjectId: input.subjectId, classArmId: input.classArmId },
-  });
-  if (existing) throw new Error("This teacher is already assigned to this subject and class.");
+  const existingKeys = new Set(existing.map((a) => `${a.subjectId}:${a.classArmId}`));
+  const rows = input.subjectIds
+    .flatMap((subjectId) => input.classArmIds.map((classArmId) => ({ subjectId, classArmId })))
+    .filter(({ subjectId, classArmId }) => !existingKeys.has(`${subjectId}:${classArmId}`));
 
-  return prisma.teacherAssignment.create({
-    data: { schoolId, teacherId: input.teacherId, subjectId: input.subjectId, classArmId: input.classArmId },
-  });
+  if (rows.length > 0) {
+    await prisma.teacherAssignment.createMany({
+      data: rows.map(({ subjectId, classArmId }) => ({ schoolId, teacherId: input.teacherId, subjectId, classArmId })),
+    });
+  }
+
+  return { created: rows.length, skipped: input.subjectIds.length * input.classArmIds.length - rows.length };
 }
 
 export async function deleteTeacherAssignment(schoolId: string, id: string) {

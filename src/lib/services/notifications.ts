@@ -145,6 +145,10 @@ export const PREFERENCE_TOGGLEABLE_CATEGORIES: NotificationCategory[] = [
   "MESSAGING",
   "BIRTHDAY",
   "AI_INSIGHT",
+  "LIBRARY",
+  "TRANSPORT",
+  "PAYROLL",
+  "HR",
 ];
 
 /// Every toggleable category, defaulted true for any category the user has

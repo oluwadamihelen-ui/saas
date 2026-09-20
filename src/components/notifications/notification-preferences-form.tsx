@@ -20,6 +20,10 @@ const CATEGORY_LABELS: Partial<Record<NotificationCategory, string>> = {
   MESSAGING: "Messages",
   BIRTHDAY: "Birthdays",
   AI_INSIGHT: "AI insights",
+  LIBRARY: "Library (due/overdue books)",
+  TRANSPORT: "Transport",
+  PAYROLL: "Payroll",
+  HR: "HR (staff invites, etc.)",
 };
 
 interface ChannelState {

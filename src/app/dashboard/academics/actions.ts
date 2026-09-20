@@ -4,14 +4,14 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requirePermission, requireAnyPermission, withAuthErrors } from "@/lib/auth/require";
 import { PERMISSIONS } from "@/lib/permissions";
-import { createTeacherAssignment, deleteTeacherAssignment } from "@/lib/services/teacher-assignments";
+import { createTeacherAssignments, deleteTeacherAssignment } from "@/lib/services/teacher-assignments";
 import { createSubject, updateSubject } from "@/lib/services/academics";
 import { logAudit } from "@/lib/audit";
 
 const schema = z.object({
   teacherId: z.string().trim().min(1, "Choose a teacher"),
-  subjectId: z.string().trim().min(1, "Choose a subject"),
-  classArmId: z.string().trim().min(1, "Choose a class"),
+  subjectIds: z.array(z.string().trim().min(1)).min(1, "Choose at least one subject"),
+  classArmIds: z.array(z.string().trim().min(1)).min(1, "Choose at least one class"),
 });
 
 export interface TeacherAssignmentState {
@@ -27,28 +27,35 @@ export const createTeacherAssignmentAction = withAuthErrors(async function creat
 
   const parsed = schema.safeParse({
     teacherId: formData.get("teacherId"),
-    subjectId: formData.get("subjectId"),
-    classArmId: formData.get("classArmId"),
+    subjectIds: formData.getAll("subjectIds"),
+    classArmIds: formData.getAll("classArmIds"),
   });
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Please check your selections." };
   }
 
+  let result;
   try {
-    const assignment = await createTeacherAssignment(user.schoolId, parsed.data);
+    result = await createTeacherAssignments(user.schoolId, parsed.data);
     await logAudit({
       schoolId: user.schoolId,
       userId: user.id,
       action: "teacher_assignment.created",
       resourceType: "TeacherAssignment",
-      resourceId: assignment.id,
+      newValue: { teacherId: parsed.data.teacherId, subjectIds: parsed.data.subjectIds, classArmIds: parsed.data.classArmIds, created: result.created },
     });
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Could not create assignment." };
   }
 
   revalidatePath("/dashboard/academics");
-  return { status: "success" };
+  if (result.created === 0) {
+    return { status: "error", message: "This teacher is already assigned to all of those subjects and classes." };
+  }
+  return {
+    status: "success",
+    message: result.skipped > 0 ? `${result.created} assignment(s) added, ${result.skipped} already existed.` : undefined,
+  };
 });
 
 export async function deleteTeacherAssignmentAction(id: string) {

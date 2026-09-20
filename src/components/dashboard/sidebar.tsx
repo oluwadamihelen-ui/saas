@@ -275,8 +275,8 @@ export function Sidebar({ perms, school }: { perms: string[]; school: { name: st
   const visibleNav = visibleNavFor(perms);
 
   return (
-    <aside className="hidden w-64 shrink-0 flex-col bg-navy md:flex">
-      <div className="flex h-16 items-center border-b border-navy-border px-6">
+    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col bg-navy md:flex">
+      <div className="flex h-16 shrink-0 items-center border-b border-navy-border px-6">
         <Link href="/dashboard"><SchoolLogo name={school.name} logoUrl={school.logoUrl} height={26} variant="navy" /></Link>
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
