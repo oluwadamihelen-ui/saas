@@ -4,6 +4,9 @@ import { prisma } from "@/lib/db";
 import { getSchool } from "@/lib/services/school";
 import { listNotifications, unreadNotificationCount } from "@/lib/services/notifications";
 import { maybeRunNotificationRules } from "@/lib/services/notification-rules";
+import { readViewAsGrant, isAuthorizedToViewStudent } from "@/lib/services/view-as";
+import { SYSTEM_ROLE_LABELS, type SystemRoleKey } from "@/lib/permissions";
+import { ExitViewAsBanner } from "@/components/portal/exit-view-as-banner";
 import { PortalSidebar, PortalMobileNav } from "@/components/portal/portal-sidebar";
 import { DashboardTopbar } from "@/components/dashboard/topbar";
 import { BrandStyle } from "@/components/brand/brand-style";
@@ -11,8 +14,22 @@ import { BrandStyle } from "@/components/brand/brand-style";
 export default async function StudentPortalLayout({ children }: { children: React.ReactNode }) {
   const sessionUser = await requireSchoolUser();
 
+  let viewedStudentName: string | null = null;
+
   if (sessionUser.role !== "STUDENT") {
-    redirect(sessionUser.role === "PARENT" ? "/portal/parent" : "/dashboard");
+    const fallback = sessionUser.role === "PARENT" ? "/portal/parent" : "/dashboard";
+    const grant = await readViewAsGrant();
+    if (!grant || grant.viewerId !== sessionUser.id) redirect(fallback);
+
+    const authorized = await isAuthorizedToViewStudent(sessionUser.schoolId, sessionUser, grant.studentId);
+    if (!authorized) redirect(fallback);
+
+    const viewedStudent = await prisma.student.findFirst({
+      where: { id: grant.studentId, schoolId: sessionUser.schoolId },
+      select: { firstName: true, lastName: true },
+    });
+    if (!viewedStudent) redirect(fallback);
+    viewedStudentName = `${viewedStudent.firstName} ${viewedStudent.lastName}`;
   }
 
   await maybeRunNotificationRules(sessionUser.schoolId);
@@ -33,13 +50,16 @@ export default async function StudentPortalLayout({ children }: { children: Reac
         <DashboardTopbar
           name={user.name}
           email={user.email}
-          roleName="Student"
+          roleName={viewedStudentName ? SYSTEM_ROLE_LABELS[sessionUser.role as SystemRoleKey] ?? sessionUser.role : "Student"}
           notifications={notifications}
           unreadCount={unreadCount}
           notificationsHref="/portal/student/notifications"
           mobileNav={<PortalMobileNav role="student" school={schoolBrief} />}
         />
-        <main className="container-shell min-w-0 flex-1 py-6 sm:py-8">{children}</main>
+        <main className="container-shell min-w-0 flex-1 py-6 sm:py-8">
+          {viewedStudentName ? <ExitViewAsBanner studentName={viewedStudentName} /> : null}
+          {children}
+        </main>
       </div>
     </div>
   );

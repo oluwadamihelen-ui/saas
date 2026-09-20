@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { requireSchoolUser } from "@/lib/auth/require";
-import { getStudentForUser } from "@/lib/services/portal";
+import { resolveViewedStudent } from "@/lib/services/portal";
 import { getExamForCandidate } from "@/lib/services/cbt-attempts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,8 +9,9 @@ import { StartExamButton } from "../start-exam-button";
 
 export default async function ExamInstructionsPage({ params }: { params: Promise<{ examId: string }> }) {
   const user = await requireSchoolUser();
-  const student = await getStudentForUser(user.schoolId, user.id);
-  if (!student) notFound();
+  const resolved = await resolveViewedStudent(user.schoolId, user);
+  if (!resolved) notFound();
+  const { student } = resolved;
   const { examId } = await params;
 
   const candidate = await getExamForCandidate(user.schoolId, student.id, examId);

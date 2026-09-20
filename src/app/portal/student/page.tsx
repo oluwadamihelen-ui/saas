@@ -3,15 +3,16 @@ import { notFound } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSchoolUser } from "@/lib/auth/require";
-import { getStudentForUser } from "@/lib/services/portal";
+import { resolveViewedStudent } from "@/lib/services/portal";
 import { listAssignmentsForStudent } from "@/lib/services/assignments";
 import { formatDate } from "@/lib/utils";
 import { NeedsAttentionCard } from "@/components/notifications/needs-attention-card";
 
 export default async function StudentDashboardPage() {
   const user = await requireSchoolUser();
-  const student = await getStudentForUser(user.schoolId, user.id);
-  if (!student) notFound();
+  const resolved = await resolveViewedStudent(user.schoolId, user);
+  if (!resolved) notFound();
+  const { student } = resolved;
 
   const assignments = await listAssignmentsForStudent(user.schoolId, student.id);
   const upcoming = assignments.filter((a) => a.status !== "GRADED").slice(0, 5);

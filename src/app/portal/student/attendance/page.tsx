@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSchoolUser } from "@/lib/auth/require";
-import { getStudentForUser } from "@/lib/services/portal";
+import { resolveViewedStudent } from "@/lib/services/portal";
 import { getStudentAttendanceHistory } from "@/lib/services/attendance";
 import { formatDate } from "@/lib/utils";
 
@@ -11,8 +11,9 @@ const ATTENDANCE_BADGE = { PRESENT: "success", LATE: "warning", EXCUSED: "neutra
 
 export default async function StudentAttendancePage() {
   const user = await requireSchoolUser();
-  const student = await getStudentForUser(user.schoolId, user.id);
-  if (!student) notFound();
+  const resolved = await resolveViewedStudent(user.schoolId, user);
+  if (!resolved) notFound();
+  const { student } = resolved;
 
   const attendance = await getStudentAttendanceHistory(user.schoolId, student.id);
 

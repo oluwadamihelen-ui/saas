@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireSchoolUser } from "@/lib/auth/require";
-import { getStudentForUser } from "@/lib/services/portal";
+import { resolveViewedStudent } from "@/lib/services/portal";
 import { getExamForCandidate } from "@/lib/services/cbt-attempts";
 import { getExamResultForStudent } from "@/lib/services/cbt-results";
 import { isCbtAiConfigured } from "@/lib/services/cbt-ai";
@@ -11,8 +11,9 @@ import { RevisionPlan } from "./revision-plan";
 
 export default async function StudentExamResultPage({ params }: { params: Promise<{ examId: string }> }) {
   const user = await requireSchoolUser();
-  const student = await getStudentForUser(user.schoolId, user.id);
-  if (!student) notFound();
+  const resolved = await resolveViewedStudent(user.schoolId, user);
+  if (!resolved) notFound();
+  const { student } = resolved;
   const { examId } = await params;
 
   const candidate = await getExamForCandidate(user.schoolId, student.id, examId);

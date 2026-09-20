@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSchoolUser } from "@/lib/auth/require";
-import { getStudentForUser } from "@/lib/services/portal";
+import { resolveViewedStudent } from "@/lib/services/portal";
 import { getStudentLearningSummary } from "@/lib/services/lectures";
 import { listLiveClassesForStudent } from "@/lib/services/live-classes";
 import { formatDate } from "@/lib/utils";
@@ -13,7 +13,8 @@ import { ProgressBar } from "@/components/online-learning/progress-bar";
 
 export default async function StudentOnlineLearningPage() {
   const user = await requireSchoolUser();
-  const student = await getStudentForUser(user.schoolId, user.id);
+  const resolved = await resolveViewedStudent(user.schoolId, user);
+  const student = resolved?.student ?? null;
   if (!student) {
     return <EmptyState icon={<BookOpen className="h-6 w-6" />} title="No student profile found" description="Contact your school administrator." />;
   }

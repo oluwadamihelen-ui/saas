@@ -1,15 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSchoolUser } from "@/lib/auth/require";
-import { getStudentForUser } from "@/lib/services/portal";
+import { resolveViewedStudent } from "@/lib/services/portal";
 import { getLectureForStudent } from "@/lib/services/lectures";
 import { LectureViewer } from "./lecture-viewer";
 
 export default async function StudentLecturePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await requireSchoolUser();
-  const student = await getStudentForUser(user.schoolId, user.id);
-  if (!student) notFound();
+  const resolved = await resolveViewedStudent(user.schoolId, user);
+  if (!resolved) notFound();
+  const { student } = resolved;
 
   const result = await getLectureForStudent(user.schoolId, student.id, id);
   if (!result) notFound();

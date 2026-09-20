@@ -25,6 +25,10 @@ export const CBT_IMPORT_TEMPLATE_EXAMPLE =
 export const STAFF_IMPORT_TEMPLATE_HEADER = "name,email,role,phone,staffid,jobtitle,department";
 export const STAFF_IMPORT_TEMPLATE_EXAMPLE = 'John Ade,john.ade@example.com,Teacher,08012345678,STAFF-014,Class Teacher,Sciences';
 
+export const GUARDIAN_IMPORT_TEMPLATE_HEADER =
+  "admissionNumber,guardianFirstName,guardianLastName,guardianPhone,guardianEmail,guardianRelationship";
+export const GUARDIAN_IMPORT_TEMPLATE_EXAMPLE = "2023-0014,Chidi,Okafor,08087654321,chidi.okafor@example.com,FATHER";
+
 /// Re-parses each raw example-row string above (the same text shown inline
 /// on the import pages) back into fields, then re-serializes through
 /// rowsToCsv — so quoting stays correct without a second hand-written
@@ -85,4 +89,12 @@ export async function buildStaffTemplateCsv(schoolId: string): Promise<string> {
   });
   const extraRow = role ? ["Mary Okafor", "mary.okafor@example.com", role.name, "", "", "", ""] : undefined;
   return templateCsv(STAFF_IMPORT_TEMPLATE_HEADER, [STAFF_IMPORT_TEMPLATE_EXAMPLE], extraRow);
+}
+
+/// The second example row uses one of the school's own real admission
+/// numbers when it has any students enrolled, same as the other templates.
+export async function buildGuardianTemplateCsv(schoolId: string): Promise<string> {
+  const student = await prisma.student.findFirst({ where: { schoolId }, orderBy: { admissionNumber: "asc" } });
+  const extraRow = student ? [student.admissionNumber, "Ngozi", "Bello", "08023456789", "", "MOTHER"] : undefined;
+  return templateCsv(GUARDIAN_IMPORT_TEMPLATE_HEADER, [GUARDIAN_IMPORT_TEMPLATE_EXAMPLE], extraRow);
 }

@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSchoolUser } from "@/lib/auth/require";
-import { getStudentForUser } from "@/lib/services/portal";
+import { resolveViewedStudent } from "@/lib/services/portal";
 import { listLiveClassesForStudent } from "@/lib/services/live-classes";
 import { formatDate } from "@/lib/utils";
 
@@ -15,7 +15,8 @@ function isSameDay(a: Date, b: Date) {
 
 export default async function StudentLiveClassesPage() {
   const user = await requireSchoolUser();
-  const student = await getStudentForUser(user.schoolId, user.id);
+  const resolved = await resolveViewedStudent(user.schoolId, user);
+  const student = resolved?.student ?? null;
   const liveClasses = student ? await listLiveClassesForStudent(user.schoolId, student.id) : [];
 
   const now = new Date();

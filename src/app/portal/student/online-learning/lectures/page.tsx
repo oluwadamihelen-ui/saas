@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSchoolUser } from "@/lib/auth/require";
-import { getStudentForUser } from "@/lib/services/portal";
+import { resolveViewedStudent } from "@/lib/services/portal";
 import { listLecturesForStudent } from "@/lib/services/lectures";
 import { ProgressBar } from "@/components/online-learning/progress-bar";
 
@@ -13,7 +13,8 @@ const STATUS_VARIANT = { NOT_STARTED: "neutral", IN_PROGRESS: "warning", COMPLET
 
 export default async function StudentLecturesPage() {
   const user = await requireSchoolUser();
-  const student = await getStudentForUser(user.schoolId, user.id);
+  const resolved = await resolveViewedStudent(user.schoolId, user);
+  const student = resolved?.student ?? null;
   const lectures = student ? await listLecturesForStudent(user.schoolId, student.id) : [];
 
   return (

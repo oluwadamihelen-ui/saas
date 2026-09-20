@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSchoolUser } from "@/lib/auth/require";
-import { getStudentForUser } from "@/lib/services/portal";
+import { resolveViewedStudent } from "@/lib/services/portal";
 import { listAssignmentsForStudent } from "@/lib/services/assignments";
 import { formatDate } from "@/lib/utils";
 
@@ -10,8 +10,9 @@ const SUBMISSION_BADGE = { PENDING: "neutral", SUBMITTED: "accent", GRADED: "suc
 
 export default async function StudentAssignmentsPage() {
   const user = await requireSchoolUser();
-  const student = await getStudentForUser(user.schoolId, user.id);
-  if (!student) notFound();
+  const resolved = await resolveViewedStudent(user.schoolId, user);
+  if (!resolved) notFound();
+  const { student } = resolved;
 
   const assignments = await listAssignmentsForStudent(user.schoolId, student.id);
 

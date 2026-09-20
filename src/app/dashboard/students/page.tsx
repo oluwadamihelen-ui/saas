@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
+import { ViewAsChildButton } from "@/components/portal/view-as-child-button";
 import { requireSchoolUser } from "@/lib/auth/require";
 import { getUserPermissions } from "@/lib/auth/permissions-resolve";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -29,6 +30,9 @@ export default async function StudentsPage({
   const user = await requireSchoolUser();
   const perms = await getUserPermissions(user.id);
   const canEnroll = perms.has(PERMISSIONS.STUDENTS_CREATE);
+  const canGeneratePasswords = perms.has(PERMISSIONS.STUDENTS_EDIT);
+  const canManageGuardians = perms.has(PERMISSIONS.GUARDIANS_MANAGE);
+  const canViewAsStudent = user.role === "SCHOOL_OWNER" || user.role === "PRINCIPAL";
   const params = await searchParams;
 
   const [{ students, total, page, pageCount }, classArms] = await Promise.all([
@@ -53,14 +57,24 @@ export default async function StudentsPage({
             <a href="/api/students/export">Export CSV</a>
           </Button>
           {canEnroll && (
-            <>
-              <Button asChild variant="secondary" size="sm">
-                <Link href="/dashboard/students/import">Import CSV</Link>
-              </Button>
-              <Button asChild>
-                <Link href="/dashboard/students/new">Enroll a student</Link>
-              </Button>
-            </>
+            <Button asChild variant="secondary" size="sm">
+              <Link href="/dashboard/students/import">Import CSV</Link>
+            </Button>
+          )}
+          {canManageGuardians && (
+            <Button asChild variant="secondary" size="sm">
+              <Link href="/dashboard/students/import-guardians">Add guardians</Link>
+            </Button>
+          )}
+          {canGeneratePasswords && (
+            <Button asChild variant="secondary" size="sm">
+              <Link href="/dashboard/students/generate-passwords">Generate passwords</Link>
+            </Button>
+          )}
+          {canEnroll && (
+            <Button asChild>
+              <Link href="/dashboard/students/new">Enroll a student</Link>
+            </Button>
           )}
         </div>
       </div>
@@ -115,6 +129,7 @@ export default async function StudentsPage({
                   <TableHead>Admission No.</TableHead>
                   <TableHead>Class</TableHead>
                   <TableHead>Status</TableHead>
+                  {canViewAsStudent && <TableHead>Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -132,6 +147,11 @@ export default async function StudentsPage({
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[s.status]}>{s.status}</Badge>
                     </TableCell>
+                    {canViewAsStudent && (
+                      <TableCell>
+                        <ViewAsChildButton studentId={s.id} />
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>

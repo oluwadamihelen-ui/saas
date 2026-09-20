@@ -3,13 +3,14 @@ import { CheckCircle2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSchoolUser } from "@/lib/auth/require";
-import { getStudentForUser } from "@/lib/services/portal";
+import { resolveViewedStudent } from "@/lib/services/portal";
 import { listLecturesForStudent } from "@/lib/services/lectures";
 import { formatDate } from "@/lib/utils";
 
 export default async function CompletedLessonsPage() {
   const user = await requireSchoolUser();
-  const student = await getStudentForUser(user.schoolId, user.id);
+  const resolved = await resolveViewedStudent(user.schoolId, user);
+  const student = resolved?.student ?? null;
   const lectures = student ? await listLecturesForStudent(user.schoolId, student.id) : [];
   const completed = lectures.filter((l) => l.progress[0]?.status === "COMPLETED");
 

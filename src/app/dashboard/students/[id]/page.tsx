@@ -20,6 +20,7 @@ import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import { WithdrawButton } from "./withdraw-button";
 import { DeleteStudentButton } from "./delete-student-button";
+import { ViewAsChildButton } from "@/components/portal/view-as-child-button";
 import { AddGuardianForm } from "./add-guardian-form";
 import { LinkExistingGuardianForm } from "./link-existing-guardian-form";
 import { RemoveGuardianButton } from "./remove-guardian-button";
@@ -106,6 +107,9 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
             <Button asChild variant="secondary" size="sm">
               <Link href={`/dashboard/students/${student.id}/edit`}>Edit</Link>
             </Button>
+          )}
+          {(user.role === "SCHOOL_OWNER" || user.role === "PRINCIPAL") && (
+            <ViewAsChildButton studentId={student.id} label="View portal" />
           )}
           {canDelete && student.status === "ACTIVE" && <WithdrawButton studentId={student.id} />}
           {canDelete && (

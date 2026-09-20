@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSchoolUser } from "@/lib/auth/require";
-import { getStudentForUser } from "@/lib/services/portal";
+import { resolveViewedStudent } from "@/lib/services/portal";
 import { computeReportCard } from "@/lib/services/results";
 import { computePreschoolReport, listAssessmentLevels } from "@/lib/services/preschool-results";
 import { getCurrentTerm } from "@/lib/services/academics";
@@ -15,8 +15,9 @@ type BadgeVariant = (typeof VARIANTS)[number];
 
 export default async function StudentResultsPage() {
   const user = await requireSchoolUser();
-  const student = await getStudentForUser(user.schoolId, user.id);
-  if (!student) notFound();
+  const resolved = await resolveViewedStudent(user.schoolId, user);
+  if (!resolved) notFound();
+  const { student } = resolved;
 
   const [currentTerm, school] = await Promise.all([
     getCurrentTerm(user.schoolId),
