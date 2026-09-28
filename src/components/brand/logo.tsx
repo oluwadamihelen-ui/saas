@@ -12,7 +12,7 @@ export function Logo({ height = 32, className }: { height?: number; className?: 
       >
         <Building2 style={{ height: iconSize, width: iconSize }} />
       </span>
-      StayOS
+      Otelum
     </span>
   );
 }

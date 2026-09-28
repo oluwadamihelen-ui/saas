@@ -1,5 +1,5 @@
 {
-  "name": "stayos",
+  "name": "otelum",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,7 +9,8 @@
     "lint": "eslint",
     "worker": "tsx --tsconfig tsconfig.json scripts/worker.ts",
     "db:seed": "tsx --tsconfig tsconfig.json prisma/seed/index.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

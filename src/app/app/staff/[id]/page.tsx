@@ -7,6 +7,7 @@ import { Select, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/db";
 import { updateStaffMember, togglePermissionOverride } from "../actions";
+import { ResetPasswordControl } from "../reset-password-control";
 import type { RoleKey } from "@/generated/prisma/enums";
 
 export const metadata: Metadata = { title: "Staff Member" };
@@ -75,6 +76,16 @@ export default async function StaffMemberPage({ params }: { params: Promise<{ id
               <Button type="submit">Save Changes</Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Reset password</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-3 text-xs text-muted">Sets a new password for this person immediately -- use this if they&apos;re locked out. Share the new password with them through a secure channel.</p>
+          <ResetPasswordControl memberId={member.id} />
         </CardContent>
       </Card>
 

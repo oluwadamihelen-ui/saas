@@ -1,6 +1,6 @@
-# StayOS — Architecture
+# Otelum — Architecture
 
-StayOS is a multi-property hotel management system (a hotel operations
+Otelum is a multi-property hotel management system (a hotel operations
 SaaS): reservations, front desk, rooms and housekeeping, guest folios and
 payments, maintenance, expenses, and reporting — for independent hotels,
 guest houses, and small hotel groups. Every hotel's operational data is
@@ -279,6 +279,21 @@ additive UI feature (a cross-hotel rollup dashboard), not a rewrite.
 ## 9. Security Architecture
 
 - **Passwords**: bcrypt, cost factor 12.
+- **Login rate limiting**: `lib/auth/rate-limit.ts` throttles credential
+  attempts per email (8 per 10 minutes) via Redis, checked before the
+  (expensive, timing-sensitive) bcrypt comparison runs. It fails **open** on
+  any Redis error or timeout (bounded to 500ms) rather than open — the
+  shared queue connection is configured with unlimited retries for BullMQ's
+  sake, so without that timeout a Redis outage would hang, not just slow,
+  every login. A Redis outage never blocks the front desk from signing in;
+  it only means the throttle itself is temporarily unavailable.
+- **Password recovery**: no email-based "forgot password" flow yet (no
+  email provider is wired up — see §11). In the meantime,
+  `lib/services/account.ts` provides the two flows that don't need one:
+  self-service change-password (`/app/profile`, `/super/profile`, requires
+  the current password) and an Owner/Manager-initiated reset for a locked-out
+  staff member (`staff.manage` permission, scoped to their own hotel, staff
+  detail page).
 - **Sessions**: JWT, HttpOnly cookies (Auth.js default); every `/app/*` and
   `/super/*` request is guarded by `proxy.ts` and then by a
   `requirePermission()`/`requireSuperAdmin()` call in the page/action
@@ -339,3 +354,10 @@ to add these without a rewrite, but they are not implemented:
 - OTA/channel manager integrations (Booking.com, Airbnb).
 - A cross-hotel rollup dashboard for group owners (the data model supports
   it — §8 — the UI does not exist yet).
+- Email-based "forgot password" self-recovery (see §9 — self-service change
+  and an admin-initiated reset cover the immediate need without requiring
+  an email provider; a real forgot-password flow is additive once one is
+  wired up).
+- CAPTCHA/bot mitigation on hotel self-registration (`/register`) — the
+  login rate limiter (§9) protects existing accounts from brute force, but
+  nothing yet throttles or challenges automated hotel signups.

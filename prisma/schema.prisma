@@ -7,8 +7,14 @@
 // which is what actually guarantees Hotel A can never read Hotel B's data.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider      = "prisma-client"
+  output        = "../src/generated/prisma"
+  // "native" covers local dev and any CI/build machine matching it; the
+  // others cover the most common production targets so a Docker image
+  // built on one base and run on another (or a build-then-deploy split
+  // across different OS images) doesn't ship a query engine binary that
+  // doesn't match the runtime host.
+  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x", "rhel-openssl-3.0.x"]
 }
 
 datasource db {

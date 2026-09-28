@@ -1,4 +1,4 @@
-# StayOS
+# Otelum
 
 A multi-property hotel management system: reservations, front desk
 (check-in/check-out, walk-ins), rooms and housekeeping, guest folios and
@@ -39,7 +39,7 @@ All seeded with password `Passw0rd!`:
 
 | Role | Email | Hotel |
 |---|---|---|
-| Super Admin | admin@stayos.example | — (platform-wide) |
+| Super Admin | admin@otelum.io | — (platform-wide) |
 | Hotel Owner | owner@sunrisehotel.example | Sunrise Hotel (Lagos, NGN) |
 | Hotel Manager | manager@sunrisehotel.example | Sunrise Hotel |
 | Receptionist | reception@sunrisehotel.example | Sunrise Hotel |
@@ -97,3 +97,25 @@ npm run db:seed            # (re)seed the database — three hotels, full staff
                             # rosters, rooms, guests, and a realistic mix of
                             # reservation lifecycles
 ```
+
+## Going to production
+
+- `npm run db:seed` is environment-aware: with `NODE_ENV=production` it only
+  seeds the permission catalog (required for RBAC to function) and,
+  optionally, one real Super Admin account from `SUPER_ADMIN_EMAIL` /
+  `SUPER_ADMIN_PASSWORD` — it never creates the demo hotels, demo staff, or
+  the dev Super Admin (`admin@otelum.io` / `Passw0rd!`). It's safe to run
+  against a live database.
+- The demo-accounts hint box on `/login` only renders when
+  `NODE_ENV !== "production"` (i.e. never in a production build), so real
+  users never see seeded credentials.
+- Run `npx prisma migrate deploy` (not `migrate dev`) against the production
+  database. Confirm your Postgres provider allows `CREATE EXTENSION
+  btree_gist` first — it backs the double-booking exclusion constraint and
+  the initial migration will fail without it.
+- Set a real `AUTH_SECRET` (`openssl rand -base64 32`), a real
+  `DATABASE_URL`/`REDIS_URL`, and `APP_URL`/`NEXTAUTH_URL` matching your
+  production domain. Never reuse the `.env.example` placeholder secret.
+- `npm run worker` needs to run as a persistent background process
+  (separate from the web server) for daily operational reminders and
+  auto-no-show flagging to fire.

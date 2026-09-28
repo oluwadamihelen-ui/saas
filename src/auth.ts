@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/security/logger";
 import { authConfig } from "@/lib/auth/config";
+import { isLoginRateLimited, resetLoginRateLimit } from "@/lib/auth/rate-limit";
 
 export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   ...authConfig,
@@ -20,6 +21,11 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         const password = String(credentials?.password ?? "");
         const requestedHotelId = credentials?.hotelId ? String(credentials.hotelId) : undefined;
         if (!email || !password) return null;
+
+        if (await isLoginRateLimited(email)) {
+          logger.warn("auth.login_rate_limited", { email });
+          return null;
+        }
 
         const user = await prisma.user.findUnique({
           where: { email },
@@ -40,6 +46,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         }
 
         if (user.isSuperAdmin) {
+          await resetLoginRateLimit(email);
           logger.info("auth.login_success", { userId: user.id, role: "SUPER_ADMIN" });
           return { id: user.id, email: user.email, name: user.name, role: "SUPER_ADMIN", isSuperAdmin: true, hotelId: null, hotelName: null, hotelCurrency: null };
         }
@@ -55,6 +62,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           activeMemberships.find((m) => m.hotelId === user.primaryHotelId) ??
           activeMemberships[0];
 
+        await resetLoginRateLimit(email);
         logger.info("auth.login_success", { userId: user.id, role: membership.role, hotelId: membership.hotelId });
 
         return {

@@ -40,7 +40,7 @@ export default function HomePage() {
               Run your hotel&apos;s front desk, rooms and revenue from one system
             </h1>
             <p className="max-w-xl text-base text-muted">
-              StayOS handles reservations, check-in/check-out, housekeeping, maintenance, payments and reporting —
+              Otelum handles reservations, check-in/check-out, housekeeping, maintenance, payments and reporting —
               with each property&apos;s data fully isolated from every other.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
@@ -73,7 +73,7 @@ export default function HomePage() {
 
       <footer className="border-t border-border bg-surface py-8">
         <div className="container-shell flex flex-col items-center justify-between gap-4 text-sm text-muted sm:flex-row">
-          <span>© {new Date().getFullYear()} StayOS. All rights reserved.</span>
+          <span>© {new Date().getFullYear()} Otelum.io. All rights reserved.</span>
           <Link href="/login" className="text-accent">
             Sign in
           </Link>

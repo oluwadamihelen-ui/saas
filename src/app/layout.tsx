@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "StayOS — Hotel Management System",
-    template: "%s | StayOS",
+    default: "Otelum — Hotel Management System",
+    template: "%s | Otelum",
   },
   description:
     "A modern, multi-property hotel management platform: reservations, front desk, housekeeping, payments and reporting in one place.",

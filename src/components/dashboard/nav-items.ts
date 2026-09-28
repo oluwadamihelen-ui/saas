@@ -14,6 +14,7 @@ import {
   UserCog,
   Settings,
   ScrollText,
+  User,
 } from "lucide-react";
 import { PERMISSIONS, type PermissionKey } from "@/lib/auth/permissions";
 
@@ -41,4 +42,5 @@ export const APP_NAV_ITEMS: NavItemDef[] = [
   { href: "/app/staff", label: "Staff", icon: UserCog, permission: PERMISSIONS.STAFF_MANAGE },
   { href: "/app/settings", label: "Settings", icon: Settings, permission: PERMISSIONS.SETTINGS_MANAGE },
   { href: "/app/audit-log", label: "Audit Log", icon: ScrollText, permission: PERMISSIONS.AUDIT_LOG_VIEW },
+  { href: "/app/profile", label: "My Profile", icon: User },
 ];

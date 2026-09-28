@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LayoutDashboard, Building2, Users, Settings } from "lucide-react";
+import { LayoutDashboard, Building2, Users, Settings, User } from "lucide-react";
 import { auth } from "@/auth";
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
 import { DashboardTopbar } from "@/components/dashboard/dashboard-topbar";
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: "/super/hotels", label: "Hotels", icon: <Building2 className={ICON_CLASS} /> },
   { href: "/super/users", label: "Platform Users", icon: <Users className={ICON_CLASS} /> },
   { href: "/super/settings", label: "Platform Settings", icon: <Settings className={ICON_CLASS} /> },
+  { href: "/super/profile", label: "My Profile", icon: <User className={ICON_CLASS} /> },
 ];
 
 export default async function SuperAdminLayout({ children }: { children: React.ReactNode }) {

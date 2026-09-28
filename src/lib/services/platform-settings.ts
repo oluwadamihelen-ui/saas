@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 
 const DEFAULTS: Record<string, string> = {
-  "platform.supportEmail": "support@stayos.example",
+  "platform.supportEmail": "support@otelum.io",
   "platform.trialDurationDays": "14",
   "platform.defaultCurrency": "USD",
 };

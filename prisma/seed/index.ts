@@ -52,11 +52,35 @@ async function seedPermissions() {
 }
 
 async function seedSuperAdmin() {
-  const email = "admin@stayos.example";
+  const email = "admin@otelum.io";
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) return existing;
   const passwordHash = await bcrypt.hash(PASSWORD, 12);
   return prisma.user.create({ data: { name: "Platform Super Admin", email, passwordHash, isSuperAdmin: true, status: "ACTIVE" } });
+}
+
+/**
+ * Production bootstrap: creates exactly one real Super Admin account from
+ * environment variables, with no demo hotels, guests, or hardcoded
+ * passwords -- the seed script's demo fixtures (seedSuperAdmin() and
+ * seedHotel() below) are dev/staging conveniences only and must never run
+ * against a live database with real hotel signups.
+ */
+async function bootstrapProductionSuperAdmin() {
+  const email = process.env.SUPER_ADMIN_EMAIL;
+  const password = process.env.SUPER_ADMIN_PASSWORD;
+  if (!email || !password) {
+    console.log("SUPER_ADMIN_EMAIL / SUPER_ADMIN_PASSWORD not set -- skipping Super Admin bootstrap (set both and re-run to create one).");
+    return;
+  }
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    console.log(`Super Admin ${email} already exists -- not modified.`);
+    return;
+  }
+  const passwordHash = await bcrypt.hash(password, 12);
+  await prisma.user.create({ data: { name: "Super Admin", email, passwordHash, isSuperAdmin: true, status: "ACTIVE" } });
+  console.log(`Created Super Admin ${email}.`);
 }
 
 async function addStaffMember(hotelId: string, name: string, email: string, role: RoleKey, department: StaffDepartment) {
@@ -299,7 +323,16 @@ async function assignMaintenanceRequestFirst(hotelId: string, assignedToId: stri
 }
 
 async function main() {
+  // Permissions/role grants are core application data (RBAC depends on
+  // them), not demo content -- always seed them, in every environment.
   await seedPermissions();
+
+  if (process.env.NODE_ENV === "production") {
+    console.log("NODE_ENV=production -- skipping demo Super Admin and demo hotels.");
+    await bootstrapProductionSuperAdmin();
+    return;
+  }
+
   await seedSuperAdmin();
 
   await seedHotel({

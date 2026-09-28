@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS, HOTEL_ROLE_KEYS } from "@/lib/auth/permissions";
 import { recordAuditLog } from "@/lib/security/audit";
+import { resetMemberPassword } from "@/lib/services/account";
 import type { RoleKey, StaffDepartment, EmploymentStatus } from "@/generated/prisma/enums";
 
 const staffSchema = z.object({
@@ -75,6 +76,27 @@ export async function updateStaffMember(memberId: string, formData: FormData) {
   await recordAuditLog({ hotelId: actor.hotelId, actorId: actor.id, action: "staff.updated", resourceType: "HotelMember", resourceId: memberId, newValue: parsed.data });
   revalidatePath("/app/staff");
   revalidatePath(`/app/staff/${memberId}`);
+}
+
+const resetPasswordSchema = z.object({ newPassword: z.string().min(8, "Password must be at least 8 characters").max(200) });
+
+export interface ResetPasswordState {
+  status: "idle" | "success" | "error";
+  message?: string;
+}
+
+export async function resetStaffPasswordAction(memberId: string, _prev: ResetPasswordState, formData: FormData): Promise<ResetPasswordState> {
+  const actor = await requirePermission(PERMISSIONS.STAFF_MANAGE);
+  const parsed = resetPasswordSchema.safeParse(Object.fromEntries(formData.entries()));
+  if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message };
+
+  try {
+    await resetMemberPassword(actor.hotelId, actor.id, memberId, parsed.data.newPassword);
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Unable to reset password." };
+  }
+
+  return { status: "success", message: "Password reset. Share the new password with them securely." };
 }
 
 export async function togglePermissionOverride(memberId: string, userId: string, permissionId: string, granted: boolean) {
