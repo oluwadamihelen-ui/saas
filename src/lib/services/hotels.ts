@@ -115,6 +115,82 @@ export async function getHotelById(hotelId: string) {
   return prisma.hotel.findUnique({ where: { id: hotelId } });
 }
 
+export interface CreateBranchInput {
+  hotelName: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  phone?: string;
+  hotelEmail?: string;
+  website?: string;
+  currency: string;
+  timezone: string;
+  checkInTime: string;
+  checkOutTime: string;
+  numberOfRooms: number;
+  description?: string;
+}
+
+/**
+ * Lets an existing Hotel Owner add another property under the same login,
+ * reusing their existing User row rather than the /register flow's
+ * new-account path. The new hotel's parentGroupId points at whichever hotel
+ * anchors the group -- the acting hotel's own parentGroupId if it's already
+ * a branch, otherwise the acting hotel itself -- so a chain of branches
+ * added one at a time still ends up flat under one group, never nested.
+ */
+export async function createHotelBranch(actingHotelId: string, actorId: string, input: CreateBranchInput) {
+  const actingHotel = await prisma.hotel.findUniqueOrThrow({ where: { id: actingHotelId } });
+  const groupId = actingHotel.parentGroupId ?? actingHotel.id;
+  const slug = await uniqueSlug(input.hotelName);
+
+  const hotel = await prisma.$transaction(async (tx) => {
+    const created = await tx.hotel.create({
+      data: {
+        name: input.hotelName,
+        slug,
+        address: input.address,
+        city: input.city,
+        state: input.state,
+        country: input.country,
+        phone: input.phone,
+        email: input.hotelEmail,
+        website: input.website || null,
+        currency: input.currency,
+        timezone: input.timezone,
+        checkInTime: input.checkInTime,
+        checkOutTime: input.checkOutTime,
+        numberOfRooms: input.numberOfRooms,
+        description: input.description,
+        status: "TRIAL",
+        trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        parentGroupId: groupId,
+      },
+    });
+
+    await tx.hotelMember.create({
+      data: { hotelId: created.id, userId: actorId, role: "HOTEL_OWNER", department: "MANAGEMENT", employmentStatus: "ACTIVE" },
+    });
+
+    return created;
+  });
+
+  await recordAuditLog({ hotelId: hotel.id, actorId, action: "hotel.branch_added", resourceType: "Hotel", resourceId: hotel.id, newValue: { name: hotel.name, groupId } });
+  logger.info("hotel.branch_added", { hotelId: hotel.id, actorId, groupId });
+  return hotel;
+}
+
+/** Every hotel in the same group as the given hotel, including itself -- used to list "your branches" regardless of which one you're currently viewing from. */
+export async function listGroupBranches(hotelId: string) {
+  const hotel = await prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } });
+  const groupId = hotel.parentGroupId ?? hotel.id;
+  return prisma.hotel.findMany({
+    where: { OR: [{ id: groupId }, { parentGroupId: groupId }] },
+    orderBy: { name: "asc" },
+  });
+}
+
 export interface HotelSettingsInput {
   name: string;
   address?: string;
