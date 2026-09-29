@@ -10,7 +10,7 @@ import { findOrCreateGuestByContact } from "@/lib/services/guests";
 import { confirmReservation, cancelReservation, markNoShow, extendStay, transferRoom } from "@/lib/services/reservations";
 import { checkInReservation, checkOutReservation } from "@/lib/services/front-desk";
 import { addCharge, removeCharge } from "@/lib/services/additional-charges";
-import { recordPayment } from "@/lib/services/payments";
+import { recordPayment, initiateOnlinePayment } from "@/lib/services/payments";
 import type { ChargeType, PaymentMethod, ReservationSource } from "@/generated/prisma/enums";
 
 export interface AvailabilitySearchResult {
@@ -165,4 +165,33 @@ export async function recordPaymentAction(reservationId: string, guestId: string
   const user = await requirePermission(PERMISSIONS.PAYMENTS_MANAGE);
   await recordPayment(user.hotelId, user.id, { guestId, reservationId, amount, method, notes: notes || undefined });
   revalidatePath(`/app/reservations/${reservationId}`);
+}
+
+export interface OnlinePaymentLinkResult {
+  status: "success" | "error";
+  checkoutUrl?: string;
+  message?: string;
+}
+
+// Next.js redacts a thrown Error's message from Server Action responses in
+// production builds (the client sees a generic "Minified React error"
+// instead) -- returning the outcome as data instead of throwing is what
+// actually gets our error messages (invalid keys, no provider configured,
+// gateway unreachable) in front of the staff member who needs to see them.
+export async function createOnlinePaymentLinkAction(reservationId: string, guestId: string, amount: number): Promise<OnlinePaymentLinkResult> {
+  const user = await requirePermission(PERMISSIONS.PAYMENTS_MANAGE);
+  try {
+    const redirectUrl = `${process.env.APP_URL ?? "http://localhost:3000"}/app/reservations/${reservationId}`;
+    const { checkoutUrl } = await initiateOnlinePayment(user.hotelId, user.id, {
+      guestId,
+      reservationId,
+      amount,
+      currency: user.hotelCurrency ?? "USD",
+      redirectUrl,
+    });
+    revalidatePath(`/app/reservations/${reservationId}`);
+    return { status: "success", checkoutUrl };
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Unable to create payment link." };
+  }
 }

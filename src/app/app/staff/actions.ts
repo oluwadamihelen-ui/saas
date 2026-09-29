@@ -8,6 +8,8 @@ import { requirePermission } from "@/lib/auth/require";
 import { PERMISSIONS, HOTEL_ROLE_KEYS } from "@/lib/auth/permissions";
 import { recordAuditLog } from "@/lib/security/audit";
 import { resetMemberPassword } from "@/lib/services/account";
+import { emailUser } from "@/lib/services/notifications";
+import { getHotelById } from "@/lib/services/hotels";
 import type { RoleKey, StaffDepartment, EmploymentStatus } from "@/generated/prisma/enums";
 
 const staffSchema = z.object({
@@ -49,6 +51,17 @@ export async function createStaffMember(_prev: StaffFormState, formData: FormDat
   });
 
   await recordAuditLog({ hotelId: actor.hotelId, actorId: actor.id, action: "staff.created", resourceType: "HotelMember", resourceId: member.id, newValue: { email: user.email, role: member.role } });
+
+  const hotel = await getHotelById(actor.hotelId);
+  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  await emailUser(
+    { email: user.email, name: user.name },
+    {
+      type: "staff.welcome",
+      title: `You've been added to ${hotel?.name ?? "your hotel"} on Otelum`,
+      message: `An account was created for you at ${hotel?.name ?? "your hotel"} with the role of ${parsed.data.role.replaceAll("_", " ").toLowerCase()}. Sign in at ${appUrl}/login using the credentials your manager shared with you.`,
+    }
+  );
 
   revalidatePath("/app/staff");
   return { status: "success" };

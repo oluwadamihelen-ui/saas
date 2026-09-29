@@ -10,6 +10,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { getReservation } from "@/lib/services/reservations";
 import { getGuestFolio } from "@/lib/services/folio";
 import { listRooms } from "@/lib/services/rooms";
+import { getPaymentSettingsView } from "@/lib/services/payment-settings";
 import { ReservationWorkflowPanel } from "../reservation-workflow-panel";
 import { FolioPanel } from "../folio-panel";
 
@@ -21,7 +22,12 @@ export default async function ReservationDetailPage({ params }: { params: Promis
   await requirePermission(PERMISSIONS.RESERVATIONS_VIEW);
 
   const { id } = await params;
-  const [reservation, folio, allRooms] = await Promise.all([getReservation(user.hotelId, id), getGuestFolio(user.hotelId, id), listRooms(user.hotelId)]);
+  const [reservation, folio, allRooms, paymentSettings] = await Promise.all([
+    getReservation(user.hotelId, id),
+    getGuestFolio(user.hotelId, id),
+    listRooms(user.hotelId),
+    getPaymentSettingsView(user.hotelId),
+  ]);
   if (!reservation || !folio) notFound();
 
   const currency = user.hotelCurrency ?? "USD";
@@ -136,6 +142,7 @@ export default async function ReservationDetailPage({ params }: { params: Promis
               canPay={canPay}
               canEditCharges={canManageReservations}
               charges={reservation.additionalCharges.map((c) => ({ id: c.id, description: c.description ?? c.type }))}
+              onlinePaymentsEnabled={Boolean(paymentSettings.activeProvider)}
             />
           )}
         </CardContent>

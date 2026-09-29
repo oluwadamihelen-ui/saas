@@ -107,21 +107,21 @@ model User {
   memberships         HotelMember[]
   permissionOverrides UserPermission[]
 
-  recordedPayments        Payment[]              @relation("PaymentReceivedBy")
-  recordedCharges         AdditionalCharge[]     @relation("ChargeRecordedBy")
-  recordedExpenses        Expense[]              @relation("ExpenseRecordedBy")
-  createdReservations     Reservation[]          @relation("ReservationCreatedBy")
-  checkedInReservations   Reservation[]          @relation("ReservationCheckedInBy")
-  checkedOutReservations  Reservation[]          @relation("ReservationCheckedOutBy")
-  cancelledReservations   Reservation[]          @relation("ReservationCancelledBy")
-  transfersInitiated      RoomTransfer[]         @relation("TransferBy")
-  housekeepingAssigned    HousekeepingTask[]     @relation("HousekeepingAssignedTo")
-  housekeepingInspected   HousekeepingTask[]     @relation("HousekeepingInspectedBy")
-  maintenanceReported     MaintenanceRequest[]   @relation("MaintenanceReportedBy")
-  maintenanceAssigned     MaintenanceRequest[]   @relation("MaintenanceAssignedTo")
-  roomStatusChanges       RoomStatusLog[]        @relation("RoomStatusChangedBy")
-  notifications           Notification[]
-  auditLogs               AuditLog[]
+  recordedPayments       Payment[]            @relation("PaymentReceivedBy")
+  recordedCharges        AdditionalCharge[]   @relation("ChargeRecordedBy")
+  recordedExpenses       Expense[]            @relation("ExpenseRecordedBy")
+  createdReservations    Reservation[]        @relation("ReservationCreatedBy")
+  checkedInReservations  Reservation[]        @relation("ReservationCheckedInBy")
+  checkedOutReservations Reservation[]        @relation("ReservationCheckedOutBy")
+  cancelledReservations  Reservation[]        @relation("ReservationCancelledBy")
+  transfersInitiated     RoomTransfer[]       @relation("TransferBy")
+  housekeepingAssigned   HousekeepingTask[]   @relation("HousekeepingAssignedTo")
+  housekeepingInspected  HousekeepingTask[]   @relation("HousekeepingInspectedBy")
+  maintenanceReported    MaintenanceRequest[] @relation("MaintenanceReportedBy")
+  maintenanceAssigned    MaintenanceRequest[] @relation("MaintenanceAssignedTo")
+  roomStatusChanges      RoomStatusLog[]      @relation("RoomStatusChangedBy")
+  notifications          Notification[]
+  auditLogs              AuditLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -144,9 +144,9 @@ enum SubscriptionPlan {
 
 // A hotel (property). The tenant boundary for every operational model below.
 model Hotel {
-  id          String @id @default(uuid())
+  id          String  @id @default(uuid())
   name        String
-  slug        String @unique
+  slug        String  @unique
   description String?
 
   address String?
@@ -164,9 +164,9 @@ model Hotel {
   checkOutTime  String @default("12:00")
   numberOfRooms Int    @default(0)
 
-  taxRatePercent   Decimal @default(0) @db.Decimal(5, 2)
-  invoicePrefix    String  @default("INV")
-  reservationPrefix String @default("RES")
+  taxRatePercent    Decimal @default(0) @db.Decimal(5, 2)
+  invoicePrefix     String  @default("INV")
+  reservationPrefix String  @default("RES")
 
   status           HotelStatus      @default(TRIAL)
   subscriptionPlan SubscriptionPlan @default(STARTER)
@@ -184,23 +184,24 @@ model Hotel {
   isGroupHQ     Boolean @default(false)
 
   members             HotelMember[]
-  primaryUsers         User[]                 @relation("PrimaryHotel")
-  permissionOverrides  UserPermission[]
-  roomTypes            RoomType[]
-  rooms                Room[]
-  guests               Guest[]
-  reservations          Reservation[]
-  payments              Payment[]
-  additionalCharges     AdditionalCharge[]
-  invoices              Invoice[]
-  expenses              Expense[]
-  housekeepingTasks     HousekeepingTask[]
-  maintenanceRequests   MaintenanceRequest[]
-  roomTransfers         RoomTransfer[]
-  roomStatusLogs        RoomStatusLog[]
-  notifications         Notification[]
-  auditLogs             AuditLog[]
-  settings              Setting[]
+  primaryUsers        User[]                @relation("PrimaryHotel")
+  permissionOverrides UserPermission[]
+  roomTypes           RoomType[]
+  rooms               Room[]
+  guests              Guest[]
+  reservations        Reservation[]
+  payments            Payment[]
+  additionalCharges   AdditionalCharge[]
+  invoices            Invoice[]
+  expenses            Expense[]
+  housekeepingTasks   HousekeepingTask[]
+  maintenanceRequests MaintenanceRequest[]
+  roomTransfers       RoomTransfer[]
+  roomStatusLogs      RoomStatusLog[]
+  notifications       Notification[]
+  auditLogs           AuditLog[]
+  settings            Setting[]
+  paymentSettings     HotelPaymentSettings?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -215,18 +216,18 @@ model Hotel {
 // hotel in question (never trusting a client-supplied hotelId alone) and
 // denies access if none exists.
 model HotelMember {
-  id               String             @id @default(uuid())
+  id               String           @id @default(uuid())
   hotelId          String
-  hotel            Hotel              @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  hotel            Hotel            @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   userId           String
-  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   role             RoleKey
   department       StaffDepartment?
-  employmentStatus EmploymentStatus   @default(ACTIVE)
-  dateJoined       DateTime           @default(now())
+  employmentStatus EmploymentStatus @default(ACTIVE)
+  dateJoined       DateTime         @default(now())
   shift            StaffShift?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   @@unique([hotelId, userId])
   @@index([userId])
@@ -260,22 +261,22 @@ enum StaffShift {
 // =========================================================================
 
 model RoomType {
-  id           String   @id @default(uuid())
+  id           String        @id @default(uuid())
   hotelId      String
-  hotel        Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  hotel        Hotel         @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   name         String
   description  String?
-  maxGuests    Int      @default(2)
-  numBeds      Int      @default(1)
+  maxGuests    Int           @default(2)
+  numBeds      Int           @default(1)
   bedType      String?
   amenities    String[]
-  basePrice    Decimal  @db.Decimal(12, 2)
+  basePrice    Decimal       @db.Decimal(12, 2)
   images       String[]
-  isActive     Boolean  @default(true)
+  isActive     Boolean       @default(true)
   rooms        Room[]
   reservations Reservation[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   @@index([hotelId])
 }
@@ -306,11 +307,11 @@ model Room {
   isActive    Boolean    @default(true)
 
   reservations        Reservation[]
-  housekeepingTasks    HousekeepingTask[]
-  maintenanceRequests  MaintenanceRequest[]
-  statusLogs           RoomStatusLog[]
-  transfersFrom         RoomTransfer[]        @relation("TransferFromRoom")
-  transfersTo           RoomTransfer[]        @relation("TransferToRoom")
+  housekeepingTasks   HousekeepingTask[]
+  maintenanceRequests MaintenanceRequest[]
+  statusLogs          RoomStatusLog[]
+  transfersFrom       RoomTransfer[]       @relation("TransferFromRoom")
+  transfersTo         RoomTransfer[]       @relation("TransferToRoom")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -323,17 +324,17 @@ model Room {
 // Append-only history of room status transitions, used for housekeeping /
 // front-desk audit trails ("who marked 204 dirty, and when").
 model RoomStatusLog {
-  id            String     @id @default(uuid())
-  hotelId       String
-  hotel         Hotel      @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  roomId        String
-  room          Room       @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  fromStatus    RoomStatus?
-  toStatus      RoomStatus
-  reason        String?
-  changedById   String?
-  changedBy     User?      @relation("RoomStatusChangedBy", fields: [changedById], references: [id])
-  createdAt     DateTime   @default(now())
+  id          String      @id @default(uuid())
+  hotelId     String
+  hotel       Hotel       @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  roomId      String
+  room        Room        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  fromStatus  RoomStatus?
+  toStatus    RoomStatus
+  reason      String?
+  changedById String?
+  changedBy   User?       @relation("RoomStatusChangedBy", fields: [changedById], references: [id])
+  createdAt   DateTime    @default(now())
 
   @@index([hotelId, roomId])
 }
@@ -343,22 +344,22 @@ model RoomStatusLog {
 // =========================================================================
 
 model Guest {
-  id                  String    @id @default(uuid())
-  hotelId             String
-  hotel               Hotel     @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  firstName           String
-  lastName             String
-  phone                String?
-  email                String?
-  address              String?
-  nationality          String?
-  idType               String?
-  idNumber             String?
-  dateOfBirth          DateTime?
-  emergencyContactName String?
+  id                    String    @id @default(uuid())
+  hotelId               String
+  hotel                 Hotel     @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  firstName             String
+  lastName              String
+  phone                 String?
+  email                 String?
+  address               String?
+  nationality           String?
+  idType                String?
+  idNumber              String?
+  dateOfBirth           DateTime?
+  emergencyContactName  String?
   emergencyContactPhone String?
-  preferences          String?
-  notes                String?
+  preferences           String?
+  notes                 String?
 
   reservations      Reservation[]
   payments          Payment[]
@@ -395,17 +396,17 @@ enum ReservationSource {
 }
 
 model Reservation {
-  id          String   @id @default(uuid())
-  hotelId     String
-  hotel       Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  reference   String   @unique
+  id        String @id @default(uuid())
+  hotelId   String
+  hotel     Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  reference String @unique
 
-  guestId     String
-  guest       Guest    @relation(fields: [guestId], references: [id])
-  roomId      String
-  room        Room     @relation(fields: [roomId], references: [id])
-  roomTypeId  String
-  roomType    RoomType @relation(fields: [roomTypeId], references: [id])
+  guestId    String
+  guest      Guest    @relation(fields: [guestId], references: [id])
+  roomId     String
+  room       Room     @relation(fields: [roomId], references: [id])
+  roomTypeId String
+  roomType   RoomType @relation(fields: [roomTypeId], references: [id])
 
   checkInDate  DateTime // date only, stored at midnight UTC
   checkOutDate DateTime
@@ -413,11 +414,11 @@ model Reservation {
   adults   Int @default(1)
   children Int @default(0)
 
-  roomRate Decimal @db.Decimal(12, 2) // per-night rate locked in at booking time
-  nights   Int
-  subtotal Decimal @db.Decimal(12, 2)
-  discount Decimal @default(0) @db.Decimal(12, 2)
-  tax      Decimal @default(0) @db.Decimal(12, 2)
+  roomRate    Decimal @db.Decimal(12, 2) // per-night rate locked in at booking time
+  nights      Int
+  subtotal    Decimal @db.Decimal(12, 2)
+  discount    Decimal @default(0) @db.Decimal(12, 2)
+  tax         Decimal @default(0) @db.Decimal(12, 2)
   // totalAmount = subtotal - discount + tax + sum(AdditionalCharge.amount).
   // Recomputed by the service layer whenever a charge is added/removed or
   // the stay is extended/transferred -- never hand-edited.
@@ -441,9 +442,9 @@ model Reservation {
   checkedOutById String?
   checkedOutBy   User?     @relation("ReservationCheckedOutBy", fields: [checkedOutById], references: [id])
 
-  cancelledAt     DateTime?
-  cancelledById   String?
-  cancelledBy     User?     @relation("ReservationCancelledBy", fields: [cancelledById], references: [id])
+  cancelledAt        DateTime?
+  cancelledById      String?
+  cancelledBy        User?     @relation("ReservationCancelledBy", fields: [cancelledById], references: [id])
   cancellationReason String?
 
   payments          Payment[]
@@ -465,19 +466,19 @@ model Reservation {
 // mid-stay. The reservation's roomId is updated to the new room, but this
 // row preserves the original assignment permanently.
 model RoomTransfer {
-  id             String      @id @default(uuid())
-  hotelId        String
-  hotel          Hotel       @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  reservationId  String
-  reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
-  fromRoomId     String
-  fromRoom       Room        @relation("TransferFromRoom", fields: [fromRoomId], references: [id])
-  toRoomId       String
-  toRoom         Room        @relation("TransferToRoom", fields: [toRoomId], references: [id])
-  reason         String?
+  id              String      @id @default(uuid())
+  hotelId         String
+  hotel           Hotel       @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  reservationId   String
+  reservation     Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  fromRoomId      String
+  fromRoom        Room        @relation("TransferFromRoom", fields: [fromRoomId], references: [id])
+  toRoomId        String
+  toRoom          Room        @relation("TransferToRoom", fields: [toRoomId], references: [id])
+  reason          String?
   transferredById String?
-  transferredBy  User?       @relation("TransferBy", fields: [transferredById], references: [id])
-  transferredAt  DateTime    @default(now())
+  transferredBy   User?       @relation("TransferBy", fields: [transferredById], references: [id])
+  transferredAt   DateTime    @default(now())
 
   @@index([hotelId])
   @@index([reservationId])
@@ -504,27 +505,64 @@ enum PaymentStatus {
   REFUNDED
 }
 
+// The gateway a given ONLINE_PAYMENT/PAYMENT_LINK Payment was initiated
+// through. Null for manually-recorded payments (cash, bank transfer, POS,
+// or "other") -- those never touch a gateway at all.
+enum PaymentProviderType {
+  PAYSTACK
+  FLUTTERWAVE
+  KORAPAY
+}
+
 model Payment {
-  id            String        @id @default(uuid())
+  id            String               @id @default(uuid())
   hotelId       String
-  hotel         Hotel         @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  reference     String        @unique
+  hotel         Hotel                @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  reference     String               @unique
   guestId       String
-  guest         Guest         @relation(fields: [guestId], references: [id])
+  guest         Guest                @relation(fields: [guestId], references: [id])
   reservationId String?
-  reservation   Reservation?  @relation(fields: [reservationId], references: [id])
-  amount        Decimal       @db.Decimal(12, 2)
+  reservation   Reservation?         @relation(fields: [reservationId], references: [id])
+  amount        Decimal              @db.Decimal(12, 2)
   method        PaymentMethod
-  status        PaymentStatus @default(COMPLETED)
-  paymentDate   DateTime      @default(now())
+  status        PaymentStatus        @default(COMPLETED)
+  provider      PaymentProviderType?
+  paymentDate   DateTime             @default(now())
   receivedById  String?
-  receivedBy    User?         @relation("PaymentReceivedBy", fields: [receivedById], references: [id])
+  receivedBy    User?                @relation("PaymentReceivedBy", fields: [receivedById], references: [id])
   notes         String?
-  createdAt     DateTime      @default(now())
+  createdAt     DateTime             @default(now())
 
   @@index([hotelId])
   @@index([reservationId])
   @@index([guestId])
+}
+
+// Per-hotel online payment gateway configuration. A hotel may have keys on
+// file for more than one provider (so switching back and forth doesn't lose
+// them) but only `activeProvider` is actually used to initialize charges.
+// Secret keys are encrypted at rest (see lib/security/encryption.ts) --
+// public keys are safe to store and display in plain text, they're meant to
+// be embedded in client-side checkout code by design.
+model HotelPaymentSettings {
+  id      String @id @default(uuid())
+  hotelId String @unique
+  hotel   Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  activeProvider PaymentProviderType?
+
+  paystackPublicKey    String?
+  paystackSecretKeyEnc String?
+
+  flutterwavePublicKey      String?
+  flutterwaveSecretKeyEnc   String?
+  flutterwaveWebhookHashEnc String?
+
+  korapayPublicKey    String?
+  korapaySecretKeyEnc String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum ChargeType {
@@ -649,23 +687,23 @@ enum HousekeepingTaskStatus {
 }
 
 model HousekeepingTask {
-  id             String                  @id @default(uuid())
-  hotelId        String
-  hotel          Hotel                   @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  roomId         String
-  room           Room                    @relation(fields: [roomId], references: [id])
-  taskType       HousekeepingTaskType    @default(CLEAN_ROOM)
-  status         HousekeepingTaskStatus  @default(PENDING)
-  assignedToId   String?
-  assignedTo     User?                   @relation("HousekeepingAssignedTo", fields: [assignedToId], references: [id])
-  notes          String?
-  startedAt      DateTime?
-  completedAt    DateTime?
-  inspectedAt    DateTime?
-  inspectedById  String?
-  inspectedBy    User?                   @relation("HousekeepingInspectedBy", fields: [inspectedById], references: [id])
-  createdAt      DateTime                @default(now())
-  updatedAt      DateTime                @updatedAt
+  id            String                 @id @default(uuid())
+  hotelId       String
+  hotel         Hotel                  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  roomId        String
+  room          Room                   @relation(fields: [roomId], references: [id])
+  taskType      HousekeepingTaskType   @default(CLEAN_ROOM)
+  status        HousekeepingTaskStatus @default(PENDING)
+  assignedToId  String?
+  assignedTo    User?                  @relation("HousekeepingAssignedTo", fields: [assignedToId], references: [id])
+  notes         String?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  inspectedAt   DateTime?
+  inspectedById String?
+  inspectedBy   User?                  @relation("HousekeepingInspectedBy", fields: [inspectedById], references: [id])
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
 
   @@index([hotelId, status])
   @@index([roomId])
@@ -697,23 +735,23 @@ enum MaintenancePriority {
 }
 
 model MaintenanceRequest {
-  id           String                @id @default(uuid())
+  id           String               @id @default(uuid())
   hotelId      String
-  hotel        Hotel                 @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  hotel        Hotel                @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   roomId       String?
-  room         Room?                 @relation(fields: [roomId], references: [id])
+  room         Room?                @relation(fields: [roomId], references: [id])
   issueType    MaintenanceIssueType
   description  String
-  priority     MaintenancePriority   @default(MEDIUM)
-  status       MaintenanceStatus     @default(REPORTED)
+  priority     MaintenancePriority  @default(MEDIUM)
+  status       MaintenanceStatus    @default(REPORTED)
   reportedById String?
-  reportedBy   User?                 @relation("MaintenanceReportedBy", fields: [reportedById], references: [id])
+  reportedBy   User?                @relation("MaintenanceReportedBy", fields: [reportedById], references: [id])
   assignedToId String?
-  assignedTo   User?                 @relation("MaintenanceAssignedTo", fields: [assignedToId], references: [id])
+  assignedTo   User?                @relation("MaintenanceAssignedTo", fields: [assignedToId], references: [id])
   resolvedAt   DateTime?
   notes        String?
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @updatedAt
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
 
   @@index([hotelId, status])
   @@index([roomId])

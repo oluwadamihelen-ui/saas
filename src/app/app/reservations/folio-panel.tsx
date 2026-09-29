@@ -2,10 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2 } from "lucide-react";
+import { Trash2, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
-import { addChargeAction, removeChargeAction, recordPaymentAction } from "./actions";
+import { addChargeAction, removeChargeAction, recordPaymentAction, createOnlinePaymentLinkAction } from "./actions";
 import type { ChargeType, PaymentMethod } from "@/generated/prisma/enums";
 
 const CHARGE_TYPES: ChargeType[] = ["LAUNDRY", "ROOM_SERVICE", "RESTAURANT", "BAR", "MINI_BAR", "EXTRA_BED", "AIRPORT_PICKUP", "LATE_CHECKOUT", "OTHER"];
@@ -18,6 +18,7 @@ export function FolioPanel({
   canPay,
   charges,
   canEditCharges,
+  onlinePaymentsEnabled,
 }: {
   reservationId: string;
   guestId: string;
@@ -25,6 +26,7 @@ export function FolioPanel({
   canPay: boolean;
   canEditCharges: boolean;
   charges: { id: string; description: string }[];
+  onlinePaymentsEnabled: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -37,6 +39,11 @@ export function FolioPanel({
   const [payAmount, setPayAmount] = useState("");
   const [payMethod, setPayMethod] = useState<PaymentMethod>("CASH");
   const [payNotes, setPayNotes] = useState("");
+
+  const [linkAmount, setLinkAmount] = useState("");
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [isLinkPending, startLinkTransition] = useTransition();
 
   function run(fn: () => Promise<void>, onSuccess?: () => void) {
     setError(null);
@@ -138,6 +145,60 @@ export function FolioPanel({
               Record Payment
             </Button>
           </div>
+        </div>
+      )}
+
+      {canPay && onlinePaymentsEnabled && (
+        <div className="space-y-2 rounded-md border border-border p-3">
+          <p className="text-sm font-medium text-foreground">Send an online payment link</p>
+          <p className="text-xs text-muted">
+            Creates a hosted checkout link with your hotel&apos;s payment provider. Share it with the guest; the
+            balance updates automatically once they pay.
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1.5">
+              <Label>Amount</Label>
+              <Input type="number" min={0} step="0.01" value={linkAmount} onChange={(e) => setLinkAmount(e.target.value)} className="w-32" />
+            </div>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={isLinkPending || !linkAmount}
+              onClick={() => {
+                setError(null);
+                setCheckoutUrl(null);
+                startLinkTransition(async () => {
+                  const result = await createOnlinePaymentLinkAction(reservationId, guestId, Number(linkAmount));
+                  if (result.status === "success" && result.checkoutUrl) {
+                    setCheckoutUrl(result.checkoutUrl);
+                    setLinkAmount("");
+                  } else {
+                    setError(result.message ?? "Unable to create payment link.");
+                  }
+                });
+              }}
+            >
+              {isLinkPending ? "Creating link..." : "Create payment link"}
+            </Button>
+          </div>
+          {checkoutUrl && (
+            <div className="flex items-center gap-2 rounded-md bg-muted-surface p-2">
+              <Input readOnly value={checkoutUrl} className="font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  navigator.clipboard.writeText(checkoutUrl).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  });
+                }}
+              >
+                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

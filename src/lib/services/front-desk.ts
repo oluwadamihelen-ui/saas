@@ -39,6 +39,11 @@ export async function checkInReservation(hotelId: string, actorId: string, reser
   });
 
   await recordAuditLog({ hotelId, actorId, action: "reservation.checked_in", resourceType: "Reservation", resourceId: reservationId });
+  await notifyHotelStaff(hotelId, {
+    type: "reservation.checked_in",
+    title: "Guest checked in",
+    message: `${reservation.guest.firstName} ${reservation.guest.lastName} checked into Room ${reservation.room.roomNumber} (${reservation.reference}).`,
+  });
   return updated;
 }
 
@@ -75,6 +80,7 @@ export async function checkOutReservation(hotelId: string, actorId: string, rese
   });
 
   await recordAuditLog({ hotelId, actorId, action: "reservation.checked_out", resourceType: "Reservation", resourceId: reservationId, newValue: { outstandingAllowed: Boolean(input.allowOutstandingBalance) } });
+  await notifyHotelStaff(hotelId, { type: "reservation.checked_out", title: "Guest checked out", message: `Reservation ${reservation.reference} has been checked out and invoiced.` });
   await notifyHotelStaff(hotelId, { type: "housekeeping.needed", title: "Room needs cleaning", message: `Room is ready for housekeeping after checkout (${reservation.reference}).` }, ["HOTEL_MANAGER", "HOUSEKEEPING"]);
 
   return result;

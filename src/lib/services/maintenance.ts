@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import type { MaintenanceIssueType, MaintenancePriority, MaintenanceStatus } from "@/generated/prisma/enums";
 import { recordAuditLog } from "@/lib/security/audit";
 import { setRoomStatus } from "./rooms";
+import { notifyHotelStaff } from "./notifications";
 
 export interface CreateMaintenanceRequestInput {
   roomId?: string;
@@ -36,6 +37,11 @@ export async function createMaintenanceRequest(hotelId: string, actorId: string 
   });
 
   await recordAuditLog({ hotelId, actorId, action: "maintenance.reported", resourceType: "MaintenanceRequest", resourceId: request.id, newValue: { issueType: input.issueType, priority: input.priority } });
+  await notifyHotelStaff(
+    hotelId,
+    { type: "maintenance.reported", title: "Maintenance issue reported", message: `${input.issueType.replaceAll("_", " ")} reported (${input.priority.toLowerCase()} priority): ${input.description}` },
+    ["HOTEL_OWNER", "HOTEL_MANAGER", "MAINTENANCE"]
+  );
   return request;
 }
 

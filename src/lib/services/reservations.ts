@@ -229,6 +229,7 @@ export async function cancelReservation(hotelId: string, actorId: string, id: st
   });
 
   await recordAuditLog({ hotelId, actorId, action: "reservation.cancelled", resourceType: "Reservation", resourceId: id, newValue: { reason } });
+  await notifyHotelStaff(hotelId, { type: "reservation.cancelled", title: "Reservation cancelled", message: `Reservation ${reservation.reference} was cancelled: ${reason}` });
   return updated;
 }
 
