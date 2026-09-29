@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Building2, Target, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Logo } from "@/components/brand/logo";
+import { SiteHeader } from "@/components/marketing/site-header";
 import { SiteFooter } from "@/components/marketing/site-footer";
 
 export const metadata = { title: "About — Otelum" };
@@ -9,21 +9,7 @@ export const metadata = { title: "About — Otelum" };
 export default function AboutPage() {
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="border-b border-border bg-surface">
-        <div className="container-shell flex h-16 items-center justify-between">
-          <Link href="/">
-            <Logo height={30} />
-          </Link>
-          <nav className="flex items-center gap-3">
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/login">Sign in</Link>
-            </Button>
-            <Button asChild size="sm">
-              <Link href="/register">Register your hotel</Link>
-            </Button>
-          </nav>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="flex-1">
         <section className="border-b border-border bg-surface">

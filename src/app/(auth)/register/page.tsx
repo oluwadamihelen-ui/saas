@@ -1,11 +1,16 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { RegisterForm } from "./register-form";
 
 export const metadata: Metadata = { title: "Register your hotel" };
 
-export default function RegisterPage() {
+export default async function RegisterPage() {
+  const session = await auth();
+  if (session?.user) redirect(session.user.isSuperAdmin ? "/super" : "/app");
+
   return (
     <Card>
       <CardHeader>

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import type { Metadata } from "next";
+import { auth } from "@/auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { LoginForm } from "./login-form";
 
@@ -11,7 +13,10 @@ export const metadata: Metadata = { title: "Sign in" };
 // at real (or seeded) account passwords to the public.
 const SHOW_DEMO_ACCOUNTS = process.env.NODE_ENV !== "production";
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const session = await auth();
+  if (session?.user) redirect(session.user.isSuperAdmin ? "/super" : "/app");
+
   return (
     <div className="mx-auto w-full max-w-sm">
       <Card>

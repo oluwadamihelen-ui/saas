@@ -10,9 +10,10 @@ import {
   UserCog,
   Wrench,
 } from "lucide-react";
+import { auth } from "@/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Logo } from "@/components/brand/logo";
+import { SiteHeader } from "@/components/marketing/site-header";
 import { SiteFooter } from "@/components/marketing/site-footer";
 
 const FEATURES = [
@@ -78,12 +79,15 @@ const FAQS = [
   },
 ];
 
-export default function HomePage() {
+export default async function HomePage() {
+  const session = await auth();
+  const dashboardHref = session?.user ? (session.user.isSuperAdmin ? "/super" : "/app") : null;
+
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur">
-        <div className="container-shell flex h-16 items-center justify-between">
-          <Logo height={30} />
+      <SiteHeader
+        sticky
+        extraNav={
           <nav className="hidden items-center gap-6 md:flex">
             <a href="#features" className="text-sm text-muted hover:text-foreground">
               Features
@@ -98,16 +102,8 @@ export default function HomePage() {
               About
             </Link>
           </nav>
-          <div className="flex items-center gap-3">
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/login">Sign in</Link>
-            </Button>
-            <Button asChild size="sm">
-              <Link href="/register">Register your hotel</Link>
-            </Button>
-          </div>
-        </div>
-      </header>
+        }
+      />
 
       <main className="flex-1">
         {/* Hero */}
@@ -124,12 +120,20 @@ export default function HomePage() {
               with each property&apos;s data fully isolated from every other.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
-              <Button asChild size="lg">
-                <Link href="/register">Get started free</Link>
-              </Button>
-              <Button asChild variant="secondary" size="lg">
-                <Link href="/login">Sign in to your hotel</Link>
-              </Button>
+              {dashboardHref ? (
+                <Button asChild size="lg">
+                  <Link href={dashboardHref}>Go to your dashboard</Link>
+                </Button>
+              ) : (
+                <>
+                  <Button asChild size="lg">
+                    <Link href="/register">Get started free</Link>
+                  </Button>
+                  <Button asChild variant="secondary" size="lg">
+                    <Link href="/login">Sign in to your hotel</Link>
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </section>
