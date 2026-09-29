@@ -27,7 +27,7 @@ export default async function SuperAdminLayout({ children }: { children: React.R
         <SidebarNav items={NAV_ITEMS} basePath="/super" />
       </aside>
       <div className="flex flex-1 flex-col">
-        <DashboardTopbar name={session?.user?.name ?? "Super Admin"} email={session?.user?.email ?? ""} />
+        <DashboardTopbar name={session?.user?.name ?? "Super Admin"} email={session?.user?.email ?? ""} navItems={NAV_ITEMS} />
         <main className="flex-1 overflow-x-hidden p-6">{children}</main>
       </div>
     </div>

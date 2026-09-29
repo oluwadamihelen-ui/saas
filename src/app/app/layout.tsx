@@ -34,6 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           role={user.role}
           unreadCount={unreadCount}
           hotelOptions={hotels.map((h) => ({ hotelId: h.hotelId, hotelName: h.hotel.name }))}
+          navItems={navItems}
         />
         <main className="flex-1 overflow-x-hidden p-6">{children}</main>
       </div>

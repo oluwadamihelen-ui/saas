@@ -8,6 +8,8 @@ import { Bell, ChevronDown, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ROLE_LABELS } from "@/lib/auth/permissions";
 import { resolveHotelSwitch } from "@/lib/auth/hotel";
+import { MobileNav } from "@/components/dashboard/mobile-nav";
+import type { NavItem } from "@/components/dashboard/sidebar-nav";
 
 export interface HotelOption {
   hotelId: string;
@@ -21,6 +23,7 @@ export function HotelTopbar({
   role,
   unreadCount,
   hotelOptions,
+  navItems,
 }: {
   name: string;
   email: string;
@@ -28,6 +31,7 @@ export function HotelTopbar({
   role: string;
   unreadCount: number;
   hotelOptions: HotelOption[];
+  navItems: NavItem[];
 }) {
   const { update } = useSession();
   const router = useRouter();
@@ -49,17 +53,18 @@ export function HotelTopbar({
   }
 
   return (
-    <header className="flex h-16 items-center justify-between border-b border-border bg-surface px-6">
-      <div className="flex items-center gap-2">
+    <header className="flex h-16 items-center justify-between gap-2 border-b border-border bg-surface px-3 sm:px-6">
+      <div className="flex min-w-0 items-center gap-1 sm:gap-2">
+        <MobileNav items={navItems} basePath="/app" />
         {hotelOptions.length > 1 ? (
-          <div className="relative">
+          <div className="relative min-w-0">
             <button
               type="button"
               onClick={() => setSwitcherOpen((v) => !v)}
-              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-semibold text-foreground hover:bg-muted-surface"
+              className="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-sm font-semibold text-foreground hover:bg-muted-surface"
             >
-              {hotelName ?? "Select hotel"}
-              <ChevronDown className="h-4 w-4 text-muted" />
+              <span className="truncate">{hotelName ?? "Select hotel"}</span>
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted" />
             </button>
             {switcherOpen && (
               <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-md border border-border bg-surface py-1 shadow-lg">
@@ -78,10 +83,10 @@ export function HotelTopbar({
             )}
           </div>
         ) : (
-          <span className="text-sm font-semibold text-foreground">{hotelName}</span>
+          <span className="truncate text-sm font-semibold text-foreground">{hotelName}</span>
         )}
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-4">
         <Link href="/app/notifications" className="relative rounded-md p-2 text-muted hover:bg-muted-surface hover:text-foreground">
           <Bell className="h-4 w-4" />
           {unreadCount > 0 && (
@@ -90,9 +95,9 @@ export function HotelTopbar({
             </span>
           )}
         </Link>
-        <div className="text-right">
-          <p className="text-sm font-medium text-foreground">{name}</p>
-          <p className="text-xs text-muted">
+        <div className="hidden text-right sm:block">
+          <p className="max-w-40 truncate sm:max-w-56 lg:max-w-72 text-sm font-medium text-foreground">{name}</p>
+          <p className="max-w-40 truncate sm:max-w-56 lg:max-w-72 text-xs text-muted">
             {ROLE_LABELS[role as keyof typeof ROLE_LABELS] ?? role} · {email}
           </p>
         </div>
