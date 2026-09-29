@@ -5,8 +5,8 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(amount: number | string, currency = "USD"): string {
-  const value = typeof amount === "string" ? Number(amount) : amount;
+export function formatCurrency(amount: number | string | { toString(): string }, currency = "USD"): string {
+  const value = typeof amount === "number" ? amount : Number(amount.toString());
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(value);
 }
 

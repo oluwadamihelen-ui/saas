@@ -4,8 +4,9 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/security/logger";
 import { authConfig } from "@/lib/auth/config";
+import { isLoginRateLimited, resetLoginRateLimit } from "@/lib/auth/rate-limit";
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   ...authConfig,
   providers: [
     Credentials({
@@ -13,15 +14,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        hotelId: { label: "Hotel", type: "text" },
       },
       authorize: async (credentials) => {
         const email = String(credentials?.email ?? "").toLowerCase().trim();
         const password = String(credentials?.password ?? "");
+        const requestedHotelId = credentials?.hotelId ? String(credentials.hotelId) : undefined;
         if (!email || !password) return null;
+
+        if (await isLoginRateLimited(email)) {
+          logger.warn("auth.login_rate_limited", { email });
+          return null;
+        }
 
         const user = await prisma.user.findUnique({
           where: { email },
-          include: { role: true },
+          include: {
+            memberships: { include: { hotel: true }, orderBy: { createdAt: "asc" } },
+          },
         });
 
         if (!user || !user.passwordHash || user.status !== "ACTIVE") {
@@ -35,13 +45,35 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        logger.info("auth.login_success", { userId: user.id, role: user.role.key });
+        if (user.isSuperAdmin) {
+          await resetLoginRateLimit(email);
+          logger.info("auth.login_success", { userId: user.id, role: "SUPER_ADMIN" });
+          return { id: user.id, email: user.email, name: user.name, role: "SUPER_ADMIN", isSuperAdmin: true, hotelId: null, hotelName: null, hotelCurrency: null };
+        }
+
+        const activeMemberships = user.memberships.filter((m) => m.employmentStatus === "ACTIVE" && (m.hotel.status === "ACTIVE" || m.hotel.status === "TRIAL"));
+        if (activeMemberships.length === 0) {
+          logger.warn("auth.login_failed", { email, reason: "no_active_hotel_membership" });
+          return null;
+        }
+
+        const membership =
+          (requestedHotelId ? activeMemberships.find((m) => m.hotelId === requestedHotelId) : undefined) ??
+          activeMemberships.find((m) => m.hotelId === user.primaryHotelId) ??
+          activeMemberships[0];
+
+        await resetLoginRateLimit(email);
+        logger.info("auth.login_success", { userId: user.id, role: membership.role, hotelId: membership.hotelId });
 
         return {
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role.key,
+          role: membership.role,
+          isSuperAdmin: false,
+          hotelId: membership.hotelId,
+          hotelName: membership.hotel.name,
+          hotelCurrency: membership.hotel.currency,
         };
       },
     }),

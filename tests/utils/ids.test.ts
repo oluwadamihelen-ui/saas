@@ -1,25 +1,40 @@
-import { describe, expect, it } from "vitest";
-import { generateInvoiceNumber, generateLicenseKey, generateOrderNumber, generateTicketNumber } from "@/lib/utils/ids";
+import { describe, it, expect } from "vitest";
+import {
+  generateReservationReference,
+  generateInvoiceNumber,
+  generatePaymentReference,
+  generateExpenseReference,
+  slugify,
+} from "@/lib/utils/ids";
 
 describe("id generators", () => {
-  it("generates order numbers with the expected prefix and shape", () => {
-    const orderNumber = generateOrderNumber();
-    expect(orderNumber).toMatch(/^ORD-\d{4}-\d{6}$/);
+  it("generates a reservation reference matching RES-YYYY-NNNNNN", () => {
+    const ref = generateReservationReference();
+    expect(ref).toMatch(/^RES-\d{4}-\d{6}$/);
   });
 
-  it("generates invoice numbers scoped to the current year", () => {
-    const invoiceNumber = generateInvoiceNumber();
-    expect(invoiceNumber).toMatch(new RegExp(`^INV-${new Date().getFullYear()}-\\d{6}$`));
+  it("generates an invoice number matching INV-YYYY-NNNNNN", () => {
+    const ref = generateInvoiceNumber();
+    expect(ref).toMatch(/^INV-\d{4}-\d{6}$/);
   });
 
-  it("generates ticket numbers", () => {
-    expect(generateTicketNumber()).toMatch(/^TCK-\d{7}$/);
+  it("generates a payment reference matching PAY-NNNNNNNNN", () => {
+    const ref = generatePaymentReference();
+    expect(ref).toMatch(/^PAY-\d{9}$/);
   });
 
-  it("generates unique, well-formed license keys", () => {
-    const a = generateLicenseKey();
-    const b = generateLicenseKey();
-    expect(a).toMatch(/^[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}$/);
-    expect(a).not.toEqual(b);
+  it("generates an expense reference matching EXP-NNNNNNNNN", () => {
+    const ref = generateExpenseReference();
+    expect(ref).toMatch(/^EXP-\d{9}$/);
+  });
+
+  it("generates references that differ across calls", () => {
+    const refs = new Set(Array.from({ length: 20 }, () => generateReservationReference()));
+    expect(refs.size).toBeGreaterThan(1);
+  });
+
+  it("slugifies hotel names", () => {
+    expect(slugify("Sunrise Hotel & Suites")).toBe("sunrise-hotel-suites");
+    expect(slugify("  Ocean View  ")).toBe("ocean-view");
   });
 });

@@ -1,57 +1,43 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { auth } from "@/auth";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/logo";
-import { MobileNav } from "./mobile-nav";
 
-const NAV_LINKS = [
-  { href: "/apps", label: "Apps" },
-  { href: "/categories", label: "Categories" },
-  { href: "/services", label: "Services" },
-  { href: "/bundles", label: "Bundles" },
-  { href: "/domains", label: "Domains" },
-  { href: "/hosting", label: "Hosting" },
-  { href: "/pricing", label: "Pricing" },
-  { href: "/about", label: "About" },
-  { href: "/contact", label: "Contact" },
-];
-
-export async function SiteHeader() {
+/**
+ * Shared header for every public marketing page (home, about, contact,
+ * privacy, terms). Checks the session itself so a signed-in visitor who
+ * reopens the site sees "Go to dashboard" instead of "Sign in" -- these
+ * pages used to render Sign in/Register unconditionally, which made an
+ * already-logged-in account look logged out.
+ */
+export async function SiteHeader({ extraNav, sticky = false }: { extraNav?: ReactNode; sticky?: boolean }) {
   const session = await auth();
+  const dashboardHref = session?.user ? (session.user.isSuperAdmin ? "/super" : "/app") : null;
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur">
+    <header className={`${sticky ? "sticky top-0 z-30 bg-surface/95 backdrop-blur" : "bg-surface"} border-b border-border`}>
       <div className="container-shell flex h-16 items-center justify-between">
-        <Link href="/" className="flex items-center">
+        <Link href="/">
           <Logo height={30} />
         </Link>
-
-        <nav className="hidden items-center gap-7 lg:flex">
-          {NAV_LINKS.map((link) => (
-            <Link key={link.href} href={link.href} className="text-sm text-muted transition-colors hover:text-foreground">
-              {link.label}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="hidden items-center gap-3 lg:flex">
-          {session?.user ? (
-            <Button asChild size="sm" variant="secondary">
-              <Link href={session.user.role === "SUPER_ADMIN" || session.user.role === "STAFF" ? "/admin" : "/dashboard"}>
-                Dashboard
-              </Link>
+        {extraNav}
+        <div className="flex items-center gap-3">
+          {dashboardHref ? (
+            <Button asChild size="sm">
+              <Link href={dashboardHref}>Go to dashboard</Link>
             </Button>
           ) : (
-            <Button asChild size="sm" variant="ghost">
-              <Link href="/login">Login</Link>
-            </Button>
+            <>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/login">Sign in</Link>
+              </Button>
+              <Button asChild size="sm">
+                <Link href="/register">Register your hotel</Link>
+              </Button>
+            </>
           )}
-          <Button asChild size="sm">
-            <Link href="/apps">Get Started</Link>
-          </Button>
         </div>
-
-        <MobileNav links={NAV_LINKS} isAuthenticated={Boolean(session?.user)} />
       </div>
     </header>
   );

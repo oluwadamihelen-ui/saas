@@ -1,31 +1,32 @@
-import crypto from "crypto";
-
 function randomDigits(length: number): string {
   return Array.from({ length }, () => Math.floor(Math.random() * 10)).join("");
 }
 
-export function generateOrderNumber(): string {
-  const date = new Date();
-  const y = date.getFullYear().toString().slice(-2);
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  return `ORD-${y}${m}-${randomDigits(6)}`;
+/** RES-2026-000123 */
+export function generateReservationReference(prefix = "RES"): string {
+  const year = new Date().getFullYear();
+  return `${prefix}-${year}-${randomDigits(6)}`;
 }
 
-export function generateInvoiceNumber(): string {
-  const date = new Date();
-  const y = date.getFullYear();
-  return `INV-${y}-${randomDigits(6)}`;
+/** INV-2026-000123 */
+export function generateInvoiceNumber(prefix = "INV"): string {
+  const year = new Date().getFullYear();
+  return `${prefix}-${year}-${randomDigits(6)}`;
 }
 
-export function generateTicketNumber(): string {
-  return `TCK-${randomDigits(7)}`;
+/** PAY-000000123 */
+export function generatePaymentReference(): string {
+  return `PAY-${randomDigits(9)}`;
 }
 
-export function generateQuoteNumber(): string {
-  return `QTE-${randomDigits(6)}`;
+/** EXP-000000123 */
+export function generateExpenseReference(): string {
+  return `EXP-${randomDigits(9)}`;
 }
 
-export function generateLicenseKey(): string {
-  const segment = () => crypto.randomBytes(2).toString("hex").toUpperCase();
-  return `${segment()}-${segment()}-${segment()}-${segment()}`;
+export function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
 }

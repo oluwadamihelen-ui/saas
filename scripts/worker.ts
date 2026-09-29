@@ -1,26 +1,14 @@
 import "dotenv/config";
-import { startDeploymentWorker } from "@/lib/queue/deploymentWorker";
-import { startDomainRenewalWorker } from "@/lib/queue/domainRenewalWorker";
-import { scheduleDomainRenewalSweep } from "@/lib/queue/domainRenewalQueue";
-import { startHostingRenewalWorker } from "@/lib/queue/hostingRenewalWorker";
-import { scheduleHostingRenewalSweep } from "@/lib/queue/hostingRenewalQueue";
+import { startOperationsSweepWorker } from "@/lib/queue/operationsSweepWorker";
+import { scheduleOperationsSweep } from "@/lib/queue/operationsSweepQueue";
 
-const deploymentWorker = startDeploymentWorker();
-console.log("Deployment worker started. Waiting for jobs...");
+const worker = startOperationsSweepWorker();
 
-const domainRenewalWorker = startDomainRenewalWorker();
-scheduleDomainRenewalSweep()
-  .then(() => console.log("Domain renewal worker started (daily sweep scheduled)."))
-  .catch((error) => console.error("Failed to schedule domain renewal sweep:", error));
-
-const hostingRenewalWorker = startHostingRenewalWorker();
-scheduleHostingRenewalSweep()
-  .then(() => console.log("Hosting renewal worker started (daily sweep scheduled)."))
-  .catch((error) => console.error("Failed to schedule hosting renewal sweep:", error));
+scheduleOperationsSweep()
+  .then(() => console.log("Operations sweep worker started (daily reminders, stale-outstanding alerts, auto no-show)."))
+  .catch((error) => console.error("Failed to schedule operations sweep:", error));
 
 process.on("SIGTERM", async () => {
-  await deploymentWorker.close();
-  await domainRenewalWorker.close();
-  await hostingRenewalWorker.close();
+  await worker.close();
   process.exit(0);
 });

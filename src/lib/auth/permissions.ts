@@ -1,69 +1,104 @@
-// Canonical permission catalog. Seeded into the Permission table and wired
-// to roles via RolePermission so access control is data-driven: an admin can
-// regrant/revoke a STAFF permission without a code change.
+import { RoleKey } from "@/generated/prisma/enums";
 
+// Canonical permission catalog for hotel-scoped operations. Seeded into the
+// Permission table and wired to roles via RolePermission (role -> default
+// grants) so access control is data-driven: a Hotel Owner can revoke a
+// single receptionist's ability to manage rooms without a code change
+// (UserPermission override, scoped to hotelId + userId).
 export const PERMISSIONS = {
-  APPLICATIONS_MANAGE: "applications.manage",
-  APPLICATIONS_PUBLISH: "applications.publish",
-  ORDERS_VIEW: "orders.view",
-  ORDERS_MANAGE: "orders.manage",
-  CUSTOMERS_VIEW: "customers.view",
-  CUSTOMERS_MANAGE: "customers.manage",
-  DEPLOYMENTS_VIEW: "deployments.view",
-  DEPLOYMENTS_MANAGE: "deployments.manage",
-  DOMAINS_MANAGE: "domains.manage",
-  HOSTING_MANAGE: "hosting.manage",
-  PROVIDERS_MANAGE: "providers.manage",
-  INVOICES_MANAGE: "invoices.manage",
-  SUBSCRIPTIONS_MANAGE: "subscriptions.manage",
-  SUPPORT_MANAGE: "support.manage",
-  COUPONS_MANAGE: "coupons.manage",
-  QUOTES_MANAGE: "quotes.manage",
+  RESERVATIONS_VIEW: "reservations.view",
+  RESERVATIONS_MANAGE: "reservations.manage",
+  CHECKIN_MANAGE: "checkin.manage",
+  GUESTS_VIEW: "guests.view",
+  GUESTS_MANAGE: "guests.manage",
+  ROOMS_VIEW: "rooms.view",
+  ROOMS_MANAGE: "rooms.manage",
+  HOUSEKEEPING_VIEW: "housekeeping.view",
+  HOUSEKEEPING_MANAGE: "housekeeping.manage",
+  MAINTENANCE_VIEW: "maintenance.view",
+  MAINTENANCE_MANAGE: "maintenance.manage",
+  PAYMENTS_VIEW: "payments.view",
+  PAYMENTS_MANAGE: "payments.manage",
+  INVOICES_VIEW: "invoices.view",
+  EXPENSES_VIEW: "expenses.view",
+  EXPENSES_MANAGE: "expenses.manage",
+  REPORTS_VIEW: "reports.view",
   STAFF_MANAGE: "staff.manage",
   SETTINGS_MANAGE: "settings.manage",
   AUDIT_LOG_VIEW: "audit_log.view",
-  ANALYTICS_VIEW: "analytics.view",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 
 export const PERMISSION_CATALOG: { key: PermissionKey; category: string; description: string }[] = [
-  { key: PERMISSIONS.APPLICATIONS_MANAGE, category: "Applications", description: "Create and edit applications" },
-  { key: PERMISSIONS.APPLICATIONS_PUBLISH, category: "Applications", description: "Publish/unpublish applications" },
-  { key: PERMISSIONS.ORDERS_VIEW, category: "Orders", description: "View orders" },
-  { key: PERMISSIONS.ORDERS_MANAGE, category: "Orders", description: "Manage order status and refunds" },
-  { key: PERMISSIONS.CUSTOMERS_VIEW, category: "Customers", description: "View customer accounts" },
-  { key: PERMISSIONS.CUSTOMERS_MANAGE, category: "Customers", description: "Edit customer accounts" },
-  { key: PERMISSIONS.DEPLOYMENTS_VIEW, category: "Deployments", description: "View deployments and logs" },
-  { key: PERMISSIONS.DEPLOYMENTS_MANAGE, category: "Deployments", description: "Manage and retry deployments" },
-  { key: PERMISSIONS.DOMAINS_MANAGE, category: "Domains", description: "Manage domain orders and DNS" },
-  { key: PERMISSIONS.HOSTING_MANAGE, category: "Hosting", description: "Manage hosting accounts and plans" },
-  { key: PERMISSIONS.PROVIDERS_MANAGE, category: "Providers", description: "Configure third-party providers" },
-  { key: PERMISSIONS.INVOICES_MANAGE, category: "Billing", description: "Manage invoices and payments" },
-  { key: PERMISSIONS.SUBSCRIPTIONS_MANAGE, category: "Billing", description: "Manage subscriptions" },
-  { key: PERMISSIONS.SUPPORT_MANAGE, category: "Support", description: "Manage support tickets" },
-  { key: PERMISSIONS.COUPONS_MANAGE, category: "Marketing", description: "Manage coupons and bundles" },
-  { key: PERMISSIONS.QUOTES_MANAGE, category: "Marketing", description: "Review customization requests and manage quotes" },
+  { key: PERMISSIONS.RESERVATIONS_VIEW, category: "Reservations", description: "View reservations and the calendar" },
+  { key: PERMISSIONS.RESERVATIONS_MANAGE, category: "Reservations", description: "Create, edit, cancel and extend reservations" },
+  { key: PERMISSIONS.CHECKIN_MANAGE, category: "Front Desk", description: "Check guests in and out, transfer rooms" },
+  { key: PERMISSIONS.GUESTS_VIEW, category: "Guests", description: "View guest profiles and history" },
+  { key: PERMISSIONS.GUESTS_MANAGE, category: "Guests", description: "Create and edit guest records" },
+  { key: PERMISSIONS.ROOMS_VIEW, category: "Rooms", description: "View rooms, room types and availability" },
+  { key: PERMISSIONS.ROOMS_MANAGE, category: "Rooms", description: "Create, edit rooms/room types and change room status" },
+  { key: PERMISSIONS.HOUSEKEEPING_VIEW, category: "Housekeeping", description: "View housekeeping tasks" },
+  { key: PERMISSIONS.HOUSEKEEPING_MANAGE, category: "Housekeeping", description: "Create and update housekeeping tasks" },
+  { key: PERMISSIONS.MAINTENANCE_VIEW, category: "Maintenance", description: "View maintenance requests" },
+  { key: PERMISSIONS.MAINTENANCE_MANAGE, category: "Maintenance", description: "Create and update maintenance requests" },
+  { key: PERMISSIONS.PAYMENTS_VIEW, category: "Billing", description: "View payments" },
+  { key: PERMISSIONS.PAYMENTS_MANAGE, category: "Billing", description: "Record and refund payments" },
+  { key: PERMISSIONS.INVOICES_VIEW, category: "Billing", description: "View and download invoices" },
+  { key: PERMISSIONS.EXPENSES_VIEW, category: "Billing", description: "View expenses" },
+  { key: PERMISSIONS.EXPENSES_MANAGE, category: "Billing", description: "Record and edit expenses" },
+  { key: PERMISSIONS.REPORTS_VIEW, category: "Reports", description: "View hotel reports and analytics" },
   { key: PERMISSIONS.STAFF_MANAGE, category: "Administration", description: "Manage staff accounts and permissions" },
-  { key: PERMISSIONS.SETTINGS_MANAGE, category: "Administration", description: "Configure platform settings" },
-  { key: PERMISSIONS.AUDIT_LOG_VIEW, category: "Administration", description: "View audit logs" },
-  { key: PERMISSIONS.ANALYTICS_VIEW, category: "Administration", description: "View analytics" },
+  { key: PERMISSIONS.SETTINGS_MANAGE, category: "Administration", description: "Configure hotel settings" },
+  { key: PERMISSIONS.AUDIT_LOG_VIEW, category: "Administration", description: "View the audit log" },
 ];
 
-export const ROLE_DEFAULT_PERMISSIONS: Record<"SUPER_ADMIN" | "STAFF" | "CUSTOMER" | "DEVELOPER", PermissionKey[]> = {
-  SUPER_ADMIN: PERMISSION_CATALOG.map((p) => p.key),
-  STAFF: [
-    PERMISSIONS.ORDERS_VIEW,
-    PERMISSIONS.ORDERS_MANAGE,
-    PERMISSIONS.CUSTOMERS_VIEW,
-    PERMISSIONS.DEPLOYMENTS_VIEW,
-    PERMISSIONS.DEPLOYMENTS_MANAGE,
-    PERMISSIONS.DOMAINS_MANAGE,
-    PERMISSIONS.HOSTING_MANAGE,
-    PERMISSIONS.SUPPORT_MANAGE,
-    PERMISSIONS.COUPONS_MANAGE,
-    PERMISSIONS.QUOTES_MANAGE,
+const ALL_PERMISSIONS = PERMISSION_CATALOG.map((p) => p.key);
+
+// Default permission grants per hotel role. SUPER_ADMIN is intentionally
+// absent -- it is a platform-level flag (User.isSuperAdmin), never a
+// HotelMember role, and platform admins bypass hotel permission checks
+// entirely (see requirePermission()).
+export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<RoleKey, "SUPER_ADMIN">, PermissionKey[]> = {
+  HOTEL_OWNER: ALL_PERMISSIONS,
+  HOTEL_MANAGER: ALL_PERMISSIONS.filter((p) => p !== PERMISSIONS.SETTINGS_MANAGE),
+  RECEPTIONIST: [
+    PERMISSIONS.RESERVATIONS_VIEW,
+    PERMISSIONS.RESERVATIONS_MANAGE,
+    PERMISSIONS.CHECKIN_MANAGE,
+    PERMISSIONS.GUESTS_VIEW,
+    PERMISSIONS.GUESTS_MANAGE,
+    PERMISSIONS.ROOMS_VIEW,
+    PERMISSIONS.PAYMENTS_VIEW,
+    PERMISSIONS.PAYMENTS_MANAGE,
+    PERMISSIONS.INVOICES_VIEW,
+    PERMISSIONS.HOUSEKEEPING_VIEW,
+    PERMISSIONS.MAINTENANCE_VIEW,
   ],
-  CUSTOMER: [],
-  DEVELOPER: [],
+  ACCOUNTANT: [
+    PERMISSIONS.RESERVATIONS_VIEW,
+    PERMISSIONS.GUESTS_VIEW,
+    PERMISSIONS.PAYMENTS_VIEW,
+    PERMISSIONS.PAYMENTS_MANAGE,
+    PERMISSIONS.INVOICES_VIEW,
+    PERMISSIONS.EXPENSES_VIEW,
+    PERMISSIONS.EXPENSES_MANAGE,
+    PERMISSIONS.REPORTS_VIEW,
+  ],
+  HOUSEKEEPING: [PERMISSIONS.ROOMS_VIEW, PERMISSIONS.HOUSEKEEPING_VIEW, PERMISSIONS.HOUSEKEEPING_MANAGE],
+  MAINTENANCE: [PERMISSIONS.ROOMS_VIEW, PERMISSIONS.MAINTENANCE_VIEW, PERMISSIONS.MAINTENANCE_MANAGE],
+  STAFF: [PERMISSIONS.RESERVATIONS_VIEW, PERMISSIONS.ROOMS_VIEW, PERMISSIONS.GUESTS_VIEW],
 };
+
+export const ROLE_LABELS: Record<RoleKey, string> = {
+  SUPER_ADMIN: "Super Admin",
+  HOTEL_OWNER: "Hotel Owner",
+  HOTEL_MANAGER: "Hotel Manager",
+  RECEPTIONIST: "Receptionist",
+  ACCOUNTANT: "Accountant",
+  HOUSEKEEPING: "Housekeeping Staff",
+  MAINTENANCE: "Maintenance Staff",
+  STAFF: "Staff",
+};
+
+export const HOTEL_ROLE_KEYS = Object.keys(ROLE_LABELS).filter((k) => k !== "SUPER_ADMIN") as Exclude<RoleKey, "SUPER_ADMIN">[];

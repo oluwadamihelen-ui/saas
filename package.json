@@ -1,17 +1,16 @@
 {
-  "name": "saas",
-  "version": "0.1.0",
+  "name": "otelum",
+  "version": "0.1.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma migrate deploy && next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "worker": "tsx --tsconfig tsconfig.json scripts/worker.ts",
     "db:seed": "tsx --tsconfig tsconfig.json prisma/seed/index.ts",
     "test": "vitest run",
-    "test:e2e-smoke": "node scripts/e2e-smoke.mjs",
-    "test:e2e-acceptance": "node scripts/e2e-acceptance.mjs"
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

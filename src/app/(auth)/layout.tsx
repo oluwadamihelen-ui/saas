@@ -7,7 +7,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <Link href="/" className="mb-8 flex items-center">
         <Logo height={32} />
       </Link>
-      <div className="w-full max-w-sm">{children}</div>
+      <div className="w-full max-w-2xl">{children}</div>
     </div>
   );
 }
