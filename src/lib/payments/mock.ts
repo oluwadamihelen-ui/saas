@@ -5,11 +5,14 @@ export const mockProvider: PaymentProvider = {
   name: "mock",
   currencies: ["USD", "NGN"],
   async createCheckout(req) {
-    return { url: `${req.callbackUrl.replace(/\/billing\/callback.*/, "")}/billing/mock?reference=${encodeURIComponent(req.reference)}` };
+    return { url: `${new URL(req.callbackUrl).origin}/billing/mock?reference=${encodeURIComponent(req.reference)}` };
   },
   async verify() {
     // The mock page marks the payment itself; the callback just reads our DB state.
     return { status: "PENDING" };
+  },
+  async refund() {
+    return process.env.MOCK_REFUND_FAIL === "1" ? { ok: false, error: "Mock refund declined" } : { ok: true };
   },
   async chargeRecurring(req) {
     if (process.env.MOCK_RENEWAL_FAIL === "1") return { status: "FAILED" };

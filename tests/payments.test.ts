@@ -64,3 +64,13 @@ describe("cronAuthorized", () => {
     process.env.CRON_SECRET = old;
   });
 });
+
+describe("mock provider checkout URL", () => {
+  it("is built from the callback's origin for both billing and marketplace callbacks", async () => {
+    const { mockProvider } = await import("@/lib/payments/mock");
+    for (const cb of ["http://localhost:3000/billing/callback?reference=r1", "http://localhost:3000/market/callback?reference=mp_r1"]) {
+      const r = await mockProvider.createCheckout({ reference: "r1", amount: 5, currency: "USD", email: "a@b.c", callbackUrl: cb });
+      expect(r.url).toBe("http://localhost:3000/billing/mock?reference=r1");
+    }
+  });
+});

@@ -58,6 +58,7 @@ model User {
   telegramLinkExpires DateTime?
   notifyLimits     Boolean   @default(true)
   notifyReminders  Boolean   @default(true)
+  role             UserRole  @default(USER)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -72,6 +73,15 @@ model User {
   pineTools        PineTool[]
   dailyRisks       DailyRisk[]
   notificationLogs NotificationLog[]
+  creator          Creator?
+  indicators       Indicator[]
+  strategies       Strategy[]
+  datasets         Dataset[]
+  backtests        BacktestRun[]
+  licenses         License[]
+  marketOrders     MarketOrder[]
+  reviews          Review[]
+  reports          Report[]
 }
 
 model Account {
@@ -325,4 +335,504 @@ model NotificationLog {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, kind, key])
+}
+
+// =====================================================================================
+// INDICATOR LAB + MARKETPLACE
+// Two-sided from day one: traders (Indicator, Strategy, Dataset, BacktestRun, License,
+// Review) and creators (Creator, Listing, MarketOrder, LedgerEntry, Payout).
+// Money in the marketplace is stored as INTEGER minor units (USD cents) — never floats.
+// =====================================================================================
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum Visibility {
+  PRIVATE
+  UNLISTED
+  PUBLIC
+}
+
+// Launch with INDICATOR + STRATEGY; the rest are reserved for later product types.
+enum ProductKind {
+  INDICATOR
+  STRATEGY
+  PINE_TOOL
+  RISK_TOOL
+  TEMPLATE
+  DASHBOARD
+  EDUCATION
+}
+
+enum ListingStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum PricingModel {
+  FREE
+  ONE_TIME
+  MONTHLY
+  YEARLY
+}
+
+enum UpdatePolicy {
+  ALL_UPDATES
+  SAME_MAJOR
+  NO_UPDATES
+}
+
+enum LicenseStatus {
+  ACTIVE
+  EXPIRED
+  REFUNDED
+  REVOKED
+}
+
+enum MarketOrderStatus {
+  PENDING
+  PAID
+  REFUNDED
+  FAILED
+}
+
+enum LedgerKind {
+  SALE
+  REFUND
+  ADJUSTMENT
+}
+
+enum PayoutStatus {
+  REQUESTED
+  PROCESSING
+  PAID
+  FAILED
+  CANCELED
+}
+
+enum ReviewStatus {
+  VISIBLE
+  HIDDEN
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+enum CreatorStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum BacktestKind {
+  SINGLE
+  OPTIMIZATION
+  WALK_FORWARD
+  IMPORTED
+}
+
+enum SampleType {
+  FULL
+  IN_SAMPLE
+  OUT_OF_SAMPLE
+}
+
+model Creator {
+  id           String        @id @default(cuid())
+  userId       String        @unique
+  displayName  String
+  slug         String        @unique
+  bio          String        @default("")
+  website      String?
+  status       CreatorStatus @default(ACTIVE)
+  verified     Boolean       @default(false)
+  // Encrypted at rest (AES-256-GCM). Never rendered back in full.
+  payoutMethodEnc String?
+  payoutMethodHint String?
+  payoutVerifiedAt DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listings Listing[]
+  orders   MarketOrder[]
+  ledger   LedgerEntry[]
+  payouts  Payout[]
+}
+
+// Metadata only. The private Pine source lives in IndicatorSource and is never selected by public queries.
+model Indicator {
+  id            String      @id @default(cuid())
+  userId        String
+  name          String
+  description   String      @default("")
+  author        String      @default("")
+  kind          ProductKind @default(INDICATOR)
+  markets       String[]    @default([])
+  timeframes    String[]    @default([])
+  pineVersion   Int?
+  visibility    Visibility  @default(PRIVATE)
+  latestVersion String      @default("1.0")
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versions   IndicatorVersion[]
+  strategies Strategy[]
+  listing    Listing?
+
+  @@index([userId, updatedAt])
+}
+
+model IndicatorVersion {
+  id            String   @id @default(cuid())
+  indicatorId   String
+  version       String
+  changelog     String   @default("")
+  compatibility String   @default("")
+  pineVersion   Int?
+  // [{ name, type, title, defval, min, max, step, options, group }]
+  inputs        Json     @default("[]")
+  releasedAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  indicator Indicator        @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
+  source    IndicatorSource?
+
+  @@unique([indicatorId, version])
+}
+
+// Strictly separated from metadata. Only the owner (and audited admin review) may read it.
+model IndicatorSource {
+  id        String   @id @default(cuid())
+  versionId String   @unique
+  code      String
+  sha256    String
+  createdAt DateTime @default(now())
+
+  version IndicatorVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+}
+
+// An indicator is NOT a strategy. A Strategy holds explicit entry/exit/stop/target/sizing rules.
+model Strategy {
+  id          String   @id @default(cuid())
+  userId      String
+  indicatorId String?
+  name        String
+  description String   @default("")
+  symbol      String   @default("XAUUSD")
+  definition  Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  indicator Indicator?   @relation(fields: [indicatorId], references: [id], onDelete: SetNull)
+  backtests BacktestRun[]
+
+  @@index([userId, updatedAt])
+}
+
+model Dataset {
+  id               String   @id @default(cuid())
+  userId           String
+  name             String
+  symbol           String
+  timeframe        String
+  source           String   // CSV_UPLOAD | SYNTHETIC
+  originalFilename String?
+  candleCount      Int
+  fromTs           DateTime
+  toTs             DateTime
+  // [[t, o, h, l, c, v], ...] — capped at 60k candles per dataset.
+  candles          Json
+  createdAt        DateTime @default(now())
+
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  backtests BacktestRun[]
+
+  @@index([userId, createdAt])
+}
+
+model BacktestRun {
+  id         String       @id @default(cuid())
+  userId     String
+  strategyId String?
+  datasetId  String?
+  kind       BacktestKind @default(SINGLE)
+  sampleType SampleType   @default(FULL)
+  label      String       @default("")
+  groupId    String?
+  // Every assumption: instrument, timeframe, period, balance, risk, spread, commission, slippage, spec, fx, params.
+  config     Json
+  params     Json?
+  summary    Json
+  report     Json
+  tradeCount Int
+  // e.g. "Uploaded CSV: xauusd_h1.csv (2023-01-01 → 2026-06-30)" or "SYNTHETIC DEMO DATA"
+  dataSource String
+  synthetic  Boolean      @default(false)
+  createdAt  DateTime     @default(now())
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategy Strategy? @relation(fields: [strategyId], references: [id], onDelete: SetNull)
+  dataset  Dataset?  @relation(fields: [datasetId], references: [id], onDelete: SetNull)
+  evidence ListingEvidence[]
+
+  @@index([userId, createdAt])
+  @@index([strategyId])
+  @@index([groupId])
+}
+
+model Listing {
+  id               String        @id @default(cuid())
+  indicatorId      String        @unique
+  creatorId        String
+  slug             String        @unique
+  title            String
+  tagline          String        @default("")
+  description      String        @default("")
+  categories       String[]      @default([])
+  features         String[]      @default([])
+  documentation    String        @default("")
+  methodology      String        @default("")
+  dataSourceNote   String        @default("")
+  demoVideoUrl     String?
+  pricingModel     PricingModel  @default(FREE)
+  priceUsdCents    Int           @default(0)
+  status           ListingStatus @default(DRAFT)
+  rejectionReason  String?
+  // Default is PROTECTED: buyers get access, not the creator's source code.
+  sourceIncluded   Boolean       @default(false)
+  updatePolicy     UpdatePolicy  @default(SAME_MAJOR)
+  // Creator delivers protected scripts through TradingView invite-only access.
+  tradingViewAccess Boolean      @default(false)
+  // Let licensed buyers run the creator's published strategy in the platform's test environment (rules stay hidden).
+  allowBuyerBacktest Boolean     @default(false)
+  strategyId       String?
+  views            Int           @default(0)
+  submittedAt      DateTime?
+  approvedAt       DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  indicator Indicator        @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
+  creator   Creator          @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  media     ListingMedia[]
+  licenses  License[]
+  orders    MarketOrder[]
+  reviews   Review[]
+  reports   Report[]
+  evidence  ListingEvidence[]
+  viewDays  ListingViewDay[]
+
+  @@index([status, creatorId])
+}
+
+model ListingMedia {
+  id         String   @id @default(cuid())
+  listingId  String
+  storageKey String
+  mimeType   String
+  caption    String   @default("")
+  sort       Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+}
+
+// A backtest the creator chose to show publicly. All assumptions are always displayed.
+model ListingEvidence {
+  id            String   @id @default(cuid())
+  listingId     String
+  backtestRunId String
+  note          String   @default("")
+  createdAt     DateTime @default(now())
+
+  listing Listing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  run     BacktestRun @relation(fields: [backtestRunId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, backtestRunId])
+}
+
+model ListingViewDay {
+  id        String @id @default(cuid())
+  listingId String
+  day       String // YYYY-MM-DD (UTC)
+  views     Int    @default(0)
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, day])
+}
+
+model License {
+  id               String        @id @default(cuid())
+  userId           String
+  listingId        String
+  orderId          String?
+  status           LicenseStatus @default(ACTIVE)
+  type             PricingModel
+  startedAt        DateTime      @default(now())
+  currentPeriodEnd DateTime?
+  // For SAME_MAJOR policy: the major version current when the buyer purchased.
+  maxMajor         Int           @default(1)
+  tradingViewUsername String?
+  accessGrantedAt  DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId])
+  @@index([listingId, status])
+}
+
+model MarketOrder {
+  id           String            @id @default(cuid())
+  buyerId      String
+  listingId    String
+  creatorId    String
+  reference    String            @unique
+  provider     String
+  status       MarketOrderStatus @default(PENDING)
+  pricingModel PricingModel
+  // What the buyer is charged (minor units of `currency`).
+  currency     String
+  chargeMinor  Int
+  // USD cents per 1 minor unit of `currency` at checkout time (1 for USD).
+  usdPerMinor  Float             @default(1)
+  tradingViewUsername String?
+  // Split snapshot (USD cents) + the commission % that applied when the order was placed.
+  grossUsdCents         Int
+  taxUsdCents           Int     @default(0)
+  processingFeeUsdCents Int     @default(0)
+  commissionPercent     Float
+  platformFeeUsdCents   Int
+  creatorEarningUsdCents Int
+  feeBearer    String            @default("creator")
+  refundReason String?
+  paidAt       DateTime?
+  refundedAt   DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  buyer   User    @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  ledger  LedgerEntry[]
+
+  @@index([buyerId])
+  @@index([creatorId, status])
+  @@index([listingId, status])
+}
+
+// Creator balances are DERIVED from this table (+ Payout), never stored as a mutable number.
+model LedgerEntry {
+  id             String     @id @default(cuid())
+  creatorId      String
+  orderId        String?
+  kind           LedgerKind
+  amountUsdCents Int        // signed
+  // Earnings are "pending" until this moment (refund-protection holdback), then "available".
+  availableAt    DateTime
+  note           String     @default("")
+  createdAt      DateTime   @default(now())
+
+  creator Creator      @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  order   MarketOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([creatorId, availableAt])
+  @@unique([orderId, kind])
+}
+
+model Payout {
+  id             String       @id @default(cuid())
+  creatorId      String
+  amountUsdCents Int
+  status         PayoutStatus @default(REQUESTED)
+  provider       String       @default("manual")
+  reference      String?
+  note           String       @default("")
+  requestedAt    DateTime     @default(now())
+  processedAt    DateTime?
+
+  creator Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([creatorId, status])
+}
+
+model Review {
+  id               String       @id @default(cuid())
+  listingId        String
+  userId           String
+  rating           Int
+  title            String       @default("")
+  body             String       @default("")
+  verifiedPurchase Boolean      @default(false)
+  status           ReviewStatus @default(VISIBLE)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  listing Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reports Report[]
+
+  @@unique([listingId, userId])
+  @@index([listingId, status])
+}
+
+model Report {
+  id         String       @id @default(cuid())
+  reporterId String
+  listingId  String?
+  reviewId   String?
+  reason     String
+  details    String       @default("")
+  status     ReportStatus @default(OPEN)
+  resolution String?
+  createdAt  DateTime     @default(now())
+  resolvedAt DateTime?
+
+  reporter User     @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  listing  Listing? @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  review   Review?  @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+}
+
+model Category {
+  id     String  @id @default(cuid())
+  slug   String  @unique
+  name   String
+  sort   Int     @default(0)
+  active Boolean @default(true)
+}
+
+model PlatformSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  action     String
+  targetType String
+  targetId   String
+  meta       Json     @default("{}")
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([targetType, targetId])
 }

@@ -12,11 +12,12 @@ export interface PlanLimits {
   advancedRules: boolean; // weekly limit, custom risk bands, min R:R
   exportData: boolean;
   tradingViewTools: boolean;
+  lab: { indicators: number; strategies: number; datasets: number; backtests: number; optimization: boolean };
 }
 
 export const PLAN_LIMITS: Record<PlanKey, PlanLimits> = {
-  FREE: { maxTrades: 30, maxAccounts: 1, screenshots: false, advancedAnalytics: false, advancedRules: false, exportData: false, tradingViewTools: false },
-  PRO: { maxTrades: Infinity, maxAccounts: 10, screenshots: true, advancedAnalytics: true, advancedRules: true, exportData: true, tradingViewTools: true },
+  FREE: { maxTrades: 30, maxAccounts: 1, screenshots: false, advancedAnalytics: false, advancedRules: false, exportData: false, tradingViewTools: false, lab: { indicators: 2, strategies: 2, datasets: 2, backtests: 10, optimization: false } },
+  PRO: { maxTrades: Infinity, maxAccounts: 10, screenshots: true, advancedAnalytics: true, advancedRules: true, exportData: true, tradingViewTools: true, lab: { indicators: 100, strategies: 200, datasets: 50, backtests: 2000, optimization: true } },
 };
 
 export type BillingIntervalKey = "MONTHLY" | "ANNUAL";
@@ -35,6 +36,7 @@ export const PRO_FEATURES = [
   "Screenshot storage",
   "TradingView / Pine Script tools",
   "CSV export",
+  "Indicator Lab: unlimited backtests, parameter testing & walk-forward",
 ];
 
 export const FREE_FEATURES = [
@@ -42,5 +44,7 @@ export const FREE_FEATURES = [
   "Trade journal (up to 30 trades)",
   "Basic analytics",
   "Daily risk guardrail",
+  "Indicator Lab (2 indicators, basic backtests)",
+  "Sell indicators in the marketplace",
   "Pre-trade checklist",
 ];

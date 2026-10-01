@@ -12,7 +12,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:seed": "tsx --tsconfig tsconfig.json prisma/seed.ts"
+    "db:seed": "tsx --tsconfig tsconfig.json prisma/seed.ts",
+    "make-admin": "tsx --tsconfig tsconfig.json prisma/make-admin.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1144.0",

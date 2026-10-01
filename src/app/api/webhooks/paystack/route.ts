@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { verifyPaystackSignature } from "@/lib/payments/paystack";
 import { activateFromPayment } from "@/lib/billing";
+import { fulfillVerified } from "@/lib/market/orders";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, duplicate: true });
   }
 
-  if (evt.event === "charge.success" && d.reference) {
+  if (evt.event === "charge.success" && d.reference?.startsWith("mp_")) {
+    // Marketplace order: amount + currency are checked against OUR order inside fulfillVerified.
+    if (d.status === "success" && typeof d.amount === "number" && d.currency) await fulfillVerified(d.reference, { amountMinor: d.amount, currency: d.currency });
+  } else if (evt.event === "charge.success" && d.reference) {
     const payment = await prisma.payment.findUnique({ where: { reference: d.reference } });
     if (payment && payment.provider === "paystack" && payment.status !== "SUCCEEDED") {
       const amountOk = typeof d.amount === "number" && Math.round(payment.amount * 100) === d.amount && d.currency === payment.currency;

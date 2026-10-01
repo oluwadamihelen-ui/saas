@@ -51,3 +51,25 @@ Results are tagged **Estimated** until the user confirms the contract spec with 
 | **Prop-firm rules** | Risk Rules → templates (generic, editable): max total drawdown (fixed or trailing), profit target, daily/weekly limits. A breached drawdown turns the guardrail to STOP and triggers a Telegram alert. | Pro feature |
 
 Tests: `npm test` (unit tests need nothing; integration tests use `TEST_DATABASE_URL` — run `DATABASE_URL=$TEST_DATABASE_URL npx prisma migrate deploy` once).
+
+## Indicator Lab & Marketplace
+
+**Honest scope:** RiskPilot cannot execute Pine Script (no runtime exists outside TradingView) and has no market-data feed.
+So the Lab stores/parses Pine *as text* (version, inputs — never executed) and backtests **explicit rules** you define
+(entries, exits, stop, target, sizing) on candle CSVs you upload. TradingView Strategy Tester trade lists can be imported for
+analysis (shown as *imported, unverified*). Synthetic demo data exists for learning and is flagged everywhere; it can never be marketplace evidence.
+
+| Area | What it does |
+|---|---|
+| Indicators | Name, description, markets, timeframes, version history, change log, compatibility, Private / Unlisted / Public. Metadata and private source are separate tables; source is only ever read by the owner (or an audited admin review). |
+| Strategies | Separate from indicators. Rule builder (EMA/SMA/RSI/ATR/Donchian, crosses/levels), stop & target types, session filter, `$parameters`. |
+| Backtests | No look-ahead (signal at close → fill at next open), spread, slippage, commission, risk-first lot sizing, stop-first when both touched. Full report + session / hour / weekday / direction / month analysis. |
+| Parameter tests | Grid (≤60 combos), never ranked or labelled "best", with the overfitting warning. Pro. |
+| Walk-forward | Fixed parameters on separate in-sample and out-of-sample periods, stored as separate runs. Pro. |
+| Marketplace | Browse/search/filters, listings with history/docs/screenshots, free · one-time · monthly · yearly, reviews (access required, creators can't review themselves), reports, compare (no ranking). |
+| Licensing | Protected by default; "source included" is an explicit creator choice. Update policy per product. TradingView invite-only delivery workflow. Buyers can test a creator's strategy in the Lab without seeing its rules. |
+| Money | Integer cents. Commission, fees, tax, holdback, price limits, NGN rate are **platform settings** (admin UI). Orders snapshot the terms. Ledger-derived creator balances, payouts (manual provider behind an interface), refunds with provider call + clawback. |
+| Admin | `/admin` (404 for non-admins; every function re-checks the role): listings review, creators, reports, refunds, payouts, settings, categories, audit log. Make an admin: `npm run make-admin -- you@example.com`. |
+
+Demo logins (password `Passw0rd!`): `demo@riskpilot.app` (Pro trader), `admin@riskpilot.app`, `ada@creators.demo`, `chidi@creators.demo`, `tunde@creators.demo`.
+`APP_ENCRYPTION_KEY` (base64, 32 bytes) encrypts payout details in production.

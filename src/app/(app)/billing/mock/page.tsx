@@ -10,7 +10,9 @@ export default async function MockPay({ searchParams }: { searchParams: Promise<
   const { reference } = await searchParams;
   const user = await getUser();
   if (getPaymentProvider().name !== "mock" || !reference) redirect("/billing");
-  const p = await prisma.payment.findFirst({ where: { reference, userId: user.id } });
+  const p = reference.startsWith("mp_")
+    ? await prisma.marketOrder.findFirst({ where: { reference, buyerId: user.id } }).then((o) => (o ? { amount: o.chargeMinor / 100, currency: o.currency } : null))
+    : await prisma.payment.findFirst({ where: { reference, userId: user.id } });
   if (!p) redirect("/billing");
   return (
     <Card className="mx-auto mt-16 max-w-md p-8 text-center">

@@ -35,3 +35,6 @@ export const CURRENCIES = ["USD", "NGN", "EUR", "GBP"] as const;
 export type CurrencyCode = (typeof CURRENCIES)[number];
 
 export const CURRENCY_SYMBOL: Record<string, string> = { USD: "$", NGN: "₦", EUR: "€", GBP: "£" };
+
+/** Typical pip size (price units). A pip is not standardised for metals/crypto/indices — users can edit it. */
+export const PIP_SIZE: Record<string, number> = { XAUUSD: 0.1, XAGUSD: 0.01, BTCUSD: 1, ETHUSD: 0.1, EURUSD: 0.0001, GBPUSD: 0.0001, USDJPY: 0.01, US30: 1, NAS100: 1 };

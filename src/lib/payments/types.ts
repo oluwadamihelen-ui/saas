@@ -40,4 +40,6 @@ export interface PaymentProvider {
   verify(reference: string): Promise<VerifyResult>;
   /** Charge a saved authorization without the customer present (renewals). */
   chargeRecurring?(req: RecurringChargeRequest): Promise<VerifyResult>;
+  /** Refund a paid reference (full amount when `amountMinor` is omitted). */
+  refund?(reference: string, amountMinor?: number): Promise<{ ok: boolean; error?: string }>;
 }

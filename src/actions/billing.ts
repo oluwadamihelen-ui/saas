@@ -7,6 +7,7 @@ import { getUser } from "@/lib/session";
 import { PRICING, type BillingIntervalKey } from "@/config/plans";
 import { getPaymentProvider } from "@/lib/payments";
 import { activateFromPayment } from "@/lib/billing";
+import { fulfillOrder } from "@/lib/market/orders";
 
 export async function startCheckoutAction(fd: FormData) {
   const user = await getUser();
@@ -30,6 +31,12 @@ export async function mockPayAction(fd: FormData) {
   const user = await getUser();
   if (getPaymentProvider().name !== "mock") redirect("/billing");
   const reference = String(fd.get("reference") ?? "");
+  if (reference.startsWith("mp_")) {
+    const order = await prisma.marketOrder.findFirst({ where: { reference, buyerId: user.id } });
+    if (!order) redirect("/market");
+    await fulfillOrder(order.id);
+    redirect(`/market/callback?reference=${reference}`);
+  }
   const p = await prisma.payment.findFirst({ where: { reference, userId: user.id } });
   if (!p) redirect("/billing");
   await activateFromPayment(p.id, { authorizationCode: `mock_auth_${user.id}` });

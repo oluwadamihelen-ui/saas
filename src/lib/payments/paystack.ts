@@ -58,6 +58,15 @@ export const paystackProvider: PaymentProvider = {
     const json = (await res.json()) as { data?: PaystackTx };
     return mapPaystackTx(json.data);
   },
+  async refund(reference, amountMinor) {
+    const res = await fetch(`${API}/refund`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ transaction: reference, ...(amountMinor ? { amount: amountMinor } : {}) }),
+    });
+    const json = (await res.json().catch(() => ({}))) as { status?: boolean; message?: string };
+    return res.ok && json.status ? { ok: true } : { ok: false, error: json.message ?? "Refund failed" };
+  },
   async chargeRecurring(req) {
     const res = await fetch(`${API}/transaction/charge_authorization`, {
       method: "POST",

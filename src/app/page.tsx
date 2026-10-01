@@ -29,7 +29,7 @@ export default function Landing() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Logo />
           <nav className="hidden items-center gap-6 text-sm text-muted md:flex">
-            <a href="#how" className="hover:text-fg">How it works</a><a href="#calculator" className="hover:text-fg">Calculator</a><a href="#pricing" className="hover:text-fg">Pricing</a><a href="#faq" className="hover:text-fg">FAQ</a>
+            <a href="#how" className="hover:text-fg">How it works</a><a href="#calculator" className="hover:text-fg">Calculator</a><a href="#lab" className="hover:text-fg">Indicator Lab</a><Link href="/market" className="hover:text-fg">Marketplace</Link><a href="#pricing" className="hover:text-fg">Pricing</a><a href="#faq" className="hover:text-fg">FAQ</a>
           </nav>
           <div className="flex items-center gap-2"><LinkButton href="/login" variant="ghost" size="sm">Log in</LinkButton><LinkButton href="/register" size="sm">Sign up</LinkButton></div>
         </div>
@@ -80,6 +80,21 @@ export default function Landing() {
         ].map(([Icon, t, b]) => { const I = Icon as typeof CalcIcon; return <Card key={t as string} className="flex gap-4 p-6"><I className="mt-1 shrink-0 text-accent" size={22} /><div><h3 className="font-semibold">{t as string}</h3><p className="mt-1.5 text-sm text-muted">{b as string}</p></div></Card>; })}
       </section>
 
+      <section id="lab" className="border-y border-line bg-surface/40 py-16">
+        <div className="mx-auto grid max-w-6xl gap-8 px-4 lg:grid-cols-2">
+          <div>
+            <h2 className="text-2xl font-semibold md:text-3xl">Indicator Lab: test your own indicator honestly.</h2>
+            <p className="mt-3 text-muted">Paste your Pine Script, document its inputs, then turn it into an explicit strategy: you define the entries, exits, stop, target and risk. Test it on your own candle data with spread, slippage and commission, split results by session, run parameter tests, and check an out-of-sample period.</p>
+            <ul className="mt-4 space-y-2 text-sm text-muted"><li>• An indicator is not a strategy — nothing trades until you write the rules</li><li>• Every result is labelled a historical simulation, with all assumptions shown</li><li>• Parameter tests never crown a &ldquo;best&rdquo; setting, and warn about overfitting</li></ul>
+          </div>
+          <div>
+            <h2 className="text-2xl font-semibold md:text-3xl">A marketplace with receipts.</h2>
+            <p className="mt-3 text-muted">Creators can sell access to indicators without handing over their source code. Buyers see the backtest period, costs, sample type and data source — and verified reviews. Claims like &ldquo;guaranteed profits&rdquo; are not allowed.</p>
+            <div className="mt-4 flex flex-wrap gap-3"><LinkButton href="/market" variant="secondary">Browse the marketplace</LinkButton><LinkButton href="/creator" variant="ghost">Become a creator</LinkButton></div>
+          </div>
+        </div>
+      </section>
+
       <section id="pricing" className="mx-auto max-w-6xl scroll-mt-16 px-4 pb-16">
         <h2 className="text-2xl font-semibold md:text-3xl">Simple pricing</h2>
         <p className="mb-8 mt-2 text-muted">Start free. Pay in USD or Naira when you need more.</p>
@@ -95,7 +110,7 @@ export default function Landing() {
 
       <footer className="border-t border-line py-10">
         <div className="mx-auto max-w-6xl space-y-4 px-4">
-          <div className="flex flex-wrap items-center justify-between gap-3"><Logo /><div className="flex gap-4 text-sm text-muted"><Link href="/login">Log in</Link><Link href="/register">Sign up</Link></div></div>
+          <div className="flex flex-wrap items-center justify-between gap-3"><Logo /><div className="flex flex-wrap gap-4 text-sm text-muted"><Link href="/market">Marketplace</Link><Link href="/legal/terms">Terms</Link><Link href="/legal/privacy">Privacy</Link><Link href="/legal/risk-disclosure">Risk Disclosure</Link><Link href="/legal/seller-terms">Seller Terms</Link><Link href="/legal/refund-policy">Refund Policy</Link><Link href="/login">Log in</Link><Link href="/register">Sign up</Link></div></div>
           <Disclaimer />
         </div>
       </footer>
