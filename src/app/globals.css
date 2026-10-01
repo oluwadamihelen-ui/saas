@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0a0d13;
+  --surface: #111620;
+  --surface-2: #171d2a;
+  --border: #232c3d;
+  --fg: #e8ecf3;
+  --muted: #8b95a8;
+  --accent: #3b82f6;
+  --accent-soft: rgba(59, 130, 246, 0.14);
+  --green: #22c55e;
+  --green-soft: rgba(34, 197, 94, 0.14);
+  --red: #f43f5e;
+  --red-soft: rgba(244, 63, 94, 0.14);
+  --amber: #f59e0b;
+  --amber-soft: rgba(245, 158, 11, 0.14);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--border);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-up: var(--green);
+  --color-up-soft: var(--green-soft);
+  --color-down: var(--red);
+  --color-down-soft: var(--red-soft);
+  --color-warn: var(--amber);
+  --color-warn-soft: var(--amber-soft);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+html { background: var(--bg); }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--accent-soft); }
+input, select, textarea { color-scheme: dark; }
+input[type="number"] { -moz-appearance: textfield; }
+.num { font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
+.recharts-text { fill: var(--muted); font-size: 11px; }

@@ -1,0 +1,284 @@
+// RiskPilot — risk management + journaling. Not a signal service.
+// Every user-owned row carries userId so ownership checks are a single WHERE clause.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Plan {
+  FREE
+  PRO
+}
+
+enum Direction {
+  LONG
+  SHORT
+}
+
+enum TradeResult {
+  OPEN
+  WIN
+  LOSS
+  BREAKEVEN
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  EXPIRED
+}
+
+enum BillingInterval {
+  MONTHLY
+  ANNUAL
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+model User {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  name             String?
+  passwordHash     String
+  timezone         String   @default("Africa/Lagos")
+  displayCurrency  String   @default("USD")
+  onboardedAt      DateTime?
+  activeAccountId  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  accounts         Account[]
+  trades           Trade[]
+  calculations     PositionCalculation[]
+  tags             JournalTag[]
+  checklists       Checklist[]
+  subscriptions    Subscription[]
+  payments         Payment[]
+  screenshots      TradeScreenshot[]
+  pineTools        PineTool[]
+  dailyRisks       DailyRisk[]
+}
+
+model Account {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  currency    String   @default("USD")
+  broker      String   @default("")
+  platform    String   @default("MT5")
+  startingBalance Float
+  instruments String[] @default([])
+  // symbol -> { spec: InstrumentSpec, confirmed: boolean } saved from the calculator
+  specs       Json     @default("{}")
+  archivedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  riskSettings RiskSettings?
+  trades       Trade[]
+  calculations PositionCalculation[]
+  dailyRisks   DailyRisk[]
+
+  @@index([userId])
+}
+
+model RiskSettings {
+  id                 String   @id @default(cuid())
+  accountId          String   @unique
+  defaultRiskPercent Float    @default(1)
+  maxRiskPerTrade    Float    @default(1)
+  maxDailyLossPercent  Float  @default(3)
+  maxWeeklyLossPercent Float  @default(6)
+  maxTradesPerDay    Int      @default(5)
+  minRiskReward      Float    @default(1.5)
+  // Risk bands (% of account): LOW <= lowMax, MODERATE <= moderateMax, HIGH <= highMax, else EXTREME
+  lowMax             Float    @default(1)
+  moderateMax        Float    @default(2)
+  highMax            Float    @default(5)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+}
+
+model Trade {
+  id           String      @id @default(cuid())
+  userId       String
+  accountId    String
+  openedAt     DateTime
+  instrument   String
+  direction    Direction
+  entryPrice   Float
+  stopLoss     Float
+  takeProfit   Float?
+  exitPrice    Float?
+  lots         Float
+  riskPercent  Float
+  riskAmount   Float
+  result       TradeResult @default(OPEN)
+  pnl          Float?
+  rMultiple    Float?
+  setup        String?
+  session      String?
+  reasonEntry  String?
+  reasonExit   String?
+  emotionBefore String?
+  emotionAfter  String?
+  notes        String?
+  checklistScore Float?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account     Account           @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  screenshots TradeScreenshot[]
+  tags        JournalTag[]
+
+  @@index([userId, accountId, openedAt])
+  @@index([accountId, instrument])
+  @@index([accountId, result])
+}
+
+model TradeScreenshot {
+  id         String   @id @default(cuid())
+  userId     String
+  tradeId    String
+  storageKey String
+  mimeType   String
+  sizeBytes  Int
+  createdAt  DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trade Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  @@index([tradeId])
+  @@index([userId])
+}
+
+model JournalTag {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  createdAt DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trades Trade[]
+
+  @@unique([userId, name])
+}
+
+model PositionCalculation {
+  id            String    @id @default(cuid())
+  userId        String
+  accountId     String
+  instrument    String
+  entryPrice    Float
+  stopLoss      Float
+  takeProfit    Float?
+  balance       Float
+  riskPercent   Float
+  riskAmount    Float
+  lots          Float
+  lossPerLot    Float
+  specConfirmed Boolean   @default(false)
+  // Full input snapshot (contract size, tick size/value, lot limits, fx) for "Use again".
+  inputs        Json
+  createdAt     DateTime  @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([accountId])
+}
+
+// Per-account, per-day roll-up (Africa/Lagos day key) refreshed whenever trades change.
+model DailyRisk {
+  id         String   @id @default(cuid())
+  userId     String
+  accountId  String
+  day        String   // YYYY-MM-DD in the user's timezone
+  tradeCount Int      @default(0)
+  riskUsed   Float    @default(0)
+  pnl        Float    @default(0)
+  limitHit   Boolean  @default(false)
+  updatedAt  DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, day])
+  @@index([userId, day])
+}
+
+model Checklist {
+  id        String   @id @default(cuid())
+  userId    String
+  items     Json     // string[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId])
+}
+
+model Subscription {
+  id         String             @id @default(cuid())
+  userId     String
+  plan       Plan
+  interval   BillingInterval
+  status     SubscriptionStatus @default(ACTIVE)
+  provider   String
+  providerRef String?
+  currentPeriodEnd DateTime
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@index([userId, status])
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  userId         String
+  subscriptionId String?
+  provider       String
+  reference      String        @unique
+  amount         Float
+  currency       String
+  status         PaymentStatus @default(PENDING)
+  interval       BillingInterval
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+}
+
+// A saved TradingView risk-tool configuration (Pine source is generated from these params).
+model PineTool {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  params    Json
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
