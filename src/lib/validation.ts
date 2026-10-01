@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { cleanText } from "@/lib/sanitize";
+import { TEMPLATE_KEYS } from "@/lib/engine/challenge";
 
 const text = (max: number) => z.string().transform((s) => cleanText(s, max));
 const optText = (max: number) => z.string().optional().transform((s) => (s ? cleanText(s, max) || null : null));
@@ -33,6 +34,10 @@ export const rulesSchema = z.object({
   lowMax: num().pipe(z.number().gt(0).max(100)),
   moderateMax: num().pipe(z.number().gt(0).max(100)),
   highMax: num().pipe(z.number().gt(0).max(100)),
+  maxTotalDrawdownPercent: optNum.pipe(z.number().gt(0).max(100).nullable()).default(null),
+  drawdownType: z.enum(["STATIC", "TRAILING"]).default("STATIC"),
+  profitTargetPercent: optNum.pipe(z.number().gt(0).max(1000).nullable()).default(null),
+  ruleTemplate: z.string().optional().transform((v) => (v && TEMPLATE_KEYS.includes(v) ? v : null)),
 }).refine((r) => r.lowMax < r.moderateMax && r.moderateMax < r.highMax, { message: "Risk levels must increase: low < moderate < high", path: ["lowMax"] });
 
 export const tradeSchema = z.object({

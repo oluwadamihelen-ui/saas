@@ -38,6 +38,25 @@ export function GuardrailCard({ g, currency, maxTrades, tradesToday, openRisk, b
           </div>
           <Progress value={g.weeklyUsedPercent} />
         </div>
+        {g.challenge?.enabled && g.challenge.floor !== null && (
+          <div>
+            <div className="mb-1.5 flex items-baseline justify-between text-sm">
+              <span className="text-muted">Max drawdown ({g.challenge.drawdownType === "TRAILING" ? "trailing" : "fixed"})</span>
+              <span className="num font-medium">{Math.round(g.challenge.drawdownUsedPercent)}% <span className="text-muted">used</span></span>
+            </div>
+            <Progress value={g.challenge.drawdownUsedPercent} />
+            <div className="mt-1.5 flex justify-between text-xs text-muted"><span>Floor <b className="num text-fg">{money(g.challenge.floor, currency, { decimals: 2 })}</b></span><span>Room left <b className="num text-fg">{money(g.challenge.room ?? 0, currency, { decimals: 2 })}</b></span></div>
+          </div>
+        )}
+        {g.challenge?.target != null && g.challenge.targetProgressPercent !== null && (
+          <div>
+            <div className="mb-1.5 flex items-baseline justify-between text-sm">
+              <span className="text-muted">Profit target</span>
+              <span className="num font-medium">{Math.min(100, Math.round(g.challenge.targetProgressPercent))}% <span className="text-muted">of {money(g.challenge.target, currency)}</span>{g.challenge.targetReached && <span className="ml-1.5 text-up">· reached</span>}</span>
+            </div>
+            <Progress value={g.challenge.targetProgressPercent} tone="up" />
+          </div>
+        )}
         <div className="flex justify-between border-t border-line pt-3 text-xs text-muted">
           <span>Open risk <b className="num text-fg">{money(openRisk, currency, { decimals: 2 })}</b> ({balance > 0 ? ((openRisk / balance) * 100).toFixed(1) : "0"}%)</span>
           <span>Risk taken today <b className="num text-fg">{g.riskTodayPercent}%</b></span>

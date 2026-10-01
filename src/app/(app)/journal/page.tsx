@@ -24,6 +24,7 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
       <PageHeader title="Trade journal" subtitle={`${all.length} trade${all.length === 1 ? "" : "s"} in ${account.name}`}
         action={<div className="flex gap-2">
           {plan.limits.exportData && <a href="/api/export" className="inline-flex h-10 items-center gap-2 rounded-lg border border-line bg-surface-2 px-4 text-sm font-medium"><Download size={15} /> Export CSV</a>}
+          <Link href="/journal/import" className="inline-flex h-10 items-center rounded-lg border border-line bg-surface-2 px-4 text-sm font-medium">Import CSV</Link>
           <LinkButton href="/journal/new"><Plus size={16} /> Record trade</LinkButton>
         </div>} />
       {limit !== Infinity && <p className="mb-4 text-sm text-muted">Free plan: {totalTrades} / {limit} trades used. <Link href="/billing" className="text-accent hover:underline">Upgrade for unlimited</Link>.</p>}

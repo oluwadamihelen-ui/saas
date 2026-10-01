@@ -1,4 +1,5 @@
 import { roundTo } from "./risk";
+import type { ChallengeStatus } from "./challenge";
 
 export interface GuardrailInput {
   /** Current account balance. */
@@ -33,6 +34,8 @@ export interface GuardrailStatus {
   tradeLimitReached: boolean;
   state: "OK" | "CAUTION" | "STOP";
   messages: string[];
+  /** Prop-firm / challenge rules (max drawdown, profit target), when the user has set them. */
+  challenge?: ChallengeStatus;
 }
 
 /** Limits are measured against the balance at the START of the day/week (balance − P&L so far). */

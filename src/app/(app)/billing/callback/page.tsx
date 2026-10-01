@@ -16,7 +16,7 @@ export default async function BillingCallback({ searchParams }: { searchParams: 
     // Never trust the browser: ask the processor server-to-server.
     const provider = getPaymentProvider();
     const v = await provider.verify(reference);
-    if (v.status === "SUCCEEDED" && v.amount === p.amount && v.currency === p.currency) p = (await activateFromPayment(p.id)) ?? p;
+    if (v.status === "SUCCEEDED" && v.amount === p.amount && v.currency === p.currency) p = (await activateFromPayment(p.id, { authorizationCode: v.authorizationCode })) ?? p;
     else if (v.status === "FAILED") p = await prisma.payment.update({ where: { id: p.id }, data: { status: "FAILED" } });
   }
   return (

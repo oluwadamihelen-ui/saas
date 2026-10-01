@@ -1,5 +1,6 @@
 "use server";
 import { randomUUID } from "crypto";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getUser } from "@/lib/session";
@@ -31,6 +32,17 @@ export async function mockPayAction(fd: FormData) {
   const reference = String(fd.get("reference") ?? "");
   const p = await prisma.payment.findFirst({ where: { reference, userId: user.id } });
   if (!p) redirect("/billing");
-  await activateFromPayment(p.id);
+  await activateFromPayment(p.id, { authorizationCode: `mock_auth_${user.id}` });
   redirect(`/billing/callback?reference=${reference}`);
+}
+
+/** Turn automatic renewal on/off for the user's active subscription. */
+export async function setAutoRenewAction(fd: FormData) {
+  const user = await getUser();
+  const on = String(fd.get("autoRenew")) === "on";
+  await prisma.subscription.updateMany({
+    where: { userId: user.id, status: "ACTIVE", currentPeriodEnd: { gt: new Date() } },
+    data: { autoRenew: on, canceledAt: on ? null : new Date() },
+  });
+  revalidatePath("/billing");
 }

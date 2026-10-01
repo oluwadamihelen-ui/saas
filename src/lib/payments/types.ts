@@ -15,11 +15,29 @@ export interface CheckoutSession {
 }
 export type VerifyStatus = "SUCCEEDED" | "FAILED" | "PENDING";
 
+export interface VerifyResult {
+  status: VerifyStatus;
+  amount?: number;
+  currency?: string;
+  /** Reusable card token for renewals, when the processor returns one. */
+  authorizationCode?: string;
+}
+
+export interface RecurringChargeRequest {
+  reference: string;
+  amount: number;
+  currency: string;
+  email: string;
+  authorizationCode: string;
+}
+
 export interface PaymentProvider {
   readonly name: string;
   /** Currencies this processor can charge. */
   readonly currencies: string[];
   createCheckout(req: CheckoutRequest): Promise<CheckoutSession>;
   /** Ask the processor (server-to-server) whether a reference was paid. Never trust the browser. */
-  verify(reference: string): Promise<{ status: VerifyStatus; amount?: number; currency?: string }>;
+  verify(reference: string): Promise<VerifyResult>;
+  /** Charge a saved authorization without the customer present (renewals). */
+  chargeRecurring?(req: RecurringChargeRequest): Promise<VerifyResult>;
 }

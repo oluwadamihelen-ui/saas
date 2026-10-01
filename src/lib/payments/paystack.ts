@@ -1,43 +1,71 @@
-import type { PaymentProvider, VerifyStatus } from "./types";
+import { createHmac, timingSafeEqual } from "crypto";
+import type { PaymentProvider, VerifyResult, VerifyStatus } from "./types";
 
 const API = "https://api.paystack.co";
 
+function key() {
+  const k = process.env.PAYMENT_API_KEY;
+  if (!k) throw new Error("PAYMENT_API_KEY is not set");
+  return k;
+}
+
+/** Paystack signs the RAW request body with your secret key (HMAC-SHA512, hex) in `x-paystack-signature`. */
+export function verifyPaystackSignature(rawBody: string, signature: string | null | undefined, secret: string): boolean {
+  if (!signature || !secret) return false;
+  const expected = createHmac("sha512", secret).update(rawBody).digest("hex");
+  const a = Buffer.from(expected, "utf8");
+  const b = Buffer.from(signature.trim().toLowerCase(), "utf8");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+interface PaystackTx {
+  status: string;
+  amount: number;
+  currency: string;
+  authorization?: { authorization_code?: string; reusable?: boolean };
+}
+
+export function mapPaystackTx(tx: PaystackTx | undefined): VerifyResult {
+  const s = tx?.status;
+  const status: VerifyStatus = s === "success" ? "SUCCEEDED" : s === "failed" || s === "abandoned" || s === "reversed" ? "FAILED" : "PENDING";
+  return {
+    status,
+    amount: tx ? tx.amount / 100 : undefined,
+    currency: tx?.currency,
+    authorizationCode: tx?.authorization?.reusable ? tx.authorization.authorization_code : undefined,
+  };
+}
+
 /**
  * Paystack adapter (NGN-first, also accepts USD on many accounts).
- * Needs PAYMENT_API_KEY = Paystack secret key. Not exercised in tests — verify
- * with Paystack's test keys before going live.
+ * PAYMENT_API_KEY = Paystack secret key. Exercise with Paystack TEST keys before going live.
  */
 export const paystackProvider: PaymentProvider = {
   name: "paystack",
   currencies: ["NGN", "USD"],
   async createCheckout(req) {
-    const key = process.env.PAYMENT_API_KEY;
-    if (!key) throw new Error("PAYMENT_API_KEY is not set");
     const res = await fetch(`${API}/transaction/initialize`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: req.email,
-        amount: Math.round(req.amount * 100), // minor units (kobo / cents)
-        currency: req.currency,
-        reference: req.reference,
-        callback_url: req.callbackUrl,
-      }),
+      headers: { Authorization: `Bearer ${key()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ email: req.email, amount: Math.round(req.amount * 100), currency: req.currency, reference: req.reference, callback_url: req.callbackUrl }),
     });
     const json = (await res.json()) as { status: boolean; data?: { authorization_url: string } };
     if (!res.ok || !json.status || !json.data) throw new Error("Could not start checkout");
     return { url: json.data.authorization_url };
   },
   async verify(reference) {
-    const key = process.env.PAYMENT_API_KEY;
-    if (!key) throw new Error("PAYMENT_API_KEY is not set");
-    const res = await fetch(`${API}/transaction/verify/${encodeURIComponent(reference)}`, {
-      headers: { Authorization: `Bearer ${key}` },
-      cache: "no-store",
+    const res = await fetch(`${API}/transaction/verify/${encodeURIComponent(reference)}`, { headers: { Authorization: `Bearer ${key()}` }, cache: "no-store" });
+    const json = (await res.json()) as { data?: PaystackTx };
+    return mapPaystackTx(json.data);
+  },
+  async chargeRecurring(req) {
+    const res = await fetch(`${API}/transaction/charge_authorization`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ email: req.email, amount: Math.round(req.amount * 100), currency: req.currency, reference: req.reference, authorization_code: req.authorizationCode }),
     });
-    const json = (await res.json()) as { data?: { status: string; amount: number; currency: string } };
-    const s = json.data?.status;
-    const status: VerifyStatus = s === "success" ? "SUCCEEDED" : s === "failed" || s === "abandoned" ? "FAILED" : "PENDING";
-    return { status, amount: json.data ? json.data.amount / 100 : undefined, currency: json.data?.currency };
+    const json = (await res.json()) as { status: boolean; data?: PaystackTx };
+    if (!res.ok || !json.status) return { status: "FAILED" };
+    return mapPaystackTx(json.data);
   },
 };

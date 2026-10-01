@@ -53,6 +53,11 @@ model User {
   displayCurrency  String   @default("USD")
   onboardedAt      DateTime?
   activeAccountId  String?
+  telegramChatId   String?   @unique
+  telegramLinkCode String?   @unique
+  telegramLinkExpires DateTime?
+  notifyLimits     Boolean   @default(true)
+  notifyReminders  Boolean   @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -66,6 +71,7 @@ model User {
   screenshots      TradeScreenshot[]
   pineTools        PineTool[]
   dailyRisks       DailyRisk[]
+  notificationLogs NotificationLog[]
 }
 
 model Account {
@@ -105,6 +111,11 @@ model RiskSettings {
   lowMax             Float    @default(1)
   moderateMax        Float    @default(2)
   highMax            Float    @default(5)
+  // Prop-firm / challenge rules (all optional, user-editable; verify with your firm)
+  ruleTemplate         String?
+  maxTotalDrawdownPercent Float?
+  drawdownType         String   @default("STATIC") // STATIC | TRAILING
+  profitTargetPercent  Float?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -136,6 +147,8 @@ model Trade {
   emotionAfter  String?
   notes        String?
   checklistScore Float?
+  source       String      @default("manual")
+  externalId   String?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -147,6 +160,7 @@ model Trade {
   @@index([userId, accountId, openedAt])
   @@index([accountId, instrument])
   @@index([accountId, result])
+  @@unique([accountId, externalId])
 }
 
 model TradeScreenshot {
@@ -242,6 +256,10 @@ model Subscription {
   provider   String
   providerRef String?
   currentPeriodEnd DateTime
+  autoRenew  Boolean            @default(true)
+  authorizationCode String?
+  canceledAt DateTime?
+  lastRenewalAttemptAt DateTime?
   createdAt  DateTime           @default(now())
   updatedAt  DateTime           @updatedAt
 
@@ -261,6 +279,8 @@ model Payment {
   currency       String
   status         PaymentStatus @default(PENDING)
   interval       BillingInterval
+  paidAt         DateTime?
+  renewal        Boolean       @default(false)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -281,4 +301,28 @@ model PineTool {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// Idempotency for payment-provider webhooks.
+model WebhookEvent {
+  id        String   @id @default(cuid())
+  provider  String
+  eventKey  String
+  type      String
+  createdAt DateTime @default(now())
+
+  @@unique([provider, eventKey])
+}
+
+// One row per (user, kind, key) so alerts/reminders are sent at most once.
+model NotificationLog {
+  id        String   @id @default(cuid())
+  userId    String
+  kind      String
+  key       String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, kind, key])
 }

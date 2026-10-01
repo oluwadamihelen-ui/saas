@@ -27,15 +27,17 @@ async function main() {
   await prisma.checklist.create({ data: { userId: user.id, items: DEFAULT_CHECKLIST } });
   await prisma.subscription.create({ data: { userId: user.id, plan: "PRO", interval: "ANNUAL", provider: "mock", currentPeriodEnd: new Date(Date.now() + 300 * 86_400_000) } });
 
-  const accounts = [
+  const accounts: { name: string; currency: string; balance: number; broker: string; platform: string; n: number; prop?: boolean }[] = [
     { name: "Exness Demo", currency: "USD", balance: 1000, broker: "Exness", platform: "MT5", n: 70 },
-    { name: "Deriv Naira", currency: "NGN", balance: 500000, broker: "Deriv", platform: "MT5", n: 0 },
+    { name: "Prop Challenge (demo)", currency: "USD", balance: 10000, broker: "Demo prop firm", platform: "MT5", n: 28, prop: true },
   ];
   let activeId = "";
   for (const a of accounts) {
     const acc = await prisma.account.create({
       data: { userId: user.id, name: a.name, currency: a.currency, startingBalance: a.balance, broker: a.broker, platform: a.platform, instruments: ["XAUUSD", "BTCUSD", "EURUSD", "GBPUSD"],
-        riskSettings: { create: { defaultRiskPercent: 1, maxRiskPerTrade: 1, maxDailyLossPercent: 3, maxWeeklyLossPercent: 6, maxTradesPerDay: 5 } } },
+        riskSettings: { create: a.prop
+          ? { defaultRiskPercent: 0.5, maxRiskPerTrade: 1, maxDailyLossPercent: 5, maxWeeklyLossPercent: 8, maxTradesPerDay: 5, ruleTemplate: "two_step", maxTotalDrawdownPercent: 10, drawdownType: "STATIC", profitTargetPercent: 10 }
+          : { defaultRiskPercent: 1, maxRiskPerTrade: 1, maxDailyLossPercent: 3, maxWeeklyLossPercent: 6, maxTradesPerDay: 5 } } },
     });
     if (!activeId) activeId = acc.id;
     let balance = a.balance;

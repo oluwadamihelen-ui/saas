@@ -9,6 +9,7 @@ import { calculateRMultiple } from "@/lib/engine/risk";
 import { currentBalance, refreshDailyRisk } from "@/lib/data";
 import { MAX_UPLOAD_BYTES, getStorage, sniffImage } from "@/lib/storage";
 import { rateLimit } from "@/lib/rate-limit";
+import { checkLimitAlerts } from "@/lib/notifications/alerts";
 
 type Parsed = NonNullable<ReturnType<typeof tradeSchema.safeParse>["data"]>;
 
@@ -80,6 +81,7 @@ export async function createTradeAction(_: ActionState, fd: FormData): Promise<A
   });
   const upErr = files.length ? await saveScreenshots(user.id, trade.id, files) : null;
   await refreshDailyRisk(user.id, account.id, [trade.openedAt], user.timezone, account.riskSettings!.maxDailyLossPercent, account.startingBalance);
+  await checkLimitAlerts(user.id, account.id);
   revalidatePath("/", "layout");
   redirect(`/journal/${trade.id}${upErr ? `?notice=${encodeURIComponent(upErr)}` : ""}`);
 }
@@ -104,6 +106,7 @@ export async function updateTradeAction(_: ActionState, fd: FormData): Promise<A
   });
   const upErr = files.length ? await saveScreenshots(user.id, id, files) : null;
   await refreshDailyRisk(user.id, existing.accountId, [existing.openedAt, parsed.data.openedAt], user.timezone, existing.account.riskSettings!.maxDailyLossPercent, existing.account.startingBalance);
+  await checkLimitAlerts(user.id, existing.accountId);
   revalidatePath("/", "layout");
   redirect(`/journal/${id}${upErr ? `?notice=${encodeURIComponent(upErr)}` : ""}`);
 }

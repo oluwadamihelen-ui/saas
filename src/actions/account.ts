@@ -93,7 +93,7 @@ export async function updateRulesAction(_: ActionState, fd: FormData): Promise<A
   if (!plan.limits.advancedRules) {
     // Free plan: only the basics are editable; advanced fields keep their stored values.
     const cur = account.riskSettings;
-    data = { ...data, maxWeeklyLossPercent: cur.maxWeeklyLossPercent, minRiskReward: cur.minRiskReward, lowMax: cur.lowMax, moderateMax: cur.moderateMax, highMax: cur.highMax };
+    data = { ...data, maxWeeklyLossPercent: cur.maxWeeklyLossPercent, minRiskReward: cur.minRiskReward, lowMax: cur.lowMax, moderateMax: cur.moderateMax, highMax: cur.highMax, maxTotalDrawdownPercent: cur.maxTotalDrawdownPercent, drawdownType: cur.drawdownType === "TRAILING" ? "TRAILING" : "STATIC", profitTargetPercent: cur.profitTargetPercent, ruleTemplate: cur.ruleTemplate };
   }
   await prisma.riskSettings.updateMany({ where: { accountId: account.id, account: { userId: user.id } }, data });
   revalidatePath("/", "layout");
@@ -119,4 +119,42 @@ export async function updateProfileAction(_: ActionState, fd: FormData): Promise
   await prisma.user.update({ where: { id: user.id }, data: { name: name || null, timezone: tz, displayCurrency: display } });
   revalidatePath("/", "layout");
   return { ok: true, message: "Saved." };
+}
+
+// ------------------------------------------------------------- Telegram
+
+import { generateLinkCode, LINK_CODE_TTL_MS } from "@/lib/notifications/telegram";
+
+export async function generateTelegramCodeAction(): Promise<{ code: string; expiresAt: string } | { error: string }> {
+  const user = await getUser();
+  if (!process.env.TELEGRAM_BOT_TOKEN) return { error: "Telegram isn't set up on this server yet." };
+  for (let i = 0; i < 5; i++) {
+    const code = generateLinkCode();
+    const expires = new Date(Date.now() + LINK_CODE_TTL_MS);
+    try {
+      await prisma.user.update({ where: { id: user.id }, data: { telegramLinkCode: code, telegramLinkExpires: expires } });
+      return { code, expiresAt: expires.toISOString() };
+    } catch {
+      // unique collision — try another code
+    }
+  }
+  return { error: "Could not create a code. Try again." };
+}
+
+export async function disconnectTelegramAction() {
+  const user = await getUser();
+  await prisma.user.update({ where: { id: user.id }, data: { telegramChatId: null, telegramLinkCode: null, telegramLinkExpires: null } });
+  revalidatePath("/settings");
+}
+
+export async function updateNotifyPrefsAction(fd: FormData) {
+  const user = await getUser();
+  await prisma.user.update({ where: { id: user.id }, data: { notifyLimits: fd.get("notifyLimits") === "on", notifyReminders: fd.get("notifyReminders") === "on" } });
+  revalidatePath("/settings");
+}
+
+/** Whether a Telegram link has completed (polled by the settings page while a code is shown). */
+export async function telegramStatusAction(): Promise<{ linked: boolean }> {
+  const user = await getUser();
+  return { linked: !!user.telegramChatId };
 }

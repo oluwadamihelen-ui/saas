@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { S3Storage, s3ConfigFromEnv } from "./s3";
 
 /**
  * File storage abstraction. Screenshots are only ever addressed by an opaque
@@ -32,10 +33,27 @@ class LocalStorage implements StorageProvider {
   }
 }
 
+/** Keys we generate look like `<userId>/<tradeId>/<uuid>.<ext>`; refuse anything else (path tricks, odd characters). */
+export const SAFE_KEY = /^[A-Za-z0-9_-]+(\/[A-Za-z0-9_-]+)*\.[a-z0-9]{2,5}$/;
+export function assertSafeKey(key: string) {
+  if (!SAFE_KEY.test(key)) throw new Error("Invalid storage key");
+}
+
+let cached: StorageProvider | null = null;
 export function getStorage(): StorageProvider {
+  if (cached) return cached;
   const name = (process.env.STORAGE_PROVIDER ?? "local").toLowerCase();
-  if (name === "local") return new LocalStorage();
-  throw new Error(`STORAGE_PROVIDER "${name}" is not implemented yet — add an adapter in src/lib/storage.`);
+  let impl: StorageProvider;
+  if (name === "local") impl = new LocalStorage();
+  else if (name === "s3" || name === "r2") impl = new S3Storage(s3ConfigFromEnv(name));
+  else throw new Error(`Unknown STORAGE_PROVIDER "${name}" (use local, s3 or r2).`);
+  // Every adapter gets the same key validation.
+  cached = {
+    put: (k, d, m) => (assertSafeKey(k), impl.put(k, d, m)),
+    get: (k) => (assertSafeKey(k), impl.get(k)),
+    delete: (k) => (assertSafeKey(k), impl.delete(k)),
+  };
+  return cached;
 }
 
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
