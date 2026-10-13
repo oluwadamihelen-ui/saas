@@ -52,6 +52,10 @@ Results are tagged **Estimated** until the user confirms the contract spec with 
 
 Tests: `npm test` (unit tests need nothing; integration tests use `TEST_DATABASE_URL` — run `DATABASE_URL=$TEST_DATABASE_URL npx prisma migrate deploy` once).
 
+## Easiest way to run it (no coding)
+
+Read `START-HERE.txt`, then double-click `start-windows.bat` (Windows) or `start-mac.command` (Mac).
+
 ## Indicator Lab & Marketplace
 
 **Honest scope:** RiskPilot cannot execute Pine Script (no runtime exists outside TradingView) and has no market-data feed.

@@ -1,0 +1,69 @@
+RISKPILOT - START HERE
+======================
+You do NOT need to be a developer. There are 3 parts. Total time: about 20 minutes.
+You only do this once. Next time, just double-click the start file again.
+
+
+PART 1 - Install Node.js (the engine that runs the app)
+-------------------------------------------------------
+1. Open your browser and go to:  nodejs.org
+2. Click the big green button that says "LTS" (it downloads a file).
+3. Open the downloaded file. Click "Next" on every screen, then "Install", then "Finish".
+   (Do not change anything. If Windows asks "Do you want to allow this app...?", click Yes.)
+
+That's it. You never have to open Node yourself.
+
+
+PART 2 - Get a free online database (this stores the app's information)
+-----------------------------------------------------------------------
+1. Go to:  neon.tech   and click "Sign up". Sign up with your Google account (fastest).
+2. It asks you to create a project. Type any name (for example: riskpilot) and click "Create".
+3. You'll see a box called "Connection string" (or a button "Connect").
+   - IMPORTANT: if you see a switch called "Connection pooling", turn it OFF.
+   - Click the little "copy" icon to copy the long line that starts with  postgresql://
+4. Keep that copied. You will paste it in Part 3.
+
+(Don't worry if the line looks long and strange - that is normal. Don't type it, just copy and paste.)
+
+
+PART 3 - Run the app
+--------------------
+1. Find the RiskPilot ZIP file you downloaded. Right-click it -> "Extract All" -> "Extract".
+   (Do NOT run files from inside the zip. You must extract first.)
+2. Open the new "riskpilot" folder.
+
+   WINDOWS: double-click  start-windows.bat
+     - If Windows says "Windows protected your PC", click "More info" and then "Run anyway".
+   MAC:     double-click  start-mac.command
+     - If it won't open: right-click it -> Open -> Open.
+
+3. A black window appears and does the work. Follow what it says:
+   - When it asks for the "Connection string", RIGHT-CLICK inside the window to paste
+     the line you copied in Part 2, then press Enter.
+   - Then wait. The first time takes about 5 minutes (it says "Installing..."). This is normal.
+   - Your browser opens by itself with RiskPilot. The first page can take 30 seconds.
+
+4. Log in with:
+       Email:     demo@riskpilot.app
+       Password:  Passw0rd!
+
+5. KEEP THE BLACK WINDOW OPEN while you use the app. To stop the app, close the black window.
+
+NEXT TIME: just double-click the same start file again. It will not ask anything this time.
+
+
+OTHER DEMO LOGINS (same password Passw0rd!)
+  admin@riskpilot.app     - the admin panel
+  ada@creators.demo       - a creator who sells indicators
+
+
+IF SOMETHING GOES WRONG
+  - The black window shows a red "PROBLEM:" message. Take a screenshot and send it to your helper.
+  - "Node.js is not installed": do Part 1, then double-click the start file again.
+  - "Could not reach your database": the pasted line was wrong. Delete the file named  .env
+    (it may be hidden - in Windows, tick View -> Show -> Hidden items), double-click the start file
+    again and paste the line again. Make sure "Connection pooling" is OFF in Neon.
+  - The page doesn't open: type  localhost:3000  in your browser's address bar.
+
+This is demo/test software. Payments are simulated (no real money moves). Everything here is
+calculation and record-keeping - not financial advice.
